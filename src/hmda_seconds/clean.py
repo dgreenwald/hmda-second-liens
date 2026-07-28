@@ -1,0 +1,121 @@
+"""HMDA sample restrictions and feature construction.
+
+Ports ``clean_data``/``load_and_clean`` from the original ``classify_seconds.py``
+research script. Two changes from the original, both recorded in
+MIGRATION_PLAN.md:
+
+- ``resp_id``/``seq_num`` are retained (the original dropped them) so a
+  released predicted-lien-status crosswalk can be joined back to a
+  same-vintage raw LAR file.
+- The balanced-FHFA-panel year range is parameterized instead of a hardcoded
+  ``np.arange(1990, 2017)``.
+
+The lien_status label was checked against real 2004-2007 data and found to
+already be strictly binary ({1, 2}) within this sample restriction, so unlike
+the plan's original open question, no extra filter is needed here.
+"""
+
+from __future__ import annotations
+
+import numpy as np
+import pandas as pd
+from py_tools.datasets import fhfa
+
+from . import config
+
+BASE_VAR_LIST = [
+    "year",
+    "agency_code",
+    "loan_type",
+    "loan_amt",
+    "app_income",
+    "purchaser_type",
+    "edit_status",
+    "state_code",
+    "county_code",
+    "lien_status",
+    *config.ID_VARS,
+]
+
+# HMDA state codes for territories/non-states to exclude (matches the
+# original script): Puerto Rico, Guam, American Samoa, Virgin Islands,
+# Northern Mariana Islands.
+EXCLUDED_STATE_CODES = [3, 7, 14, 43, 52]
+
+
+def load_fhfa_county_hpi(data_dir=None) -> pd.DataFrame:
+    """Load the FHFA county all-transactions HPI, indexed by (fips, year)."""
+    if data_dir is None:
+        data_dir = config.FHFA_DATA_DIR
+    df_fhfa = fhfa.load("county", data_dir=f"{data_dir}/").reset_index()
+    df_fhfa["year"] = df_fhfa["date"].dt.year
+    df_fhfa["fips"] = df_fhfa["fips"].astype("Int64")
+    return df_fhfa[["fips", "year", "hpi"]]
+
+
+def build_balanced_fhfa_panel(df_fhfa: pd.DataFrame, years) -> pd.DataFrame:
+    """Restrict to counties with a complete HPI panel over ``years``.
+
+    A county missing the HPI for even one year in the application window is
+    dropped entirely (from every year), rather than silently interpolated,
+    so the sample composition is stable across years.
+    """
+    years = list(years)
+    df_wide = pd.pivot(df_fhfa, index="fips", columns="year", values="hpi")
+    ix_balanced = np.all(pd.notnull(df_wide[years]), axis=1)
+    df_wide = df_wide.loc[ix_balanced, years].reset_index()
+    return pd.melt(
+        df_wide, id_vars=["fips"], value_vars=years, var_name="year", value_name="hpi"
+    )
+
+
+def clean_frame(df_t: pd.DataFrame, df_fhfa_balanced: pd.DataFrame) -> pd.DataFrame:
+    """Apply sample restrictions and construct model features for one year."""
+    df_t = df_t.rename({"asof_date": "year"}, axis=1)
+
+    ix = (
+        (df_t["action_taken"] == 1)
+        & (df_t["loan_purp"] == 1)
+        & (df_t["occupancy"] == 1)
+    )
+    if "lien_status" in df_t:
+        ix = ix & pd.notnull(df_t["lien_status"])
+    ix = (
+        ix
+        & df_t["state_code"].between(1, 56)
+        & (~df_t["state_code"].isin(EXCLUDED_STATE_CODES))
+    )
+    ix = ix & (df_t["county_code"] >= 1)
+    ix = ix & pd.notnull(df_t["app_income"]) & pd.notnull(df_t["loan_amt"])
+    ix = ix & (df_t["app_income"] >= 1) & (df_t["loan_amt"] >= 1)
+    ix = ix & df_t["loan_type"].between(1.0, 4.0)
+
+    var_list = [var for var in BASE_VAR_LIST if var in df_t]
+    df_t = df_t.loc[ix, var_list].copy()
+
+    df_t["loan_type"] = df_t["loan_type"].astype(int)
+
+    df_t["fips"] = (1000.0 * df_t["state_code"] + df_t["county_code"]).astype("Int64")
+    df_t["state_code"] = df_t["state_code"].astype("Int64")
+    df_t = pd.merge(df_t, df_fhfa_balanced, on=["fips", "year"], how="inner")
+
+    df_t["log_lti"] = np.log(df_t["loan_amt"] / df_t["app_income"])
+    df_t["log_ltv"] = np.log(df_t["hpi"] / df_t["loan_amt"])
+    df_t.dropna(subset=["log_lti", "log_ltv"], inplace=True)
+
+    df_t["has_edit_status"] = pd.notnull(df_t["edit_status"])
+    df_t["edit_status"] = df_t["edit_status"].fillna(0).astype(int)
+
+    df_t["loan_below_10k"] = df_t["loan_amt"] < 10
+
+    return df_t.drop(columns=["county_code"])
+
+
+def load_and_clean_year(
+    year: int, df_fhfa_balanced: pd.DataFrame, yearly_dir=None
+) -> pd.DataFrame:
+    """Read one year's raw HMDA extract and apply :func:`clean_frame`."""
+    if yearly_dir is None:
+        yearly_dir = config.HMDA_YEARLY_DIR
+    df_t = pd.read_parquet(f"{yearly_dir}/hmda{year:d}.parquet")
+    return clean_frame(df_t, df_fhfa_balanced)

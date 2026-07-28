@@ -20,6 +20,15 @@ MODEL_DIR = OUTPUT_DIR / "model"
 FIGURE_DIR = OUTPUT_DIR / "figures"
 TABLE_DIR = OUTPUT_DIR / "tables"
 
+# Large, regenerable, non-public intermediate files (the concatenated
+# training extract, per-year classified outputs) live outside the repo
+# entirely rather than under output/, following the same convention the
+# original project used for /data/hmda/. Defaults to a repo-relative
+# fallback so the pipeline still runs for someone without that local
+# convention; override via HMDA_SECONDS_EXTERNAL_DIR (see .env).
+EXTERNAL_DATA_DIR = Path(os.environ.get("HMDA_SECONDS_EXTERNAL_DIR", DATA_DIR))
+INTERMEDIATE_DIR = EXTERNAL_DATA_DIR / "intermediate"
+
 # Directory holding one cleaned HMDA extract per year, named hmda<year>.parquet,
 # in the same format produced by py_tools.datasets.hmda.load_hmda. See
 # data/README.md for how these are built from raw LAR files; override locally
@@ -29,7 +38,10 @@ HMDA_YEARLY_DIR = Path(
     os.environ.get("HMDA_SECONDS_YEARLY_DIR", RAW_DIR / "hmda" / "save")
 )
 
-FHFA_COUNTY_HPI_FILE = PUBLIC_DIR / "fhfa_county_hpi.parquet"
+# Vendored public input: FHFA's HPI_AT_BDL_county.xlsx lives directly under
+# this directory; py_tools.datasets.fhfa.load('county', data_dir=...) reads
+# it from there and caches a derived parquet alongside it.
+FHFA_DATA_DIR = PUBLIC_DIR
 
 MODEL_FILE = MODEL_DIR / "rf_fit.pkl"
 
@@ -44,9 +56,18 @@ APPLY_YEARS = range(1990, 2017)
 assert set(TRAIN_YEARS).isdisjoint(VALIDATE_YEARS)
 assert set(TRAIN_YEARS) | set(VALIDATE_YEARS) <= set(APPLY_YEARS)
 
+TRAIN_PARQUET = (
+    INTERMEDIATE_DIR / f"hmda_train_{min(TRAIN_YEARS)}_{max(TRAIN_YEARS)}.parquet"
+)
+
 LABEL_VAR = "lien_status"
 CONTINUOUS_VARS = ["log_lti", "log_ltv"]
 CATEGORY_VARS = ["purchaser_type", "loan_type", "has_edit_status", "loan_below_10k"]
+
+# Not used as model features, but retained (unlike the original script, which
+# dropped them) so a released predicted-lien-status crosswalk can be joined
+# back to a same-vintage raw LAR file by anyone who has one.
+ID_VARS = ["resp_id", "seq_num"]
 
 RF_KWARGS = {
     "n_estimators": 50,

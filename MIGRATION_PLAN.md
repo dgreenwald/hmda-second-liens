@@ -129,17 +129,33 @@ inventory.
   `scripts/make_figures.py`, generalized to run over the full 1990-2016 range rather than the
   fixed subset of years currently hardcoded there.
 
-## Before porting: one correctness question to verify against real data
+## Resolved: the lien_status binary-vs-4-class question
 
 `classify_seconds.py`'s `clean_data` only requires `lien_status` to be non-null when training
-(`ix = ix & pd.notnull(df_t['lien_status'])`) — it doesn't restrict to `lien_status in {1, 2}`.
-Per the HMDA code list, `lien_status` can also be `3` (not secured by a lien) or `4` (not
-applicable), so as written this may be training on an implicit 4-class label rather than the
-intended first-vs-second-lien binary problem, even though every downstream use only checks
-`== 1`/`== 2`. **First step when this repo has real HMDA data available**: check the empirical
-distribution of `lien_status` in 2004-2007 for this sample, and if codes 3/4 appear with
-nontrivial frequency, restrict training (and interpret prediction) as strictly binary
-(`lien_status in {1, 2}`) rather than carrying this ambiguity into a public release.
+— it doesn't explicitly restrict to `lien_status in {1, 2}`, even though HMDA's code list also
+defines `3` (not secured by a lien) and `4` (not applicable). Checked directly against the real
+cached data (`/data/hmda/save/hmda{2004..2007}.parquet`): within the actual sample restriction
+(`action_taken==1`, `loan_purp==1`, `occupancy==1`, `loan_type` in 1-4), `lien_status` takes
+only values `1` and `2` in every training year — codes `3`/`4` never appear. The purchase-loan
+restriction alone rules them out in practice. No extra filter needed; `clean.py` ports the
+original condition as-is.
+
+## Local environment decisions (this machine)
+
+- Real inputs are already available locally: `/data/hmda/save/hmda<year>.parquet` (1990-2018,
+  matching the `py_tools.datasets.hmda.load_hmda` schema exactly) and
+  `~/Dropbox/data/fhfa/HPI_AT_BDL_county.xlsx`. `config.HMDA_YEARLY_DIR` and
+  `config.FHFA_DATA_DIR` are wired to these via `.env` (gitignored) so the pipeline runs for
+  real on this machine while staying repo-relative/overridable by default for anyone else.
+- `data/hmda_seconds_new/hmda_first_lien_purch_clean_<year>.parquet`-style files sitting
+  alongside the yearly cache are leftovers from an unrelated older script
+  (`hmda_first_purch.py`) — not part of this pipeline, ignore them.
+- Large regenerable intermediate artifacts (concatenated training extract, per-year classified
+  outputs) are written to `/data/hmda_seconds/intermediate/` (external to the repo, via
+  `HMDA_SECONDS_EXTERNAL_DIR`), following the same convention the original project used for
+  `/data/hmda/`, rather than living under the repo's `output/`.
+- `resp_id`/`seq_num` are retained through `clean.py` (the original script dropped them) so a
+  released predicted-lien-status crosswalk can be joined back to a same-vintage raw LAR file.
 
 ## Methodological improvements worth making (this is most of the letter's actual contribution)
 

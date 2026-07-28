@@ -43,6 +43,7 @@ microdata beyond the aggregated/binned outputs this letter is designed to releas
 
 ## FHFA county house price index
 
-`data/public/fhfa_county_hpi.parquet` — not yet vendored. Source: FHFA's "All-Transactions
-House Price Index" at the county level (`HPI_AT_BDL_county.xlsx`), public and small enough to
-commit directly; loaded via `py_tools.datasets.fhfa.load('county')`.
+`data/public/HPI_AT_BDL_county.xlsx` — vendored directly (public FHFA "All-Transactions House
+Price Index" at the county level, ~3.4MB). Loaded via
+`py_tools.datasets.fhfa.load('county', data_dir=...)` pointed at `data/public/`; the derived
+parquet cache that call writes alongside the source file is regenerable and gitignored.
