@@ -9,7 +9,15 @@ MIGRATION_PLAN.md, "Methodological improvements", item 1).
 import os
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
+
+# Load unambiguously from the repo root rather than searching upward from
+# the current working directory, so behavior doesn't depend on where a
+# script is invoked from or on import order elsewhere pulling in a dotenv
+# search as a side effect (as py_tools.datasets loaders do).
+load_dotenv(REPO_ROOT / ".env", override=False)
 
 DATA_DIR = Path(os.environ.get("HMDA_SECONDS_DATA_DIR", REPO_ROOT / "data"))
 RAW_DIR = DATA_DIR / "raw"
@@ -59,6 +67,9 @@ assert set(TRAIN_YEARS) | set(VALIDATE_YEARS) <= set(APPLY_YEARS)
 TRAIN_PARQUET = (
     INTERMEDIATE_DIR / f"hmda_train_{min(TRAIN_YEARS)}_{max(TRAIN_YEARS)}.parquet"
 )
+CLASSIFY_PARQUET = (
+    INTERMEDIATE_DIR / f"hmda_classified_{min(APPLY_YEARS)}_{max(APPLY_YEARS)}.parquet"
+)
 
 LABEL_VAR = "lien_status"
 CONTINUOUS_VARS = ["log_lti", "log_ltv"]
@@ -77,3 +88,7 @@ RF_KWARGS = {
 
 TRAIN_SIZE = 0.25
 TEST_SIZE = 0.75
+
+PREDICTED_LABEL_VAR = f"{LABEL_VAR}_predicted"
+PROB_SECOND_LIEN_VAR = "prob_second_lien"
+SECOND_LIEN_CLASS = 2

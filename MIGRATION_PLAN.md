@@ -156,6 +156,16 @@ original condition as-is.
   `/data/hmda/`, rather than living under the repo's `output/`.
 - `resp_id`/`seq_num` are retained through `clean.py` (the original script dropped them) so a
   released predicted-lien-status crosswalk can be joined back to a same-vintage raw LAR file.
+- **Bug found and fixed in step 4**: `config.py` originally never loaded `.env` itself. Step 2
+  appeared to work only because `clean.py` happens to `import py_tools.datasets.fhfa` before
+  `from . import config`, and that import has a side effect (computing `fhfa`'s module-level
+  `default_dir` default argument calls `py_tools.datasets.config.base_dir()`, which triggers
+  py_tools's *own* dotenv search) that incidentally populated `os.environ` first. Any script
+  importing `hmda_seconds.config` directly (e.g. `scripts/train_classifier.py`) hit this in the
+  wrong order and silently fell back to repo-relative defaults instead of `/data/hmda_seconds`.
+  Fixed by having `config.py` call `load_dotenv(REPO_ROOT / ".env", override=False)` itself,
+  anchored to the repo root rather than a cwd-relative search, and adding `python-dotenv` as a
+  direct dependency instead of relying on it arriving transitively via `py_tools[datasets]`.
 
 ## Methodological improvements worth making (this is most of the letter's actual contribution)
 
@@ -221,12 +231,18 @@ section maps to one or two of the figures/tables produced by `scripts/make_figur
 
 ## Execution order
 
-1. Scaffold repo (`pyproject.toml`, `.env.example`, `Makefile`, package skeleton, `data/README.md`
-   with exact HMDA LAR source URLs).
-2. Port `clean.py` (data prep + FHFA merge), get `prepare_training_data.py` producing the
-   2004-2007 training parquet from real local HMDA data.
-3. Resolve the lien_status-in-{1,2} question against real data; adjust `clean.py` if needed.
-4. Port `train.py`/`classify.py` using `py_tools.econometrics.machine_learning` as-is.
+1. **Done.** Scaffold repo (`pyproject.toml`, `.env.example`, `Makefile`, package skeleton,
+   `data/README.md` with exact HMDA LAR source URLs).
+2. **Done.** Port `clean.py` (data prep + FHFA merge), get `prepare_training_data.py` producing
+   the 2004-2007 training parquet from real local HMDA data. Folded step 3 in here too: checked
+   the lien_status-in-{1,2} question against real data directly (see "Resolved" section above)
+   rather than treating it as a separate pass.
+3. ~~Resolve the lien_status-in-{1,2} question against real data~~ — done as part of step 2.
+4. Port `train.py`/`classify.py` using `py_tools.econometrics.machine_learning` as-is. Adds
+   `prob_second_lien` (via the underlying sklearn classifier's `predict_proba`, not exposed by
+   `RandomForestWrapper` itself) alongside the hard predicted label, since both step 5's richer
+   metrics and step 7's release need it. `classify_all_years.py` writes one combined
+   `hmda_classified_1990_2016.parquet` rather than per-year files plus a separate combine stage.
 5. Build `validate.py` (new out-of-time validation, baselines, confusion matrix, continuity
    check) — this is the new, most important code in the repo.
 6. Adapt `diagnostics.py`/`make_figures.py` from the `replication_package_proposal` templates,
