@@ -216,3 +216,14 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Local data and regenerable outputs (see MIGRATION_PLAN.md / AGENTS.md:
+# nothing under data/raw or output is committed; regenerate via `make`)
+/data/raw/*
+!/data/raw/.gitkeep
+/output/model/*
+!/output/model/.gitkeep
+/output/figures/*
+!/output/figures/.gitkeep
+/output/tables/*
+!/output/tables/.gitkeep
