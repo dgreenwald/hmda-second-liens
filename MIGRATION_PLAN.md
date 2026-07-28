@@ -288,6 +288,19 @@ considered and explicitly rejected; see the base-rate-shift finding below.
   Random Forest's flexibility per se. The naive single-threshold-on-`log_lti` baseline is
   clearly worse (accuracy ~93.5%-95.4%, second-lien precision only 22%-36%), showing the other
   features do add real value over the simplest possible rule.
+- **Formal RF-vs-logistic comparison (McNemar's test, paired on the same out-of-time
+  observations)**: sharpens the informal "tracks closely" read above into something stronger —
+  **logistic regression is more accurate than the RF in every single year, 2008-2016**, by
+  0.09-0.23pp (smallest in 2008, largest in 2011). Overwhelmingly significant in the McNemar
+  chi-squared sense (p≈0), but with multi-million-row samples that's true of any real effect and
+  not the interesting part; what's interesting is the *consistent direction and magnitude*
+  across nine independent years (logistic wins the discordant cases by roughly 2-3x every
+  year, e.g. 2008: 7,240 loans right only under logistic vs. 5,001 right only under the RF).
+  Plausibly the RF's extra flexibility fits 2004-2007-specific patterns that don't transfer as
+  well as the simpler logistic specification. **Worth reporting as a real result and revisiting
+  whether the RF should remain the primary model**, rather than treating it as a settled
+  modeling choice, since the more interpretable, faster-to-fit logistic model appears to
+  actually out-generalize it on the metric (out-of-time accuracy) that matters most here.
 
 ## Paper skeleton (`paper/letter.tex`)
 

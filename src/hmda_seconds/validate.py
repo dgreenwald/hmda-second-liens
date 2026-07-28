@@ -25,6 +25,7 @@ from sklearn.metrics import (
     roc_auc_score,
 )
 from sklearn.model_selection import train_test_split
+from statsmodels.stats.contingency_tables import mcnemar
 
 from . import config
 
@@ -195,6 +196,76 @@ class LogLtiThresholdBaseline:
 def fit_log_lti_threshold_baseline(df: pd.DataFrame) -> LogLtiThresholdBaseline:
     means = df.groupby(config.LABEL_VAR)["log_lti"].mean()
     return LogLtiThresholdBaseline(threshold=float(means.mean()))
+
+
+# --------------------------------------------------------------------------
+# Formal RF-vs-baseline comparison: McNemar's test
+# --------------------------------------------------------------------------
+
+
+def mcnemar_test(y_true: np.ndarray, y_pred_a: np.ndarray, y_pred_b: np.ndarray) -> dict:
+    """McNemar's test comparing two classifiers' correctness on the same sample.
+
+    Uses only the discordant pairs (cases where exactly one model is
+    correct) to test whether model_a and model_b differ systematically in
+    accuracy, rather than just reporting each model's accuracy separately
+    and eyeballing the difference. With the sample sizes here (millions of
+    loans per year), the chi-squared approximation with continuity
+    correction is used rather than the exact binomial test, and even a
+    tiny, substantively unimportant accuracy difference will usually be
+    "significant" -- report n_a_only_correct/n_b_only_correct (or the
+    accuracy difference) alongside the p-value, not the p-value alone.
+    """
+    correct_a = np.asarray(y_pred_a) == np.asarray(y_true)
+    correct_b = np.asarray(y_pred_b) == np.asarray(y_true)
+
+    n_both_correct = int(np.sum(correct_a & correct_b))
+    n_a_only = int(np.sum(correct_a & ~correct_b))  # a right, b wrong
+    n_b_only = int(np.sum(~correct_a & correct_b))  # b right, a wrong
+    n_both_wrong = int(np.sum(~correct_a & ~correct_b))
+
+    table = [[n_both_correct, n_a_only], [n_b_only, n_both_wrong]]
+    result = mcnemar(table, exact=False, correction=True)
+
+    n = len(y_true)
+    return {
+        "n": n,
+        "accuracy_a": (n_both_correct + n_a_only) / n,
+        "accuracy_b": (n_both_correct + n_b_only) / n,
+        "n_a_only_correct": n_a_only,
+        "n_b_only_correct": n_b_only,
+        "statistic": result.statistic,
+        "p_value": result.pvalue,
+    }
+
+
+def compare_classifiers_by_year(
+    df: pd.DataFrame,
+    y_pred_a: np.ndarray,
+    y_pred_b: np.ndarray,
+    years=None,
+    label_var: str = config.LABEL_VAR,
+) -> pd.DataFrame:
+    """mcnemar_test per year, given two sets of predictions row-aligned to df."""
+    if years is None:
+        years = config.VALIDATE_YEARS
+
+    work = df[["year", label_var]].copy()
+    work["_pred_a"] = np.asarray(y_pred_a)
+    work["_pred_b"] = np.asarray(y_pred_b)
+
+    rows = []
+    for year in years:
+        sub = work.loc[work["year"] == year].dropna(subset=[label_var])
+        if sub.empty:
+            continue
+        result = mcnemar_test(
+            sub[label_var].to_numpy(), sub["_pred_a"].to_numpy(), sub["_pred_b"].to_numpy()
+        )
+        result["year"] = year
+        rows.append(result)
+
+    return pd.DataFrame(rows).set_index("year")
 
 
 # --------------------------------------------------------------------------

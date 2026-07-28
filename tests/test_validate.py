@@ -60,6 +60,56 @@ def test_out_of_time_metrics_reads_wrapper_prediction_columns():
     assert out.loc[2009, "accuracy"] == pytest.approx(0.5)
 
 
+def test_mcnemar_test_reports_discordant_counts_and_accuracies():
+    y_true = np.array([1, 1, 1, 1, 1, 1, 1, 1, 1, 1])
+    y_pred_a = np.array([1, 1, 1, 1, 1, 1, 1, 1, 2, 2])  # 8/10 correct
+    y_pred_b = np.array([1, 1, 1, 1, 1, 1, 2, 2, 2, 2])  # 6/10 correct
+
+    result = validate.mcnemar_test(y_true, y_pred_a, y_pred_b)
+
+    assert result["n"] == 10
+    assert result["accuracy_a"] == pytest.approx(0.8)
+    assert result["accuracy_b"] == pytest.approx(0.6)
+    # a is right and b is wrong on indices 6, 7; b is right and a is wrong nowhere
+    assert result["n_a_only_correct"] == 2
+    assert result["n_b_only_correct"] == 0
+    assert 0.0 <= result["p_value"] <= 1.0
+
+
+def test_mcnemar_test_p_value_is_high_when_disagreement_is_balanced():
+    rng = np.random.default_rng(0)
+    y_true = rng.integers(1, 3, size=200)
+    y_pred_a = y_true.copy()
+    y_pred_b = y_true.copy()
+    # a is wrong (only) on 5 cases, b is wrong (only) on a disjoint set of 5
+    # cases -- equally balanced disagreement, no systematic difference in
+    # accuracy between the two models.
+    y_pred_a[:5] = 3 - y_pred_a[:5]
+    y_pred_b[5:10] = 3 - y_pred_b[5:10]
+
+    result = validate.mcnemar_test(y_true, y_pred_a, y_pred_b)
+    assert result["n_a_only_correct"] == 5
+    assert result["n_b_only_correct"] == 5
+    assert result["p_value"] > 0.5  # not significant -- disagreement is symmetric
+
+
+def test_compare_classifiers_by_year_skips_years_with_no_labels():
+    df = pd.DataFrame(
+        {
+            "year": [2008, 2008, 1995, 1995],
+            config.LABEL_VAR: [1, 2, np.nan, np.nan],
+        }
+    )
+    pred_a = np.array([1, 2, 1, 1])
+    pred_b = np.array([1, 1, 1, 1])
+
+    out = validate.compare_classifiers_by_year(df, pred_a, pred_b, years=[1995, 2008])
+
+    assert list(out.index) == [2008]
+    assert out.loc[2008, "accuracy_a"] == pytest.approx(1.0)
+    assert out.loc[2008, "accuracy_b"] == pytest.approx(0.5)
+
+
 def test_continuity_check_reports_nan_actual_share_for_unlabeled_years():
     df = pd.DataFrame(
         {

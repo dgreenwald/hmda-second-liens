@@ -99,6 +99,12 @@ def main() -> None:
     threshold_oot = validate.evaluate_by_year(df_classified, threshold_pred)
     threshold_oot.to_csv(args.output_dir / "out_of_time_metrics_threshold_baseline.csv")
 
+    print("\nFormal RF-vs-logistic comparison (McNemar's test, out-of-time)...")
+    rf_pred = df_classified[config.PREDICTED_LABEL_VAR].to_numpy()
+    comparison = validate.compare_classifiers_by_year(df_classified, rf_pred, logit_pred)
+    comparison.to_csv(args.output_dir / "rf_vs_logistic_mcnemar.csv")
+    print(comparison.to_string())
+
     print(f"\nWrote validation tables to {args.output_dir}")
 
 
