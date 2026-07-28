@@ -317,18 +317,27 @@ section maps to one or two of the figures/tables produced by `scripts/make_figur
    the lien_status-in-{1,2} question against real data directly (see "Resolved" section above)
    rather than treating it as a separate pass.
 3. ~~Resolve the lien_status-in-{1,2} question against real data~~ — done as part of step 2.
-4. Port `train.py`/`classify.py` using `py_tools.econometrics.machine_learning` as-is. Adds
-   `prob_second_lien` (via the underlying sklearn classifier's `predict_proba`, not exposed by
-   `RandomForestWrapper` itself) alongside the hard predicted label, since both step 5's richer
-   metrics and step 7's release need it. `classify_all_years.py` writes one combined
+4. **Done.** Port `train.py`/`classify.py` using `py_tools.econometrics.machine_learning` as-is.
+   Adds `prob_second_lien` (via the underlying sklearn classifier's `predict_proba`, not exposed
+   by `RandomForestWrapper` itself) alongside the hard predicted label, since both step 5's
+   richer metrics and step 7's release need it. `classify_all_years.py` writes one combined
    `hmda_classified_1990_2016.parquet` rather than per-year files plus a separate combine stage.
-5. Build `validate.py` (new out-of-time validation, baselines, confusion matrix, continuity
-   check) — this is the new, most important code in the repo.
-6. Adapt `diagnostics.py`/`make_figures.py` from the `replication_package_proposal` templates,
-   generalized to 1990-2016.
+5. **Done.** Build `validate.py` (new out-of-time validation, baselines, confusion matrix,
+   continuity check) — this is the new, most important code in the repo. Real results (see
+   above) also drove a feature-list simplification and an `n_jobs=-1` speed change.
+6. **Done.** Adapt `diagnostics.py`/`make_figures.py` from the `replication_package_proposal`
+   templates, generalized to the full `APPLY_YEARS` range instead of five hardcoded years.
+   `build_diagnostic_cells.py` reads `config.CLASSIFY_PARQUET` directly rather than per-year
+   files (there are none in this repo's design). Ran for real: 4,280 cells (14 pre-2004 years ×
+   3 series + 13 labeled years × 5 series, × 40 bins each — matches expectation exactly) and 107
+   figures. Spot-checked 2006: raw LTI is visibly bimodal (the second-lien contamination bump),
+   actual-first-lien is cleanly unimodal, and predicted-first-lien is visually almost identical
+   to actual-first-lien — reproducing the appendix's core validation claim end-to-end through
+   this repo's own pipeline.
 7. Write `tests/` against synthetic data (a handful of fabricated rows covering the filter
    edge cases, not real HMDA data) so the pipeline logic is covered without needing raw data in
-   CI.
+   CI. **Mostly done already** — `tests/` has grown alongside each module rather than as a
+   separate pass (44 tests as of step 6); revisit at the end for coverage gaps.
 8. `README.md` + package/export the crosswalk artifact.
 9. Draft `paper/letter.tex` from the outline once the validation results exist.
 

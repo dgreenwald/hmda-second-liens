@@ -70,6 +70,10 @@ TRAIN_PARQUET = (
 CLASSIFY_PARQUET = (
     INTERMEDIATE_DIR / f"hmda_classified_{min(APPLY_YEARS)}_{max(APPLY_YEARS)}.parquet"
 )
+# Small, aggregated (bin counts only, no loan-level data) -- unlike the
+# other pipeline artifacts, this is a plausible candidate to vendor
+# publicly alongside the letter for full figure reproducibility.
+HISTOGRAM_CELLS_PARQUET = TABLE_DIR / "hmda_lti_histogram_cells.parquet"
 
 LABEL_VAR = "lien_status"
 CONTINUOUS_VARS = ["log_lti", "log_ltv"]
