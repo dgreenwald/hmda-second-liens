@@ -108,6 +108,12 @@ def clean_frame(df_t: pd.DataFrame, df_fhfa_balanced: pd.DataFrame) -> pd.DataFr
 
     df_t["loan_below_10k"] = df_t["loan_amt"] < 10
 
+    # Pin every categorical feature to its canonical levels so dummy encoding
+    # (done separately per year/split downstream) always produces the same
+    # columns in the same order -- see config.CATEGORY_LEVELS.
+    for var, categories in config.CATEGORY_LEVELS.items():
+        df_t[var] = pd.Categorical(df_t[var], categories=categories)
+
     return df_t.drop(columns=["county_code"])
 
 

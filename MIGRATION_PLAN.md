@@ -166,6 +166,29 @@ original condition as-is.
   Fixed by having `config.py` call `load_dotenv(REPO_ROOT / ".env", override=False)` itself,
   anchored to the repo root rather than a cwd-relative search, and adding `python-dotenv` as a
   direct dependency instead of relying on it arriving transitively via `py_tools[datasets]`.
+- **Latent bug found and fixed in step 5**: `py_tools.get_labels_features` builds dummy columns
+  via `pd.get_dummies(df[var])`, which only creates columns for values *actually present* in
+  whatever slice it's given. `classify.py` encodes one year at a time, so a category value
+  absent from a given year would silently produce a differently-shaped/misaligned feature
+  matrix instead of an error. Checked empirically against the real data: every year 1990-2016
+  has all 4 `loan_type` values and all 10 `purchaser_type` values present, so this was not
+  actually corrupting results, but it's not guaranteed by the code and `validate.py`'s baselines
+  hit the identical pattern. Fixed at the source: `clean.clean_frame` now pins every
+  `CATEGORY_VARS` column to a `pandas.Categorical` with fixed, explicit categories
+  (`config.CATEGORY_LEVELS`), so `pd.get_dummies` always emits the same columns in the same
+  order regardless of what's present in a given slice.
+  - This fix landed *after* the step-2/step-4 real-data runs (`hmda_train_2004_2007.parquet`,
+    `rf_fit.pkl`, `hmda_classified_1990_2016.parquet` were all built pre-fix). Confirmed the fix
+    is a no-op for this specific dataset (same category coverage and sort order either way), so
+    those cached artifacts were not regenerated; a future clean `make all` rebuild will use the
+    fixed code path throughout. Flagged here rather than silently left inconsistent.
+- **Bug found and fixed while running validate.py for real**: `validate.oob_score` originally
+  fit on the *full* 19.35M-row training frame instead of the same `train_size=0.25` split
+  `train.fit()` actually uses, making it a much larger (and slower -- roughly 4x the data,
+  observed running 20+ minutes before being killed) fit than the deployed model, for a number
+  that didn't even describe that model. Fixed to split with the same `train_size`/`test_size`/
+  `random_state` as the headline model before fitting with `oob_score=True`, so it's both fast
+  and a real cross-check against the deployed model's held-out error rate.
 
 ## Methodological improvements worth making (this is most of the letter's actual contribution)
 
@@ -209,6 +232,62 @@ and substantially strengthen the letter:
 Items 1-2 are the ones I'd treat as required for the letter to feel like a real methods
 contribution rather than a repackaged appendix; 3-6 are good value-per-effort additions;
 item 7 is the deliverable that makes it citable.
+
+### Acted on: feature list and RF settings (post-review)
+
+Per the ablation/hyperparameter results below, `config.CATEGORY_VARS` now drops
+`has_edit_status` and `loan_below_10k` (down to `["purchaser_type", "loan_type"]`;
+`clean.clean_frame` still computes both columns, just doesn't feed them to the model), and
+`config.RF_KWARGS` adds `n_jobs=-1` (pure speed, no effect on the fitted model since each
+tree's fit is independently seeded from `random_state`). Hyperparameters
+(`n_estimators=50, max_depth=10`) were left unchanged -- already validated as the best point in
+the tested grid. Re-ran training for real: 1m34s wall time (was 7m57s single-threaded), 2.60%
+overall held-out error (was 2.59%), second-lien error improved slightly to 4.57% (was 4.80%) --
+confirms the dropped features weren't pulling their weight. `class_weight='balanced'` was
+considered and explicitly rejected; see the base-rate-shift finding below.
+
+### Results (real data, items 1-6 all run)
+
+- **Feature ablation** (500k-row subsample, baseline err_rate 2.61%): dropping `log_lti` or
+  `log_ltv` alone roughly doubles the error rate (4.76%, 3.65%); `purchaser_type` matters
+  modestly (2.98% without it); `loan_type`, `has_edit_status`, `loan_below_10k` are each within
+  ~0.06pp of the full-feature baseline. **Recommend dropping `has_edit_status` and
+  `loan_below_10k`** — confirmed by direct held-out-error evidence, not just importance scores.
+  (`loan_below_10k` is marginally *very* predictive of lien status on its own -- 84.5% of
+  sub-$10k loans are second liens vs. 17.9% otherwise -- but redundant given `log_lti` is
+  already a continuous feature the RF can split on directly.)
+- **Hyperparameter grid** (same subsample): the original `n_estimators=50, max_depth=10` is
+  already the best point tested (2.60% err_rate); `max_depth=15` is slightly *worse* (2.66%),
+  `n_estimators=200` is statistically indistinguishable (2.60%). **No change recommended** —
+  the original ad hoc choice holds up under scrutiny.
+- **OOB score**: 0.9740 (2.60% OOB error), matching the 2.59% held-out-split error from step 4
+  almost exactly — a good independent cross-check that the model isn't overfitting.
+- **Out-of-time validation, 2008-2016 (the headline result)**: accuracy 97.9%-98.9% and ROC-AUC
+  0.988-0.995 throughout — the model's ranking ability holds up well outside the training
+  window. But **second-lien precision degrades sharply out-of-time (53%-66%, vs. recall staying
+  strong at 85%-93%)**, while precision is presumably much better in-era (2004-2007, implicit in
+  the 4.8% same-era second-lien error rate from step 4). The `continuity_check` explains why:
+  predicted second-lien share is consistently *higher* than actual, by a small margin in
+  2004-2007 (~1pp) but by a much larger *relative* margin post-2007 as the true second-lien
+  share collapses from the piggyback-loan boom peak (~23% in 2006) to ~2% by the mid-2010s. The
+  same absolute over-prediction becomes a much bigger precision problem once the base rate the
+  model is up against is that low. This is exactly the kind of finding that justifies doing
+  out-of-time validation instead of a single same-era spot check, and should be reported
+  honestly in the letter rather than smoothed over.
+  - **Revises the class_weight recommendation floated during step 5's live review**:
+    `class_weight='balanced'` improves second-lien recall at the cost of precision on
+    2004-2007-only held-out data, which looked attractive given the application cares more
+    about not missing second liens. But the model *already* over-predicts second liens
+    out-of-time — making it more trigger-happy toward the second-lien class via balanced
+    weighting would compound that existing bias, not fix it. **Do not recommend
+    `class_weight='balanced'`** without also addressing the base-rate shift (e.g., recalibrating
+    the decision threshold per era, or reporting the precision caveat directly).
+- **Baselines, out-of-time**: a plain logistic regression on the identical features tracks the
+  RF closely (accuracy and ROC-AUC within ~0.001 of each other every year) — most of the RF's
+  apparent power out-of-time comes from the features (`log_lti`, `log_ltv`), not from the
+  Random Forest's flexibility per se. The naive single-threshold-on-`log_lti` baseline is
+  clearly worse (accuracy ~93.5%-95.4%, second-lien precision only 22%-36%), showing the other
+  features do add real value over the simplest possible rule.
 
 ## Paper skeleton (`paper/letter.tex`)
 

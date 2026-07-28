@@ -1,8 +1,9 @@
 import numpy as np
 import pandas as pd
 import pytest
+from py_tools.econometrics.machine_learning import get_labels_features
 
-from hmda_seconds import clean
+from hmda_seconds import clean, config
 
 
 def _base_row(**overrides):
@@ -113,3 +114,24 @@ def test_pre_2004_frame_without_lien_status_is_not_filtered_on_it():
     out = clean.clean_frame(df, FHFA_BALANCED)
     assert len(out) == 1
     assert "lien_status" not in out.columns
+
+
+def test_category_columns_are_pinned_to_full_levels_even_when_absent():
+    # A one-row slice necessarily has only one value of every categorical
+    # column present. Without pinning (config.CATEGORY_LEVELS), dummy
+    # encoding this slice would produce one column per variable instead of
+    # the full training-time set -- exactly the bug that would silently
+    # misalign features when classify.py encodes one year at a time.
+    df = pd.DataFrame([_base_row(purchaser_type=3, loan_type=2)])
+    out = clean.clean_frame(df, FHFA_BALANCED)
+
+    for var, categories in config.CATEGORY_LEVELS.items():
+        assert isinstance(out[var].dtype, pd.CategoricalDtype)
+        assert list(out[var].cat.categories) == categories
+
+    _, features, names = get_labels_features(
+        out, config.LABEL_VAR, config.CONTINUOUS_VARS, config.CATEGORY_VARS
+    )
+    expected_dummy_cols = sum(len(v) for v in config.CATEGORY_LEVELS.values())
+    assert features.shape[1] == len(config.CONTINUOUS_VARS) + expected_dummy_cols
+    assert len(names) == features.shape[1]

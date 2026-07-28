@@ -23,6 +23,7 @@ def training_frame():
 
     return pd.DataFrame(
         {
+            "year": rng.integers(2004, 2008, size=n),
             "log_lti": log_lti,
             "log_ltv": log_ltv,
             "purchaser_type": rng.integers(0, 4, size=n),
