@@ -27,6 +27,29 @@ def test_classification_metrics_includes_roc_auc_when_probabilities_given():
 
     metrics = validate.classification_metrics(y_true, y_pred, y_prob=y_prob)
     assert metrics["roc_auc"] == pytest.approx(1.0)
+    assert metrics["average_precision"] == pytest.approx(1.0)
+    assert 0.0 <= metrics["brier_score"] <= 1.0
+    assert metrics["log_loss"] > 0.0
+    assert metrics["observed_second_share"] == pytest.approx(0.5)
+    assert metrics["mean_predicted_second_share"] == pytest.approx(0.5)
+
+
+def test_calibration_coefficients_recover_calibrated_probabilities():
+    probability = np.linspace(0.02, 0.98, 49)
+    counts = 100 * np.ones_like(probability, dtype=int)
+    successes = np.rint(probability * counts).astype(int)
+    y = np.concatenate(
+        [
+            np.r_[np.ones(success), np.zeros(count - success)]
+            for success, count in zip(successes, counts, strict=True)
+        ]
+    )
+    p = np.repeat(probability, counts)
+
+    intercept, slope = validate.calibration_coefficients(y, p)
+
+    assert intercept == pytest.approx(0.0, abs=0.02)
+    assert slope == pytest.approx(1.0, abs=0.02)
 
 
 def test_evaluate_by_year_skips_years_with_no_labels():

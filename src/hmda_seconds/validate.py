@@ -19,7 +19,10 @@ from py_tools.econometrics.machine_learning import get_labels_features
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import (
     accuracy_score,
+    average_precision_score,
+    brier_score_loss,
     confusion_matrix,
+    log_loss,
     precision_recall_fscore_support,
     roc_auc_score,
 )
@@ -40,7 +43,7 @@ def classification_metrics(
     y_true: np.ndarray, y_pred: np.ndarray, y_prob: np.ndarray | None = None
 ) -> dict:
     """Accuracy, per-class precision/recall/F1, confusion counts, and (if
-    probabilities are given) ROC-AUC for the second-lien class."""
+    probabilities are given) ranking, scoring-rule, and calibration metrics."""
     precision, recall, f1, _ = precision_recall_fscore_support(
         y_true, y_pred, labels=CLASS_LABELS, zero_division=0
     )
@@ -61,8 +64,69 @@ def classification_metrics(
         "true_positive": tp,
     }
     if y_prob is not None:
-        metrics["roc_auc"] = roc_auc_score(y_true == config.SECOND_LIEN_CLASS, y_prob)
+        y_second = np.asarray(y_true) == config.SECOND_LIEN_CLASS
+        y_prob = np.asarray(y_prob, dtype=float)
+        calibration_intercept, calibration_slope = calibration_coefficients(
+            y_second, y_prob
+        )
+        metrics.update(
+            {
+                "roc_auc": roc_auc_score(y_second, y_prob),
+                "average_precision": average_precision_score(y_second, y_prob),
+                "log_loss": log_loss(y_second, y_prob, labels=[False, True]),
+                "brier_score": brier_score_loss(y_second, y_prob),
+                "observed_second_share": y_second.mean(),
+                "mean_predicted_second_share": y_prob.mean(),
+                "calibration_mean_error": y_prob.mean() - y_second.mean(),
+                "calibration_intercept": calibration_intercept,
+                "calibration_slope": calibration_slope,
+            }
+        )
     return metrics
+
+
+def calibration_coefficients(
+    y_true_second: np.ndarray,
+    y_prob: np.ndarray,
+    tolerance: float = 1e-10,
+    max_iter: int = 100,
+) -> tuple[float, float]:
+    """Fit the calibration model ``y ~ intercept + slope * logit(p)``.
+
+    The two-parameter Newton iteration avoids constructing a general-purpose
+    regression object for validation samples containing millions of loans.
+    """
+    y = np.asarray(y_true_second, dtype=float)
+    probability = np.clip(np.asarray(y_prob, dtype=float), 1e-12, 1 - 1e-12)
+    score = np.log(probability / (1.0 - probability))
+    coefficients = np.array([0.0, 1.0])
+
+    for _ in range(max_iter):
+        linear = coefficients[0] + coefficients[1] * score
+        fitted = np.empty_like(linear)
+        positive = linear >= 0
+        fitted[positive] = 1.0 / (1.0 + np.exp(-linear[positive]))
+        exp_linear = np.exp(linear[~positive])
+        fitted[~positive] = exp_linear / (1.0 + exp_linear)
+        weight = fitted * (1.0 - fitted)
+        gradient = np.array(
+            [(y - fitted).sum(), np.dot(score, y - fitted)]
+        )
+        information = np.array(
+            [
+                [weight.sum(), np.dot(weight, score)],
+                [np.dot(weight, score), np.dot(weight, score * score)],
+            ]
+        )
+        try:
+            step = np.linalg.solve(information, gradient)
+        except np.linalg.LinAlgError:
+            return np.nan, np.nan
+        coefficients += step
+        if np.max(np.abs(step)) < tolerance:
+            break
+
+    return float(coefficients[0]), float(coefficients[1])
 
 
 def evaluate_by_year(

@@ -28,3 +28,15 @@ def test_fit_learns_the_separating_signal(training_frame):
     # log_lti is constructed to cleanly separate the two classes, so a
     # reasonably-sized forest should do much better than chance (0.5).
     assert rfw.err_rate < 0.2
+
+
+def test_fit_full_uses_every_training_row(training_frame):
+    rfw = train.fit_full(
+        training_frame,
+        n_estimators=5,
+        max_depth=2,
+        random_state=0,
+    )
+
+    assert len(rfw.train_labels) == len(training_frame)
+    assert rfw.test_labels is None

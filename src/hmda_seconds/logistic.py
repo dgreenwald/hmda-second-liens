@@ -53,7 +53,7 @@ def predict(
     category_vars: list[str] | None = None,
 ) -> np.ndarray:
     """Predict first- versus second-lien labels for a cleaned frame."""
-    features = _feature_matrix(df, continuous_vars, category_vars)
+    features = feature_matrix(df, continuous_vars, category_vars)
     return model.predict(features)
 
 
@@ -64,7 +64,7 @@ def predict_proba_second_lien(
     category_vars: list[str] | None = None,
 ) -> np.ndarray:
     """Return each observation's estimated probability of a second lien."""
-    features = _feature_matrix(df, continuous_vars, category_vars)
+    features = feature_matrix(df, continuous_vars, category_vars)
     classes = list(model.classes_)
     return model.predict_proba(features)[:, classes.index(config.SECOND_LIEN_CLASS)]
 
@@ -89,11 +89,12 @@ def load(infile: str | Path) -> LogisticRegression:
     return model
 
 
-def _feature_matrix(
+def feature_matrix(
     df: pd.DataFrame,
     continuous_vars: list[str] | None,
     category_vars: list[str] | None,
 ) -> np.ndarray:
+    """Encode the configured continuous and categorical model features."""
     if continuous_vars is None:
         continuous_vars = config.CONTINUOUS_VARS
     if category_vars is None:

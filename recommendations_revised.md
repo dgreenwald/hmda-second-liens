@@ -148,6 +148,13 @@ significant.
 logistic regression the provisional primary estimator and retain RF as a
 robustness check.
 
+**Implemented decision:** the fair full-sample comparison makes logistic regression the
+provisional primary estimator and retains RF as a substantive robustness model. Logit performs
+better on accuracy, second-lien F1, average precision, and Brier score in every 2008--2016
+validation year, while RF performs better on ROC-AUC and log loss and has calibration slopes
+closer to one. See `BENCHMARK_FINDINGS.md` and the `benchmark_*.csv` tables for the complete
+results and computational comparison.
+
 ### Step 4: Predeclare a temporal model-selection protocol
 
 Do not use random cross-validation to choose features or hyperparameters. Use

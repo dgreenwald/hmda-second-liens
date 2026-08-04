@@ -62,6 +62,8 @@ ZILLOW_MIN_OVERLAP_YEARS = 1
 
 MODEL_FILE = MODEL_DIR / "rf_fit.pkl"
 LOGISTIC_MODEL_FILE = MODEL_DIR / "logistic_fit.pkl"
+BENCHMARK_RF_MODEL_FILE = MODEL_DIR / "benchmark_rf_full.pkl"
+BENCHMARK_LOGISTIC_MODEL_FILE = MODEL_DIR / "benchmark_logistic_full.pkl"
 
 # Lien status is reliably reported in HMDA starting in 2004. Train on the
 # same 2004-2007 window as the original script; unlike the original script,
@@ -76,6 +78,9 @@ assert set(TRAIN_YEARS) | set(VALIDATE_YEARS) <= set(APPLY_YEARS)
 
 TRAIN_PARQUET = (
     INTERMEDIATE_DIR / f"hmda_train_{min(TRAIN_YEARS)}_{max(TRAIN_YEARS)}.parquet"
+)
+BENCHMARK_TRAIN_PARQUET = INTERMEDIATE_DIR / (
+    f"hmda_train_{min(TRAIN_YEARS)}_{max(TRAIN_YEARS)}_county_value.parquet"
 )
 CLASSIFY_PARQUET = (
     INTERMEDIATE_DIR / f"hmda_classified_{min(APPLY_YEARS)}_{max(APPLY_YEARS)}.parquet"

@@ -151,3 +151,21 @@ def load_and_clean_year(
         yearly_dir = config.HMDA_YEARLY_DIR
     df_t = pd.read_parquet(f"{yearly_dir}/hmda{year:d}.parquet")
     return clean_frame(df_t, df_county_values)
+
+
+def build_training_data(
+    years=None,
+    panel_years=None,
+    yearly_dir=None,
+) -> pd.DataFrame:
+    """Build one consistently cleaned multi-year training extract."""
+    if years is None:
+        years = config.TRAIN_YEARS
+    if panel_years is None:
+        panel_years = config.APPLY_YEARS
+    df_county_values = build_county_value_panel(panel_years)
+    frames = [
+        load_and_clean_year(year, df_county_values, yearly_dir=yearly_dir)
+        for year in years
+    ]
+    return pd.concat(frames, axis=0, ignore_index=True)

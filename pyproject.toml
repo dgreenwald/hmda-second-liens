@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "hmda-second-liens"
 version = "0.1.0"
-description = "A validated Random Forest classifier for imputing HMDA lien status, 1990-2016."
+description = "Validated classifiers for imputing HMDA lien status, 1990-2016."
 authors = [
     {name = "Dan Greenwald", email = "greenw2@gmail.com"},
 ]
