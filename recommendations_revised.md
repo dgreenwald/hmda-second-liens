@@ -113,6 +113,13 @@ explicitly rather than described as a purely predictive improvement.
 - A short comparison of balanced-panel and year-specific FHFA coverage.
 - A documented decision about retaining or revising `log_ltv`.
 
+**Implemented decision:** retire the native-index `log_ltv` feature. Annual Zillow county
+ZHVI is used to estimate a county-specific dollar-per-FHFA-index-point scale, with the
+geometric mean Zillow/FHFA ratio over all available overlap years as the primary estimator.
+The resulting feature is `log_county_value_to_loan`. FHFA matching is year-specific rather
+than balanced over 1990--2016. See `COUNTY_VALUE_SCALING.md` for support, fit, robustness,
+and loan-level coverage diagnostics.
+
 ### Step 3: Establish fair RF and logistic baselines
 
 Refit the Random Forest on the full 2004--2007 training extract, using the

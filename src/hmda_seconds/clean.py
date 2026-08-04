@@ -7,8 +7,9 @@ MIGRATION_PLAN.md:
 - ``resp_id``/``seq_num`` are retained (the original dropped them) so a
   released predicted-lien-status crosswalk can be joined back to a
   same-vintage raw LAR file.
-- The balanced-FHFA-panel year range is parameterized instead of a hardcoded
-  ``np.arange(1990, 2017)``.
+- County FHFA indexes are put on a Zillow dollar scale before forming the
+  county-value-to-loan feature; the historical native-HPI ratio was not a
+  comparable price-level measure across counties.
 
 The lien_status label was checked against real 2004-2007 data and found to
 already be strictly binary ({1, 2}) within this sample restriction, so unlike
@@ -21,7 +22,7 @@ import numpy as np
 import pandas as pd
 from py_tools.datasets import fhfa
 
-from . import config
+from . import config, county_values
 
 BASE_VAR_LIST = [
     "year",
@@ -69,7 +70,30 @@ def build_balanced_fhfa_panel(df_fhfa: pd.DataFrame, years) -> pd.DataFrame:
     )
 
 
-def clean_frame(df_t: pd.DataFrame, df_fhfa_balanced: pd.DataFrame) -> pd.DataFrame:
+def build_county_value_panel(
+    years=None,
+    method: str = "geometric",
+    min_overlap_years: int = config.ZILLOW_MIN_OVERLAP_YEARS,
+    zillow_vintage: str = config.ZILLOW_VINTAGE,
+) -> pd.DataFrame:
+    """Build the year-specific FHFA panel scaled to Zillow dollar levels."""
+    if years is None:
+        years = config.APPLY_YEARS
+    df_fhfa = load_fhfa_county_hpi()
+    df_zillow = county_values.load_zillow_county_zhvi(vintage=zillow_vintage)
+    df_zillow_annual = county_values.annualize_zillow_county(df_zillow)
+    scales, _ = county_values.estimate_county_scales(df_fhfa, df_zillow_annual)
+    panel = county_values.build_county_value_panel(
+        df_fhfa,
+        scales,
+        years,
+        method=method,
+        min_overlap_years=min_overlap_years,
+    )
+    return panel[["fips", "year", "hpi", "county_value"]]
+
+
+def clean_frame(df_t: pd.DataFrame, df_county_values: pd.DataFrame) -> pd.DataFrame:
     """Apply sample restrictions and construct model features for one year."""
     df_t = df_t.rename({"asof_date": "year"}, axis=1)
 
@@ -97,11 +121,13 @@ def clean_frame(df_t: pd.DataFrame, df_fhfa_balanced: pd.DataFrame) -> pd.DataFr
 
     df_t["fips"] = (1000.0 * df_t["state_code"] + df_t["county_code"]).astype("Int64")
     df_t["state_code"] = df_t["state_code"].astype("Int64")
-    df_t = pd.merge(df_t, df_fhfa_balanced, on=["fips", "year"], how="inner")
+    df_t = pd.merge(df_t, df_county_values, on=["fips", "year"], how="inner")
 
     df_t["log_lti"] = np.log(df_t["loan_amt"] / df_t["app_income"])
-    df_t["log_ltv"] = np.log(df_t["hpi"] / df_t["loan_amt"])
-    df_t.dropna(subset=["log_lti", "log_ltv"], inplace=True)
+    df_t["log_county_value_to_loan"] = np.log(
+        df_t["county_value"] / (1000.0 * df_t["loan_amt"])
+    )
+    df_t.dropna(subset=config.CONTINUOUS_VARS, inplace=True)
 
     df_t["has_edit_status"] = pd.notnull(df_t["edit_status"])
     df_t["edit_status"] = df_t["edit_status"].fillna(0).astype(int)
@@ -118,10 +144,10 @@ def clean_frame(df_t: pd.DataFrame, df_fhfa_balanced: pd.DataFrame) -> pd.DataFr
 
 
 def load_and_clean_year(
-    year: int, df_fhfa_balanced: pd.DataFrame, yearly_dir=None
+    year: int, df_county_values: pd.DataFrame, yearly_dir=None
 ) -> pd.DataFrame:
     """Read one year's raw HMDA extract and apply :func:`clean_frame`."""
     if yearly_dir is None:
         yearly_dir = config.HMDA_YEARLY_DIR
     df_t = pd.read_parquet(f"{yearly_dir}/hmda{year:d}.parquet")
-    return clean_frame(df_t, df_fhfa_balanced)
+    return clean_frame(df_t, df_county_values)

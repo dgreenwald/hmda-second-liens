@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""Build the concatenated HMDA training extract for TRAIN_YEARS.
-
-Wraps hmda_seconds.clean: loads the FHFA county HPI, builds the balanced
-panel over the full application window, cleans each training year, and
-writes one concatenated parquet.
-"""
+"""Build the concatenated HMDA training extract for TRAIN_YEARS."""
 
 from __future__ import annotations
 
@@ -18,14 +13,13 @@ from hmda_seconds import clean, config
 
 
 def build_training_data() -> pd.DataFrame:
-    df_fhfa = clean.load_fhfa_county_hpi()
-    df_fhfa_balanced = clean.build_balanced_fhfa_panel(df_fhfa, config.APPLY_YEARS)
+    df_county_values = clean.build_county_value_panel(config.APPLY_YEARS)
 
     df_list = []
     for year in config.TRAIN_YEARS:
         print(f"Cleaning {year}...")
         start = time.time()
-        df_year = clean.load_and_clean_year(year, df_fhfa_balanced)
+        df_year = clean.load_and_clean_year(year, df_county_values)
         df_list.append(df_year)
         print(f"  {len(df_year):,} rows ({time.time() - start:.1f}s)")
 

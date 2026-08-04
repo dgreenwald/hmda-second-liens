@@ -48,12 +48,13 @@ def classify_all_years(
 
     rfw = RandomForestWrapper(infile=str(model_file))
 
-    df_fhfa = clean.load_fhfa_county_hpi()
-    df_fhfa_balanced = clean.build_balanced_fhfa_panel(df_fhfa, config.APPLY_YEARS)
+    df_county_values = clean.build_county_value_panel(config.APPLY_YEARS)
 
     df_list = []
     for year in years:
-        df_year = clean.load_and_clean_year(year, df_fhfa_balanced, yearly_dir=yearly_dir)
+        df_year = clean.load_and_clean_year(
+            year, df_county_values, yearly_dir=yearly_dir
+        )
         df_list.append(classify_frame(df_year, rfw))
 
     return pd.concat(df_list, axis=0, ignore_index=True)

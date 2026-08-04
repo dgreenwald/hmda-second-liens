@@ -51,6 +51,15 @@ HMDA_YEARLY_DIR = Path(
 # it from there and caches a derived parquet alongside it.
 FHFA_DATA_DIR = PUBLIC_DIR
 
+# Zillow Research county ZHVI used to put the FHFA appreciation indexes on a
+# dollar scale. The source is the all-homes, middle-tier, smoothed and
+# seasonally adjusted monthly series downloaded by py_tools.datasets.zillow.
+# Pin the source vintage so a later Zillow history revision cannot silently
+# change the fitted model.
+ZILLOW_VINTAGE = os.environ.get("HMDA_SECONDS_ZILLOW_VINTAGE", "202608")
+ZILLOW_ANCHOR_YEAR = 2017
+ZILLOW_MIN_OVERLAP_YEARS = 1
+
 MODEL_FILE = MODEL_DIR / "rf_fit.pkl"
 LOGISTIC_MODEL_FILE = MODEL_DIR / "logistic_fit.pkl"
 
@@ -77,7 +86,7 @@ CLASSIFY_PARQUET = (
 HISTOGRAM_CELLS_PARQUET = TABLE_DIR / "hmda_lti_histogram_cells.parquet"
 
 LABEL_VAR = "lien_status"
-CONTINUOUS_VARS = ["log_lti", "log_ltv"]
+CONTINUOUS_VARS = ["log_lti", "log_county_value_to_loan"]
 # has_edit_status and loan_below_10k were dropped from the feature list after
 # a real-data feature ablation (MIGRATION_PLAN.md, "Results (real data,
 # items 1-6 all run)") showed removing either changes held-out error by

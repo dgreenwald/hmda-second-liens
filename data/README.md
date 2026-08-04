@@ -1,8 +1,9 @@
 # Data
 
-Two inputs feed the classifier: the raw HMDA loan-level records, and the FHFA county house
-price index (used to build the `log_ltv` proxy feature). Nothing under `data/raw/` is
-committed to this repo; `data/public/` holds small vendored public inputs.
+Three inputs feed the classifier: raw HMDA loan-level records, the FHFA county house-price
+index, and Zillow Research county ZHVI. FHFA supplies the long appreciation history; Zillow
+puts each county series on a comparable dollar level. Nothing under `data/raw/` is committed
+to this repo; `data/public/` holds small vendored public inputs.
 
 ## HMDA loan-level records
 
@@ -47,3 +48,20 @@ microdata beyond the aggregated/binned outputs this letter is designed to releas
 Price Index" at the county level, ~3.4MB). Loaded via
 `py_tools.datasets.fhfa.load('county', data_dir=...)` pointed at `data/public/`; the derived
 parquet cache that call writes alongside the source file is regenerable and gitignored.
+
+## Zillow county ZHVI
+
+The pipeline uses Zillow's all-homes, middle-tier, smoothed and seasonally adjusted monthly
+county ZHVI. The source vintage is pinned by `HMDA_SECONDS_ZILLOW_VINTAGE` and defaults to
+`202608`. `py_tools.datasets.zillow` stores the raw CSV and its derived parquet under the
+`PY_TOOLS_DATA_DIR` Zillow directory; loading never downloads implicitly.
+
+Fetch the pinned input once with:
+
+```bash
+python -c "from py_tools.datasets import zillow; zillow.download_raw(vintage='202608')"
+```
+
+Run `make county-values` to regenerate the public scaling diagnostics, and
+`make county-value-coverage` to audit the scaled panel against the local HMDA files. The
+estimation and robustness choices are documented in `COUNTY_VALUE_SCALING.md`.
