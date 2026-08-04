@@ -127,19 +127,6 @@ def test_continuity_check_reports_nan_actual_share_for_unlabeled_years():
     assert out.loc[2005, "actual_second_lien_share"] == pytest.approx(0.5)
 
 
-def test_logistic_baseline_learns_the_separating_signal(training_frame):
-    model = validate.fit_logistic_baseline(training_frame, random_state=0)
-
-    pred = validate.predict_logistic_baseline(model, training_frame)
-    prob = validate.predict_proba_logistic_baseline(model, training_frame)
-
-    assert set(np.unique(pred)) <= {1, 2}
-    assert ((prob >= 0.0) & (prob <= 1.0)).all()
-
-    accuracy = (pred == training_frame[config.LABEL_VAR].to_numpy()).mean()
-    assert accuracy > 0.8  # log_lti is constructed to cleanly separate the classes
-
-
 def test_log_lti_threshold_baseline_uses_midpoint_of_class_means():
     df = pd.DataFrame(
         {

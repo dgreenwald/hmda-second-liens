@@ -52,6 +52,7 @@ HMDA_YEARLY_DIR = Path(
 FHFA_DATA_DIR = PUBLIC_DIR
 
 MODEL_FILE = MODEL_DIR / "rf_fit.pkl"
+LOGISTIC_MODEL_FILE = MODEL_DIR / "logistic_fit.pkl"
 
 # Lien status is reliably reported in HMDA starting in 2004. Train on the
 # same 2004-2007 window as the original script; unlike the original script,
@@ -117,6 +118,17 @@ RF_KWARGS = {
     # n_estimators=50 vs 200 was run single-threaded before this change --
     # this only changes wall-clock time, not the fitted model).
     "n_jobs": -1,
+}
+
+# Starting specification for the formal logistic estimator. Regularization
+# strength and the decision threshold remain objects for the next model-
+# selection pass; keeping them explicit prevents sklearn default changes from
+# silently changing the results.
+LOGISTIC_KWARGS = {
+    "C": 1.0,
+    "l1_ratio": 0.0,
+    "max_iter": 1000,
+    "solver": "lbfgs",
 }
 
 TRAIN_SIZE = 0.25

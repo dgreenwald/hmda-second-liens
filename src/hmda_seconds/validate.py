@@ -4,9 +4,9 @@ This is the letter's actual validation section (MIGRATION_PLAN.md,
 "Methodological improvements" items 1-6). The original script only
 spot-checked a single year (2006) against a random in-sample split. Here
 every labeled year the model was NOT trained on (2008-2016) is evaluated
-against its predictions, alongside two simple baselines, richer per-class
-metrics, an out-of-bag check, a feature ablation, and a small hyperparameter
-grid.
+against its predictions, alongside a logistic comparator and a simple
+threshold baseline, richer per-class metrics, an out-of-bag check, a feature
+ablation, and a small hyperparameter grid.
 """
 
 from __future__ import annotations
@@ -17,7 +17,6 @@ import numpy as np
 import pandas as pd
 from py_tools.econometrics.machine_learning import get_labels_features
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import (
     accuracy_score,
     confusion_matrix,
@@ -143,33 +142,8 @@ def continuity_check(df: pd.DataFrame) -> pd.DataFrame:
 
 
 # --------------------------------------------------------------------------
-# Baselines (item 3)
+# Simple threshold baseline (item 3)
 # --------------------------------------------------------------------------
-
-
-def fit_logistic_baseline(df: pd.DataFrame, **kwargs) -> LogisticRegression:
-    """Logistic regression on the same encoded features as the RF."""
-    labels, features, _ = get_labels_features(
-        df, config.LABEL_VAR, config.CONTINUOUS_VARS, config.CATEGORY_VARS
-    )
-    model = LogisticRegression(max_iter=1000, **kwargs)
-    model.fit(features, labels)
-    return model
-
-
-def predict_logistic_baseline(model: LogisticRegression, df: pd.DataFrame) -> np.ndarray:
-    _, features, _ = get_labels_features(
-        df, config.LABEL_VAR, config.CONTINUOUS_VARS, config.CATEGORY_VARS, features_only=True
-    )
-    return model.predict(features)
-
-
-def predict_proba_logistic_baseline(model: LogisticRegression, df: pd.DataFrame) -> np.ndarray:
-    _, features, _ = get_labels_features(
-        df, config.LABEL_VAR, config.CONTINUOUS_VARS, config.CATEGORY_VARS, features_only=True
-    )
-    classes = list(model.classes_)
-    return model.predict_proba(features)[:, classes.index(config.SECOND_LIEN_CLASS)]
 
 
 @dataclass

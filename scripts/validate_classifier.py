@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from hmda_seconds import config, validate
+from hmda_seconds import config, logistic, validate
 
 # A lighter forest than RF_KWARGS (n_estimators=50) for the ablation grid:
 # ablation refits once per feature (7 fits total), so this keeps the whole
@@ -51,8 +51,8 @@ def main() -> None:
     df_train = pd.read_parquet(args.train_input)
     df_robust = df_train.sample(n=min(ROBUSTNESS_SUBSAMPLE, len(df_train)), random_state=17)
 
-    print("Fitting baselines on the training extract...")
-    logit = validate.fit_logistic_baseline(df_train)
+    print("Fitting logistic comparator and threshold baseline...")
+    logit = logistic.fit(df_train)
     threshold_baseline = validate.fit_log_lti_threshold_baseline(df_train)
     print(f"  log_lti threshold baseline: {threshold_baseline.threshold:.4f}")
 
@@ -74,7 +74,7 @@ def main() -> None:
     if not args.classify_input.exists():
         print(
             f"\n{args.classify_input} not found -- skipping out-of-time metrics, "
-            "the continuity check, and out-of-time baseline comparison. Run "
+            "the continuity check, and out-of-time model comparison. Run "
             "classify_all_years.py, then re-run this script to fill those in."
         )
         return
@@ -89,11 +89,11 @@ def main() -> None:
     continuity = validate.continuity_check(df_classified)
     continuity.to_csv(args.output_dir / "continuity_check.csv")
 
-    print("\nEvaluating baselines out-of-time...")
-    logit_pred = validate.predict_logistic_baseline(logit, df_classified)
-    logit_prob = validate.predict_proba_logistic_baseline(logit, df_classified)
+    print("\nEvaluating comparison estimators out-of-time...")
+    logit_pred = logistic.predict(logit, df_classified)
+    logit_prob = logistic.predict_proba_second_lien(logit, df_classified)
     logit_oot = validate.evaluate_by_year(df_classified, logit_pred, y_prob=logit_prob)
-    logit_oot.to_csv(args.output_dir / "out_of_time_metrics_logistic_baseline.csv")
+    logit_oot.to_csv(args.output_dir / "out_of_time_metrics_logistic.csv")
 
     threshold_pred = threshold_baseline.predict(df_classified)
     threshold_oot = validate.evaluate_by_year(df_classified, threshold_pred)

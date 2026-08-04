@@ -11,7 +11,7 @@ ROOT := $(abspath .)
 SCRIPTS_DIR := $(ROOT)/scripts
 OUTPUT_DIR := $(ROOT)/output
 
-.PHONY: install test data train validate classify figures all clean
+.PHONY: install test data train train-logistic validate classify figures all clean
 
 install:
 	$(PYTHON) -m pip install -e ".[dev]"
@@ -29,6 +29,9 @@ data:
 
 train: data
 	$(PYTHON) $(SCRIPTS_DIR)/train_classifier.py
+
+train-logistic: data
+	$(PYTHON) $(SCRIPTS_DIR)/train_logistic_classifier.py
 
 validate: train
 	$(PYTHON) $(SCRIPTS_DIR)/validate_classifier.py
