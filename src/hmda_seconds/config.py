@@ -82,6 +82,8 @@ TRAIN_PARQUET = (
 BENCHMARK_TRAIN_PARQUET = INTERMEDIATE_DIR / (
     f"hmda_train_{min(TRAIN_YEARS)}_{max(TRAIN_YEARS)}_county_value.parquet"
 )
+SELECTION_DATA_DIR = INTERMEDIATE_DIR / "logistic_selection"
+SELECTED_LOGISTIC_MODEL_FILE = MODEL_DIR / "logistic_selected.pkl"
 CLASSIFY_PARQUET = (
     INTERMEDIATE_DIR / f"hmda_classified_{min(APPLY_YEARS)}_{max(APPLY_YEARS)}.parquet"
 )
@@ -144,6 +146,15 @@ LOGISTIC_KWARGS = {
     "max_iter": 1000,
     "solver": "lbfgs",
 }
+
+LOGISTIC_SELECTION_COARSE_C = (1e-4, 1e-2, 1.0, 100.0)
+LOGISTIC_SELECTION_SOLVER = "newton-cholesky"
+LOGISTIC_SELECTION_MAX_ITER = 200
+LOGISTIC_SELECTION_TOL = 1e-8
+LOGISTIC_SELECTION_JOBS = int(os.environ.get("HMDA_SECONDS_SELECTION_JOBS", "1"))
+LOGISTIC_SELECTION_THREADS_PER_JOB = max(
+    1, (os.cpu_count() or 1) // LOGISTIC_SELECTION_JOBS
+)
 
 TRAIN_SIZE = 0.25
 TEST_SIZE = 0.75

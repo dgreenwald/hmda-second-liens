@@ -179,6 +179,11 @@ training windows under the same rolling protocol.
 **Deliverable:** a machine-readable table listing each fold's training years,
 validation year, model specification, and metrics.
 
+**Frozen protocol:** use four-year later training windows to predict every available earlier
+labeled year, producing backward horizons 1--9. Raw out-of-sample Brier is the sole selection
+metric, averaged within horizon and then equally across horizons. See
+`MODEL_SELECTION_PROTOCOL.md` for the complete predeclared design.
+
 ### Step 5: Optimize the logistic specification
 
 Treat logistic regression as a model in its own right rather than inheriting
@@ -213,6 +218,25 @@ be used unless a defensible rule exists for previously unseen lenders.
 
 **Decision gate:** choose the simplest specification whose temporal gains are
 consistent and substantively meaningful, not merely statistically significant.
+
+**Frozen candidate set:** cross three continuous functional forms with four loan-type and
+purchaser-type interaction structures, and tune ridge strength using the reverse folds.
+Exclude HPI growth, edit-status, small-loan, year, lender, MSA, and tract features. State and
+region indicators are guarded post-selection challengers, not automatic additions. The exact
+grid and exclusions are recorded in `MODEL_SELECTION_PROTOCOL.md`.
+
+**Focused post-selection challenger:** after the original grid selected a common `log_lti`
+spline with linear purchaser-specific slope adjustments, evaluate a richer specification that
+interacts every `log_lti` spline-basis term with purchaser type. Keep the linear
+`log_county_value_to_loan` by purchaser interactions, use the same reverse folds and staged
+ridge grid, and compare raw Brier at both the equal-horizon and individual-cell levels. Do not
+replace the selected core automatically; first assess whether any improvement is material and
+consistent across backward horizons.
+
+**Result:** the spline-by-purchaser challenger selects `C=0.1` and has equal-horizon Brier
+0.065609, compared with 0.065387 for the simpler core. It improves only 16 of 45 cells and is
+worse at every horizon from 2 through 9, so it is rejected. See
+`LOGISTIC_SELECTION_FINDINGS.md` for the complete interpretation.
 
 ### Step 6: Diagnose probability calibration
 

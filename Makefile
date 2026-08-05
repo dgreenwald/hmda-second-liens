@@ -11,7 +11,7 @@ ROOT := $(abspath .)
 SCRIPTS_DIR := $(ROOT)/scripts
 OUTPUT_DIR := $(ROOT)/output
 
-.PHONY: install test data audit county-values county-value-coverage benchmark-data benchmark-estimators train train-logistic validate classify figures all clean
+.PHONY: install test data audit county-values county-value-coverage benchmark-data benchmark-estimators selection-data select-logistic evaluate-spline-purchaser-interactions train train-logistic validate classify figures all clean
 
 install:
 	$(PYTHON) -m pip install -e ".[dev]"
@@ -41,6 +41,15 @@ benchmark-data:
 
 benchmark-estimators: benchmark-data
 	$(PYTHON) $(SCRIPTS_DIR)/benchmark_estimators.py
+
+selection-data:
+	$(PYTHON) $(SCRIPTS_DIR)/prepare_selection_data.py
+
+select-logistic: selection-data
+	$(PYTHON) $(SCRIPTS_DIR)/select_logistic.py
+
+evaluate-spline-purchaser-interactions: selection-data
+	$(PYTHON) $(SCRIPTS_DIR)/evaluate_spline_purchaser_interactions.py
 
 train: data
 	$(PYTHON) $(SCRIPTS_DIR)/train_classifier.py
