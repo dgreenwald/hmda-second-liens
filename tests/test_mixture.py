@@ -39,7 +39,7 @@ def test_adjusted_probabilities_are_self_consistent_at_mle():
     assert np.corrcoef(log_ratio, adjusted)[0, 1] > 0.8
 
 
-def test_year_fixed_effect_fit_absorbs_different_source_priors():
+def test_year_fixed_effect_fit_absorbs_different_source_priors(tmp_path):
     rng = np.random.default_rng(41)
     rows = []
     for year, share in ((2005, 0.1), (2006, 0.3)):
@@ -71,6 +71,14 @@ def test_year_fixed_effect_fit_absorbs_different_source_priors():
     assert diagnostics["normalization_gap"].max() - diagnostics[
         "normalization_gap"
     ].min() < 0.25
+    path = mixture.density_ratio_models_path(
+        (2005, 2006), specification, 1.0, tmp_path
+    )
+    mixture.save_density_ratio_models(fitted, path)
+    restored = mixture.load_density_ratio_models(path)
+    assert restored.year_fixed_effect.log_ratio_offset == pytest.approx(
+        fitted.year_fixed_effect.log_ratio_offset
+    )
 
 
 def test_prior_adjustment_is_an_intercept_shift():

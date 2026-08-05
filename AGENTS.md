@@ -36,8 +36,9 @@ changing estimator behavior or validation design.
 - Core logistic workflow: `make selection-data`, `make select-logistic`,
   `make diagnose-logistic-calibration`.
 - Mixture workflow: `make estimate-mixture-shares`, then
-  `make diagnose-mixture-calibration`. Reverse/forward fold parameters are cached under
-  `output/model/mixture_folds/` and must be reused rather than silently refitted.
+  `make diagnose-mixture-calibration`, then `make diagnose-threshold-subgroups`.
+  Reverse/forward fold parameters are cached under `output/model/mixture_folds/` and must be
+  reused rather than silently refitted.
 - Legacy/full release workflow: `make data && make train && make validate && make classify &&
   make figures`; each target maps to one `scripts/*.py` CLI.
 - `pytest tests/` — must pass without real data.
@@ -66,6 +67,9 @@ changing estimator behavior or validation design.
 - Reverse validation uses four-year later training windows against every earlier labeled year,
   yielding 45 cells and horizons 1-9. Preserve equal-within-horizon, then equal-across-horizon
   aggregation where declared by the protocol.
+- Step 7 keeps the canonical 0.5 threshold frozen. Precision-recall curves are diagnostic only;
+  do not select year- or subgroup-specific thresholds. Subgroup outputs use loan type,
+  purchaser type, Census region, and target-year deciles of both continuous variables.
 
 ## Commit & Pull Request Guidelines
 - Short, imperative commit subjects, first line <= 72 chars.

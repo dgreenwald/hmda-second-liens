@@ -198,6 +198,42 @@ def fit_density_ratio_models(
     )
 
 
+def save_density_ratio_models(
+    model: DensityRatioModels, model_file: str | Path
+) -> None:
+    """Persist the complete pooled/fixed-effect/known-prior fold fit."""
+    model_file = Path(model_file)
+    model_file.parent.mkdir(parents=True, exist_ok=True)
+    with model_file.open("wb") as file:
+        pickle.dump(model, file)
+
+
+def load_density_ratio_models(model_file: str | Path) -> DensityRatioModels:
+    """Load a trusted local complete ratio-model bundle."""
+    with Path(model_file).open("rb") as file:
+        model = pickle.load(file)
+    if not isinstance(model, DensityRatioModels):
+        raise TypeError("Saved object is not a DensityRatioModels bundle")
+    return model
+
+
+def density_ratio_models_path(
+    train_years: Iterable[int],
+    specification: FeatureSpecification,
+    regularization_c: float,
+    model_dir: str | Path = config.MIXTURE_FOLD_MODEL_DIR,
+) -> Path:
+    """Return the deterministic path for a complete mixture fold fit."""
+    years = tuple(train_years)
+    if not years:
+        raise ValueError("train_years cannot be empty")
+    c_label = format(regularization_c, ".12g").replace(".", "p")
+    return Path(model_dir) / (
+        f"all_ratio_variants__{specification.name}__c_{c_label}"
+        f"__train_{min(years)}_{max(years)}.pkl"
+    )
+
+
 def fit_known_source_prior_model(
     training: pd.DataFrame,
     specification: FeatureSpecification,
@@ -348,6 +384,7 @@ def run_reverse_mixture_validation(
     output_dir: str | Path = config.TABLE_DIR,
     model_file: str | Path = config.SELECTED_LOGISTIC_MODEL_FILE,
     train_starts: Iterable[int] | None = None,
+    fold_model_dir: str | Path = config.MIXTURE_FOLD_MODEL_DIR,
 ) -> dict[str, pd.DataFrame]:
     """Run resumable density-ratio share validation over all reverse cells."""
     output_dir = Path(output_dir)
@@ -381,12 +418,23 @@ def run_reverse_mixture_validation(
         )
         if not missing_years and diagnostics_complete:
             continue
-        training = pd.concat(
-            [data_by_year[year] for year in fold.train_years], ignore_index=True
+        fold_model_file = density_ratio_models_path(
+            fold.train_years,
+            selected.specification,
+            selected.regularization_c,
+            fold_model_dir,
         )
-        fitted = fit_density_ratio_models(
-            training, selected.specification, selected.regularization_c
-        )
+        if fold_model_file.exists():
+            fitted = load_density_ratio_models(fold_model_file)
+        else:
+            training = pd.concat(
+                [data_by_year[year] for year in fold.train_years],
+                ignore_index=True,
+            )
+            fitted = fit_density_ratio_models(
+                training, selected.specification, selected.regularization_c
+            )
+            save_density_ratio_models(fitted, fold_model_file)
         source_metadata = {
             "specification": selected.specification.name,
             "regularization_c": selected.regularization_c,

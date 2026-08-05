@@ -320,6 +320,19 @@ unlikely to solve the observed false-positive problem.
 **Deliverables:** precision-recall figures, an operating-threshold table, and
 subgroup metric tables.
 
+**Implemented protocol:** compare the frozen raw and known-source-prior probabilities at the
+canonical 0.5 threshold in all reverse and forward cells. Construct fixed-grid precision-recall
+curves without selecting a new threshold. Report loan type, purchaser type, Census region, and
+target-year deciles of both continuous variables, retaining counts and prevalence. Persist every
+fitted source-window model and only aggregated diagnostic outputs. See
+`THRESHOLD_SUBGROUP_PROTOCOL.md`.
+
+**Result:** in reverse validation, the known-prior adjustment raises second-lien recall from
+0.374 to 0.724 and F1 from 0.490 to 0.788 while precision remains high at 0.872. F1 improves in
+35 of 38 subgroups and is stable across regions. In the forward check, precision rises from
+0.530 to 0.838 and F1 from 0.669 to 0.699. Retain 0.5 and proceed without threshold or subgroup
+tuning. See `THRESHOLD_SUBGROUP_FINDINGS.md`.
+
 ### Step 8: Perform external and internal plausibility checks
 
 Plot predicted second-lien shares for 1990--2016 on one figure, overlaying actual
