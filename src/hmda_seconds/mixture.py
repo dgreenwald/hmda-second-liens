@@ -1,0 +1,638 @@
+"""Density-ratio estimation of target-year second-lien count shares."""
+
+from __future__ import annotations
+
+import copy
+from collections.abc import Iterable
+from dataclasses import dataclass
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+from scipy.optimize import minimize_scalar
+from scipy.special import expit, logit
+from sklearn.linear_model import LogisticRegression
+
+from . import config, model_selection
+from .logistic_features import FeatureSpecification, LogisticFeatureTransformer
+
+YEAR_EFFECT_SCALE = 100.0
+PROBABILITY_EPSILON = 1e-12
+SHARE_BOUND = 1e-9
+SHARE_TOLERANCE = 1e-8
+
+
+@dataclass
+class RatioVariant:
+    """A normalized feature-density ratio for one source-model variant."""
+
+    name: str
+    feature_coefficients: np.ndarray
+    log_ratio_offset: float
+    mean_ratio_first: float
+    mean_inverse_ratio_second: float
+
+    def log_ratio(self, features: np.ndarray) -> np.ndarray:
+        return features @ self.feature_coefficients + self.log_ratio_offset
+
+
+@dataclass
+class DensityRatioModels:
+    """Fold-fitted transformer, raw classifier, and ratio variants."""
+
+    transformer: LogisticFeatureTransformer
+    raw_classifier: LogisticRegression
+    pooled: RatioVariant
+    year_fixed_effect: RatioVariant
+    known_source_prior: RatioVariant
+    source_year_diagnostics: pd.DataFrame
+    fit_diagnostics: pd.DataFrame
+    specification: FeatureSpecification
+    regularization_c: float
+
+    def features(self, frame: pd.DataFrame) -> np.ndarray:
+        return self.transformer.transform(frame)
+
+    def raw_probability(self, features: np.ndarray) -> np.ndarray:
+        column = list(self.raw_classifier.classes_).index(
+            config.SECOND_LIEN_CLASS
+        )
+        return self.raw_classifier.predict_proba(features)[:, column]
+
+
+@dataclass(frozen=True)
+class MixtureShareEstimate:
+    """Bounded likelihood and EM estimates for one target sample."""
+
+    share: float
+    mean_log_likelihood: float
+    optimizer_converged: bool
+    optimizer_iterations: int
+    at_boundary: bool
+    em_share: float
+    em_converged: bool
+    em_iterations: int
+
+
+def fit_density_ratio_models(
+    training: pd.DataFrame,
+    specification: FeatureSpecification,
+    regularization_c: float,
+    year_effect_scale: float = YEAR_EFFECT_SCALE,
+) -> DensityRatioModels:
+    """Fit pooled and source-year-intercept density-ratio models."""
+    years = tuple(sorted(pd.unique(training["year"])))
+    if len(years) < 2:
+        raise ValueError("At least two source years are required for year effects")
+    if year_effect_scale <= 1:
+        raise ValueError("year_effect_scale must exceed one")
+
+    transformer = LogisticFeatureTransformer(specification)
+    features = transformer.fit_transform(training)
+    labels = training[config.LABEL_VAR].to_numpy()
+    y_second = labels == config.SECOND_LIEN_CLASS
+
+    pooled_models, pooled_fit = model_selection.fit_regularization_path(
+        features, labels, [regularization_c]
+    )
+    pooled_classifier = pooled_models[regularization_c]
+    pooled_coefficients = pooled_classifier.coef_[0].copy()
+    pooled_variant = _normalized_ratio_variant(
+        "pooled", features, y_second, pooled_coefficients
+    )
+
+    year_matrix = _year_indicator_matrix(
+        training["year"].to_numpy(), years, year_effect_scale
+    )
+    fixed_effect_features = np.column_stack([features, year_matrix])
+    fixed_models, fixed_fit = model_selection.fit_regularization_path(
+        fixed_effect_features, labels, [regularization_c]
+    )
+    fixed_classifier = fixed_models[regularization_c]
+    n_features = features.shape[1]
+    fixed_coefficients = fixed_classifier.coef_[0, :n_features].copy()
+    fixed_variant = _normalized_ratio_variant(
+        "year_fixed_effect", features, y_second, fixed_coefficients
+    )
+
+    # Reweight each source year to a 50/50 class prior. Bayes' rule then makes
+    # the fitted log odds an estimate of log(f_1 / f_0), including its
+    # intercept, rather than a posterior tied to the observed source prior.
+    prior_weights = _equal_prior_weights(training, y_second)
+    prior_models, prior_fit = model_selection.fit_regularization_path(
+        features, labels, [regularization_c], sample_weight=prior_weights
+    )
+    prior_classifier = prior_models[regularization_c]
+    prior_variant = _classifier_ratio_variant(
+        "known_source_prior", features, y_second, prior_classifier
+    )
+
+    effective_year_coefficients = (
+        fixed_classifier.coef_[0, n_features:] * year_effect_scale
+    )
+    source_year_diagnostics = _source_year_diagnostics(
+        training,
+        years,
+        float(fixed_classifier.intercept_[0]),
+        effective_year_coefficients,
+        fixed_variant.log_ratio_offset,
+    )
+    fit_diagnostics = pd.DataFrame(
+        [
+            {
+                "variant": "pooled",
+                **pooled_fit[regularization_c],
+                "mean_ratio_first": pooled_variant.mean_ratio_first,
+                "mean_inverse_ratio_second": (
+                    pooled_variant.mean_inverse_ratio_second
+                ),
+                "log_ratio_offset": pooled_variant.log_ratio_offset,
+            },
+            {
+                "variant": "year_fixed_effect",
+                **fixed_fit[regularization_c],
+                "mean_ratio_first": fixed_variant.mean_ratio_first,
+                "mean_inverse_ratio_second": (
+                    fixed_variant.mean_inverse_ratio_second
+                ),
+                "log_ratio_offset": fixed_variant.log_ratio_offset,
+                "year_effect_scale": year_effect_scale,
+            },
+            {
+                "variant": "known_source_prior",
+                **prior_fit[regularization_c],
+                "mean_ratio_first": prior_variant.mean_ratio_first,
+                "mean_inverse_ratio_second": (
+                    prior_variant.mean_inverse_ratio_second
+                ),
+                "log_ratio_offset": prior_variant.log_ratio_offset,
+            },
+        ]
+    )
+    return DensityRatioModels(
+        transformer=transformer,
+        raw_classifier=copy.deepcopy(pooled_classifier),
+        pooled=pooled_variant,
+        year_fixed_effect=fixed_variant,
+        known_source_prior=prior_variant,
+        source_year_diagnostics=source_year_diagnostics,
+        fit_diagnostics=fit_diagnostics,
+        specification=specification,
+        regularization_c=regularization_c,
+    )
+
+
+def estimate_mixture_share(
+    log_ratio: np.ndarray,
+    tolerance: float = SHARE_TOLERANCE,
+    max_em_iterations: int = 100,
+) -> MixtureShareEstimate:
+    """Estimate one target second-lien share by likelihood and EM."""
+    log_ratio = _finite_vector(log_ratio, "log_ratio")
+
+    def negative_mean_likelihood(share: float) -> float:
+        return -mean_mixture_log_likelihood(log_ratio, share)
+
+    result = minimize_scalar(
+        negative_mean_likelihood,
+        bounds=(SHARE_BOUND, 1.0 - SHARE_BOUND),
+        method="bounded",
+        options={"xatol": tolerance, "maxiter": 500},
+    )
+    share = float(result.x)
+    at_boundary = bool(
+        share <= 10 * SHARE_BOUND or share >= 1.0 - 10 * SHARE_BOUND
+    )
+    em_share, em_converged, em_iterations = estimate_mixture_share_em(
+        log_ratio,
+        # EM is a numerical consistency check, not the primary estimator.
+        # Starting it at the bounded optimum avoids arbitrarily slow fixed-point
+        # convergence when the likelihood optimum is close to a boundary.
+        initial_share=share,
+        tolerance=tolerance,
+        max_iterations=max_em_iterations,
+    )
+    return MixtureShareEstimate(
+        share=share,
+        mean_log_likelihood=-float(result.fun),
+        optimizer_converged=bool(result.success),
+        optimizer_iterations=int(result.nfev),
+        at_boundary=at_boundary,
+        em_share=em_share,
+        em_converged=em_converged,
+        em_iterations=em_iterations,
+    )
+
+
+def estimate_mixture_share_em(
+    log_ratio: np.ndarray,
+    initial_share: float = 0.5,
+    tolerance: float = SHARE_TOLERANCE,
+    max_iterations: int = 10_000,
+) -> tuple[float, bool, int]:
+    """Estimate the target share by posterior-responsibility iteration."""
+    log_ratio = _finite_vector(log_ratio, "log_ratio")
+    if not 0 < initial_share < 1:
+        raise ValueError("initial_share must lie strictly between zero and one")
+    share = float(initial_share)
+    for iteration in range(1, max_iterations + 1):
+        updated = float(adjusted_probability(log_ratio, share).mean())
+        if abs(updated - share) < tolerance:
+            return updated, True, iteration
+        share = float(np.clip(updated, SHARE_BOUND, 1.0 - SHARE_BOUND))
+    return share, False, max_iterations
+
+
+def adjusted_probability(log_ratio: np.ndarray, share: float) -> np.ndarray:
+    """Return target posterior probabilities for a proposed target share."""
+    if not 0 < share < 1:
+        raise ValueError("share must lie strictly between zero and one")
+    return expit(_finite_vector(log_ratio, "log_ratio") + logit(share))
+
+
+def mean_mixture_log_likelihood(log_ratio: np.ndarray, share: float) -> float:
+    """Mean target log likelihood after dropping the first-lien density."""
+    if not 0 < share < 1:
+        raise ValueError("share must lie strictly between zero and one")
+    values = np.logaddexp(np.log1p(-share), np.log(share) + log_ratio)
+    return float(values.mean())
+
+
+def run_reverse_mixture_validation(
+    data_dir: str | Path = config.SELECTION_DATA_DIR,
+    output_dir: str | Path = config.TABLE_DIR,
+    model_file: str | Path = config.SELECTED_LOGISTIC_MODEL_FILE,
+    train_starts: Iterable[int] | None = None,
+) -> dict[str, pd.DataFrame]:
+    """Run resumable density-ratio share validation over all reverse cells."""
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    selected = model_selection.load_selected_model(model_file)
+    data_by_year = model_selection.load_selection_years(data_dir=data_dir)
+    cells_file = output_dir / "mixture_reverse_cell_shares.csv"
+    intercepts_file = output_dir / "mixture_source_year_intercepts.csv"
+    ratio_file = output_dir / "mixture_ratio_fit_diagnostics.csv"
+    cells = _read_csv_if_exists(cells_file)
+    intercepts = _read_csv_if_exists(intercepts_file)
+    ratio_diagnostics = _read_csv_if_exists(ratio_file)
+
+    folds = list(reversed(model_selection.reverse_folds()))
+    if train_starts is not None:
+        requested = set(train_starts)
+        available = {fold.train_start for fold in folds}
+        unknown = requested - available
+        if unknown:
+            raise ValueError(f"Unknown reverse-fold starts: {sorted(unknown)}")
+        folds = [fold for fold in folds if fold.train_start in requested]
+
+    for fold in folds:
+        missing_years = [
+            year
+            for year in fold.validation_years
+            if not _cell_present(cells, fold.train_start, year)
+        ]
+        diagnostics_complete = _fold_present(intercepts, fold.train_start) and (
+            _fold_present(ratio_diagnostics, fold.train_start)
+        )
+        if not missing_years and diagnostics_complete:
+            continue
+        training = pd.concat(
+            [data_by_year[year] for year in fold.train_years], ignore_index=True
+        )
+        fitted = fit_density_ratio_models(
+            training, selected.specification, selected.regularization_c
+        )
+        source_metadata = {
+            "specification": selected.specification.name,
+            "regularization_c": selected.regularization_c,
+            "train_start": fold.train_start,
+            "train_end": fold.train_end,
+        }
+        fold_intercepts = fitted.source_year_diagnostics.assign(**source_metadata)
+        intercepts = _replace_fold_checkpoint(
+            intercepts, fold_intercepts, intercepts_file, fold.train_start
+        )
+        fold_ratio = fitted.fit_diagnostics.assign(**source_metadata)
+        ratio_diagnostics = _replace_fold_checkpoint(
+            ratio_diagnostics, fold_ratio, ratio_file, fold.train_start
+        )
+
+        for validation_year in missing_years:
+            row = _evaluate_target_year(
+                fitted,
+                data_by_year[validation_year],
+                fold,
+                validation_year,
+            )
+            cells = _upsert_cell_checkpoint(cells, row, cells_file)
+
+    horizon_summary, overall_summary = aggregate_share_errors(cells)
+    horizon_summary.to_csv(
+        output_dir / "mixture_reverse_horizon_summary.csv", index=False
+    )
+    overall_summary.to_csv(
+        output_dir / "mixture_reverse_estimator_summary.csv", index=False
+    )
+    return {
+        "cells": cells,
+        "horizons": horizon_summary,
+        "summary": overall_summary,
+        "source_intercepts": intercepts,
+        "ratio_diagnostics": ratio_diagnostics,
+    }
+
+
+def aggregate_share_errors(
+    cells: pd.DataFrame,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Summarize share estimators within and then equally across horizons."""
+    estimate_columns = {
+        "raw_mean_probability": "raw_mean_probability",
+        "raw_hard_share": "raw_hard_share",
+        "mixture_pooled": "mixture_share_pooled",
+        "mixture_year_fixed_effect": "mixture_share_year_fixed_effect",
+        "mixture_known_source_prior": "mixture_share_known_source_prior",
+        "adjusted_hard_pooled": "adjusted_hard_share_pooled",
+        "adjusted_hard_year_fixed_effect": (
+            "adjusted_hard_share_year_fixed_effect"
+        ),
+        "adjusted_hard_known_source_prior": (
+            "adjusted_hard_share_known_source_prior"
+        ),
+    }
+    parts = []
+    for estimator, column in estimate_columns.items():
+        part = cells[["train_start", "validation_year", "horizon"]].copy()
+        part["estimator"] = estimator
+        part["signed_error"] = cells[column] - cells["actual_second_share"]
+        part["absolute_error"] = part["signed_error"].abs()
+        part["squared_error"] = part["signed_error"] ** 2
+        parts.append(part)
+    errors = pd.concat(parts, ignore_index=True)
+    horizons = (
+        errors.groupby(["estimator", "horizon"], as_index=False)
+        .agg(
+            mean_signed_error=("signed_error", "mean"),
+            mean_absolute_error=("absolute_error", "mean"),
+            mean_squared_error=("squared_error", "mean"),
+            n_cells=("validation_year", "size"),
+        )
+        .sort_values(["estimator", "horizon"])
+    )
+    summary = (
+        horizons.groupby("estimator", as_index=False)
+        .agg(
+            selection_signed_error=("mean_signed_error", "mean"),
+            selection_absolute_error=("mean_absolute_error", "mean"),
+            selection_squared_error=("mean_squared_error", "mean"),
+            n_horizons=("horizon", "nunique"),
+            n_cells=("n_cells", "sum"),
+        )
+        .sort_values("selection_absolute_error")
+        .reset_index(drop=True)
+    )
+    return horizons, summary
+
+
+def _evaluate_target_year(
+    fitted: DensityRatioModels,
+    target: pd.DataFrame,
+    fold: model_selection.ReverseFold,
+    validation_year: int,
+) -> pd.DataFrame:
+    features = fitted.features(target)
+    raw_probability = fitted.raw_probability(features)
+    actual_second = (
+        target[config.LABEL_VAR].to_numpy() == config.SECOND_LIEN_CLASS
+    )
+    actual_share = float(actual_second.mean())
+    row = {
+        "specification": fitted.specification.name,
+        "regularization_c": fitted.regularization_c,
+        "train_start": fold.train_start,
+        "train_end": fold.train_end,
+        "validation_year": validation_year,
+        "horizon": fold.train_start - validation_year,
+        "n_validation": len(target),
+        "actual_second_share": actual_share,
+        "raw_mean_probability": float(raw_probability.mean()),
+        "raw_hard_share": float((raw_probability >= 0.5).mean()),
+        "raw_brier": float(np.mean((raw_probability - actual_second) ** 2)),
+        "raw_log_loss": _binary_log_loss(actual_second, raw_probability),
+    }
+    for variant in (
+        fitted.pooled,
+        fitted.year_fixed_effect,
+        fitted.known_source_prior,
+    ):
+        log_ratio = variant.log_ratio(features)
+        estimate = estimate_mixture_share(log_ratio)
+        adjusted = adjusted_probability(log_ratio, estimate.share)
+        suffix = variant.name
+        row.update(
+            {
+                f"mixture_share_{suffix}": estimate.share,
+                f"mixture_signed_error_{suffix}": estimate.share - actual_share,
+                f"mixture_absolute_error_{suffix}": abs(
+                    estimate.share - actual_share
+                ),
+                f"adjusted_hard_share_{suffix}": float(
+                    (adjusted >= 0.5).mean()
+                ),
+                f"adjusted_brier_{suffix}": float(
+                    np.mean((adjusted - actual_second) ** 2)
+                ),
+                f"adjusted_log_loss_{suffix}": _binary_log_loss(
+                    actual_second, adjusted
+                ),
+                f"mean_log_likelihood_{suffix}": (
+                    estimate.mean_log_likelihood
+                ),
+                f"optimizer_converged_{suffix}": estimate.optimizer_converged,
+                f"optimizer_iterations_{suffix}": estimate.optimizer_iterations,
+                f"at_boundary_{suffix}": estimate.at_boundary,
+                f"em_share_{suffix}": estimate.em_share,
+                f"em_converged_{suffix}": estimate.em_converged,
+                f"em_iterations_{suffix}": estimate.em_iterations,
+                f"optimizer_em_difference_{suffix}": (
+                    estimate.share - estimate.em_share
+                ),
+            }
+        )
+    return pd.DataFrame([row])
+
+
+def _normalized_ratio_variant(
+    name: str,
+    features: np.ndarray,
+    y_second: np.ndarray,
+    coefficients: np.ndarray,
+) -> RatioVariant:
+    score = features @ coefficients
+    first_score = score[~y_second]
+    second_score = score[y_second]
+    offset = -_log_mean_exp(first_score)
+    mean_ratio_first = float(np.exp(_log_mean_exp(first_score + offset)))
+    mean_inverse_ratio_second = float(
+        np.exp(_log_mean_exp(-second_score - offset))
+    )
+    return RatioVariant(
+        name=name,
+        feature_coefficients=coefficients,
+        log_ratio_offset=offset,
+        mean_ratio_first=mean_ratio_first,
+        mean_inverse_ratio_second=mean_inverse_ratio_second,
+    )
+
+
+def _classifier_ratio_variant(
+    name: str,
+    features: np.ndarray,
+    y_second: np.ndarray,
+    classifier: LogisticRegression,
+) -> RatioVariant:
+    """Use the full equal-prior classifier predictor as a density ratio."""
+    coefficients = classifier.coef_[0].copy()
+    offset = float(classifier.intercept_[0])
+    score = features @ coefficients + offset
+    return RatioVariant(
+        name=name,
+        feature_coefficients=coefficients,
+        log_ratio_offset=offset,
+        mean_ratio_first=float(np.exp(_log_mean_exp(score[~y_second]))),
+        mean_inverse_ratio_second=float(
+            np.exp(_log_mean_exp(-score[y_second]))
+        ),
+    )
+
+
+def _equal_prior_weights(
+    training: pd.DataFrame, y_second: np.ndarray
+) -> np.ndarray:
+    """Give both lien classes half of each source year's total weight."""
+    weights = np.empty(len(training), dtype=float)
+    years = training["year"].to_numpy()
+    for year in np.unique(years):
+        in_year = years == year
+        share = float(y_second[in_year].mean())
+        if not 0 < share < 1:
+            raise ValueError(f"Source year {year} must contain both lien classes")
+        weights[in_year & y_second] = 0.5 / share
+        weights[in_year & ~y_second] = 0.5 / (1.0 - share)
+    return weights
+
+
+def _source_year_diagnostics(
+    training: pd.DataFrame,
+    years: tuple[int, ...],
+    reference_intercept: float,
+    effective_year_coefficients: np.ndarray,
+    ratio_offset: float,
+) -> pd.DataFrame:
+    rows = []
+    for index, year in enumerate(years):
+        sample = training.loc[training["year"] == year, config.LABEL_VAR]
+        share = float((sample == config.SECOND_LIEN_CLASS).mean())
+        year_effect = 0.0 if index == 0 else effective_year_coefficients[index - 1]
+        fitted_intercept = reference_intercept + year_effect
+        adjusted_intercept = fitted_intercept - logit(share)
+        rows.append(
+            {
+                "source_year": year,
+                "n_source": len(sample),
+                "observed_second_share": share,
+                "observed_logit_share": float(logit(share)),
+                "fitted_year_intercept": fitted_intercept,
+                "intercept_minus_logit_share": adjusted_intercept,
+                "log_ratio_offset": ratio_offset,
+                "normalization_gap": adjusted_intercept - ratio_offset,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def _year_indicator_matrix(
+    observed_years: np.ndarray,
+    levels: tuple[int, ...],
+    scale: float,
+) -> np.ndarray:
+    unknown = set(np.unique(observed_years)) - set(levels)
+    if unknown:
+        raise ValueError(f"Unknown source years: {sorted(unknown)}")
+    return np.column_stack(
+        [(observed_years == year).astype(float) * scale for year in levels[1:]]
+    )
+
+
+def _binary_log_loss(y_second: np.ndarray, probability: np.ndarray) -> float:
+    probability = np.clip(probability, PROBABILITY_EPSILON, 1 - PROBABILITY_EPSILON)
+    return float(
+        -np.mean(
+            y_second * np.log(probability)
+            + (~y_second) * np.log1p(-probability)
+        )
+    )
+
+
+def _log_mean_exp(values: np.ndarray) -> float:
+    values = _finite_vector(values, "values")
+    maximum = float(values.max())
+    return maximum + float(np.log(np.exp(values - maximum).mean()))
+
+
+def _finite_vector(values: np.ndarray, name: str) -> np.ndarray:
+    array = np.asarray(values, dtype=float)
+    if array.ndim != 1 or len(array) == 0:
+        raise ValueError(f"{name} must be a nonempty one-dimensional array")
+    if not np.isfinite(array).all():
+        raise ValueError(f"{name} contains non-finite values")
+    return array
+
+
+def _read_csv_if_exists(path: Path) -> pd.DataFrame:
+    return pd.read_csv(path) if path.exists() else pd.DataFrame()
+
+
+def _cell_present(
+    cells: pd.DataFrame, train_start: int, validation_year: int
+) -> bool:
+    required = "mixture_share_known_source_prior"
+    if cells.empty or required not in cells:
+        return False
+    matching = (
+        (cells["train_start"] == train_start)
+        & (cells["validation_year"] == validation_year)
+    )
+    return bool((matching & cells[required].notna()).any())
+
+
+def _fold_present(frame: pd.DataFrame, train_start: int) -> bool:
+    return not frame.empty and bool((frame["train_start"] == train_start).any())
+
+
+def _replace_fold_checkpoint(
+    existing: pd.DataFrame,
+    new: pd.DataFrame,
+    path: Path,
+    train_start: int,
+) -> pd.DataFrame:
+    if not existing.empty:
+        existing = existing.loc[existing["train_start"] != train_start]
+    combined = pd.concat([existing, new], ignore_index=True)
+    combined.to_csv(path, index=False)
+    return combined
+
+
+def _upsert_cell_checkpoint(
+    existing: pd.DataFrame, new: pd.DataFrame, path: Path
+) -> pd.DataFrame:
+    row = new.iloc[0]
+    if not existing.empty:
+        keep = ~(
+            (existing["train_start"] == row["train_start"])
+            & (existing["validation_year"] == row["validation_year"])
+        )
+        existing = existing.loc[keep]
+    combined = pd.concat([existing, new], ignore_index=True)
+    combined.to_csv(path, index=False)
+    return combined

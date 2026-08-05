@@ -15,6 +15,7 @@ requires-python = ">=3.11"
 dependencies = [
     "dgreenwald-py-tools[ml,datasets]>=0.2,<1.0",
     "python-dotenv>=1.0",
+    "scipy>=1.10",
 ]
 
 [project.urls]

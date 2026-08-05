@@ -288,6 +288,7 @@ def fit_regularization_path(
     features: np.ndarray,
     labels: np.ndarray,
     c_values: Iterable[float],
+    sample_weight: np.ndarray | None = None,
 ) -> tuple[dict[float, LogisticRegression], dict[float, dict]]:
     """Fit an ascending ridge path with warm starts and convergence recovery."""
     models = {}
@@ -305,7 +306,7 @@ def fit_regularization_path(
         start = time.perf_counter()
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always", ConvergenceWarning)
-            classifier.fit(features, labels)
+            classifier.fit(features, labels, sample_weight=sample_weight)
         converged = not any(
             issubclass(warning.category, ConvergenceWarning) for warning in caught
         )
@@ -313,7 +314,7 @@ def fit_regularization_path(
             classifier.set_params(max_iter=4 * config.LOGISTIC_SELECTION_MAX_ITER)
             with warnings.catch_warnings(record=True) as caught:
                 warnings.simplefilter("always", ConvergenceWarning)
-                classifier.fit(features, labels)
+                classifier.fit(features, labels, sample_weight=sample_weight)
             converged = not any(
                 issubclass(warning.category, ConvergenceWarning)
                 for warning in caught
