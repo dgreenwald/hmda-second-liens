@@ -274,6 +274,14 @@ the 2004--2007 model overpredicts every 2008--2016 observed share by 1.27--1.98 
 probabilities as loan-level uncertainty/ranking outputs, but do not treat their unadjusted mean
 as a transportable pre-2004 count-share estimate. See `CALIBRATION_FINDINGS.md`.
 
+**Known-source-prior extension:** freeze the selected specification and `C=0.1`, reweight each
+labeled source year to equal first- and second-lien prior mass, and estimate each target year's
+intercept from its unlabeled feature distribution. Across the same 45 reverse cells, this lowers
+equal-horizon Brier from 0.0654 to 0.0318, log loss from 0.1938 to 0.1059, and the aggregate-share
+shortfall from 7.47 to 2.45 percentage points. Mean Brier improves at all nine horizons. In the
+2008-2016 forward check, Brier and log loss improve in every year. Proceed to Step 7 without
+retuning on these validation outcomes. See `MIXTURE_CALIBRATION_FINDINGS.md`.
+
 If an external, definitionally comparable estimate of pre-2004 prevalence is
 available, an intercept or prior-probability adjustment may be considered. The
 paper must then identify the external estimate and the maintained assumption

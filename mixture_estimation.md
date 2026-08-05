@@ -281,6 +281,9 @@ Add a separate pipeline stage without changing the selected logistic artifact:
 - `src/hmda_seconds/mixture.py`: density-ratio construction, bounded MLE, EM, direct component
   densities, diagnostics, and result aggregation.
 - `scripts/estimate_mixture_shares.py`: thin CLI.
+- `src/hmda_seconds/mixture_calibration.py` and
+  `scripts/diagnose_mixture_calibration.py`: Step 6 probability diagnostics for the frozen
+  known-source-prior estimator.
 - `tests/test_mixture.py`: synthetic mixtures with known shares, boundary cases, likelihood/EM
   agreement, and checkpoint behavior.
 - `make estimate-mixture-shares`: reproducible entry point.
@@ -288,6 +291,13 @@ Add a separate pipeline stage without changing the selected logistic artifact:
 Write only aggregated share, metric, component-summary, and density-bin outputs under
 `output/tables/`, plus diagnostic figures under `output/figures/`. Do not persist or release
 loan-level target characteristics as part of this stage.
+
+Every fitted model must be persisted when it is estimated. Reverse and forward fold artifacts
+belong under `output/model/mixture_folds/` with deterministic names recording the estimator,
+specification, regularization value, and training window. Each artifact must contain the fitted
+feature transformer and all prediction parameters, so subsequent diagnostics load the exact
+fit rather than estimating it again. Persisting fitted parameters does not expose loan-level
+HMDA observations and is distinct from the prohibition on releasing microdata.
 
 Suggested outputs include:
 

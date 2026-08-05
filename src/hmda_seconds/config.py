@@ -25,6 +25,7 @@ PUBLIC_DIR = DATA_DIR / "public"
 
 OUTPUT_DIR = Path(os.environ.get("HMDA_SECONDS_OUTPUT_DIR", REPO_ROOT / "output"))
 MODEL_DIR = OUTPUT_DIR / "model"
+MIXTURE_FOLD_MODEL_DIR = MODEL_DIR / "mixture_folds"
 FIGURE_DIR = OUTPUT_DIR / "figures"
 TABLE_DIR = OUTPUT_DIR / "tables"
 

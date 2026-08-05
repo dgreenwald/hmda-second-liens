@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import pickle
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -58,6 +59,21 @@ class DensityRatioModels:
             config.SECOND_LIEN_CLASS
         )
         return self.raw_classifier.predict_proba(features)[:, column]
+
+
+@dataclass
+class KnownSourcePriorModel:
+    """Frozen feature transform and equal-prior density-ratio classifier."""
+
+    transformer: LogisticFeatureTransformer
+    ratio: RatioVariant
+    fit_diagnostics: dict
+    specification: FeatureSpecification
+    regularization_c: float
+    train_years: tuple[int, ...]
+
+    def log_ratio(self, frame: pd.DataFrame) -> np.ndarray:
+        return self.ratio.log_ratio(self.transformer.transform(frame))
 
 
 @dataclass(frozen=True)
@@ -179,6 +195,75 @@ def fit_density_ratio_models(
         fit_diagnostics=fit_diagnostics,
         specification=specification,
         regularization_c=regularization_c,
+    )
+
+
+def fit_known_source_prior_model(
+    training: pd.DataFrame,
+    specification: FeatureSpecification,
+    regularization_c: float,
+    model_file: str | Path | None = None,
+) -> KnownSourcePriorModel:
+    """Fit only the frozen equal-source-prior ratio used after selection."""
+    transformer = LogisticFeatureTransformer(specification)
+    features = transformer.fit_transform(training)
+    labels = training[config.LABEL_VAR].to_numpy()
+    y_second = labels == config.SECOND_LIEN_CLASS
+    prior_weights = _equal_prior_weights(training, y_second)
+    models, diagnostics = model_selection.fit_regularization_path(
+        features, labels, [regularization_c], sample_weight=prior_weights
+    )
+    classifier = models[regularization_c]
+    fitted = KnownSourcePriorModel(
+        transformer=transformer,
+        ratio=_classifier_ratio_variant(
+            "known_source_prior", features, y_second, classifier
+        ),
+        fit_diagnostics=diagnostics[regularization_c],
+        specification=specification,
+        regularization_c=regularization_c,
+        train_years=tuple(sorted(pd.unique(training["year"]))),
+    )
+    if model_file is not None:
+        save_known_source_prior_model(fitted, model_file)
+    return fitted
+
+
+def save_known_source_prior_model(
+    model: KnownSourcePriorModel, model_file: str | Path
+) -> None:
+    """Persist every parameter needed to reproduce a fold's log ratios."""
+    model_file = Path(model_file)
+    model_file.parent.mkdir(parents=True, exist_ok=True)
+    with model_file.open("wb") as file:
+        pickle.dump(model, file)
+
+
+def load_known_source_prior_model(
+    model_file: str | Path,
+) -> KnownSourcePriorModel:
+    """Load a trusted local known-prior fold model."""
+    with Path(model_file).open("rb") as file:
+        model = pickle.load(file)
+    if not isinstance(model, KnownSourcePriorModel):
+        raise TypeError("Saved object is not a KnownSourcePriorModel")
+    return model
+
+
+def known_source_prior_model_path(
+    train_years: Iterable[int],
+    specification: FeatureSpecification,
+    regularization_c: float,
+    model_dir: str | Path = config.MIXTURE_FOLD_MODEL_DIR,
+) -> Path:
+    """Return the deterministic artifact path for a frozen fold model."""
+    years = tuple(train_years)
+    if not years:
+        raise ValueError("train_years cannot be empty")
+    c_label = format(regularization_c, ".12g").replace(".", "p")
+    return Path(model_dir) / (
+        f"known_source_prior__{specification.name}__c_{c_label}"
+        f"__train_{min(years)}_{max(years)}.pkl"
     )
 
 

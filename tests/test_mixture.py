@@ -91,6 +91,38 @@ def test_prior_adjustment_is_an_intercept_shift():
     assert np.all(np.diff(adjusted) > 0)
 
 
+def test_known_source_prior_fold_model_round_trip(tmp_path):
+    rng = np.random.default_rng(53)
+    n = 1_000
+    second = rng.random(n) < 0.2
+    training = pd.DataFrame(
+        {
+            "year": np.where(np.arange(n) % 2, 2005, 2006),
+            "lien_status": np.where(second, 2, 1),
+            "log_lti": rng.normal(second, 1.0),
+            "log_county_value_to_loan": rng.normal(0, 1.0, n),
+            "purchaser_type": rng.integers(0, 10, n),
+            "loan_type": rng.integers(1, 5, n),
+        }
+    )
+    specification = logistic_features.FeatureSpecification("linear", "none")
+    path = mixture.known_source_prior_model_path(
+        (2005, 2006), specification, 0.1, tmp_path
+    )
+
+    fitted = mixture.fit_known_source_prior_model(
+        training, specification, 0.1, model_file=path
+    )
+    restored = mixture.load_known_source_prior_model(path)
+
+    assert path.exists()
+    assert restored.train_years == (2005, 2006)
+    assert restored.regularization_c == 0.1
+    assert restored.log_ratio(training) == pytest.approx(
+        fitted.log_ratio(training)
+    )
+
+
 def test_share_error_aggregation_weights_horizons_equally():
     cells = pd.DataFrame(
         {
