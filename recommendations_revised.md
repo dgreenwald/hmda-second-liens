@@ -259,6 +259,21 @@ boom-era random holdout cannot correct an unknown target-period base rate. Any
 post-hoc calibration method must be trained using a temporally defensible rule
 and evaluated in later years not used to fit the calibrator.
 
+**Implemented protocol:** diagnose the fixed selected logistic specification in every cell of
+the 45-cell reverse-validation triangle. Report raw Brier, log loss, observed and predicted
+shares, mean calibration error, and calibration intercept/slope; average metrics using the
+same equal-horizon convention as model selection. Construct ten approximate equal-count
+reliability bins within each cell and pool their counts by backward horizon. Separately apply
+the final 2004--2007 refit to 2008--2016 as a forward-regime robustness check. No recalibrator
+is fitted. See `CALIBRATION_PROTOCOL.md`.
+
+**Result:** calibration levels are not temporally stable. In reverse validation, the
+equal-horizon observed share is 13.63% while the mean predicted probability is 6.16%, a
+7.47-point shortfall that becomes much larger at long horizons. In the separate forward check,
+the 2004--2007 model overpredicts every 2008--2016 observed share by 1.27--1.98 points. Retain
+probabilities as loan-level uncertainty/ranking outputs, but do not treat their unadjusted mean
+as a transportable pre-2004 count-share estimate. See `CALIBRATION_FINDINGS.md`.
+
 If an external, definitionally comparable estimate of pre-2004 prevalence is
 available, an intercept or prior-probability adjustment may be considered. The
 paper must then identify the external estimate and the maintained assumption

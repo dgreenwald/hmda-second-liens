@@ -99,7 +99,12 @@ def calibration_coefficients(
     y = np.asarray(y_true_second, dtype=float)
     probability = np.clip(np.asarray(y_prob, dtype=float), 1e-12, 1 - 1e-12)
     score = np.log(probability / (1.0 - probability))
-    coefficients = np.array([0.0, 1.0])
+    prevalence = np.clip(y.mean(), 1e-12, 1 - 1e-12)
+    coefficients = np.array([np.log(prevalence / (1.0 - prevalence)), 0.0])
+
+    def objective(candidate: np.ndarray) -> float:
+        linear = candidate[0] + candidate[1] * score
+        return float(np.sum(y * linear - np.logaddexp(0.0, linear)))
 
     for _ in range(max_iter):
         linear = coefficients[0] + coefficients[1] * score
@@ -122,8 +127,18 @@ def calibration_coefficients(
             step = np.linalg.solve(information, gradient)
         except np.linalg.LinAlgError:
             return np.nan, np.nan
-        coefficients += step
-        if np.max(np.abs(step)) < tolerance:
+        current_objective = objective(coefficients)
+        step_scale = 1.0
+        while step_scale >= 2.0**-20:
+            candidate = coefficients + step_scale * step
+            if objective(candidate) >= current_objective - 1e-8:
+                break
+            step_scale /= 2.0
+        else:
+            return np.nan, np.nan
+        accepted_step = step_scale * step
+        coefficients = candidate
+        if np.max(np.abs(accepted_step)) < tolerance:
             break
 
     return float(coefficients[0]), float(coefficients[1])

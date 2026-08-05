@@ -52,6 +52,20 @@ def test_calibration_coefficients_recover_calibrated_probabilities():
     assert slope == pytest.approx(1.0, abs=0.02)
 
 
+def test_calibration_coefficients_handle_large_prevalence_shift():
+    rng = np.random.default_rng(17)
+    probability = np.linspace(1e-5, 0.95, 20_000)
+    score = np.log(probability / (1.0 - probability))
+    shifted = 1.5 + 1.1 * score
+    outcome_probability = 1.0 / (1.0 + np.exp(-shifted))
+    y = rng.random(len(probability)) < outcome_probability
+
+    intercept, slope = validate.calibration_coefficients(y, probability)
+
+    assert intercept == pytest.approx(1.5, abs=0.06)
+    assert slope == pytest.approx(1.1, abs=0.04)
+
+
 def test_evaluate_by_year_skips_years_with_no_labels():
     df = pd.DataFrame(
         {
