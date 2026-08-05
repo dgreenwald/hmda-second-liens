@@ -11,7 +11,7 @@ ROOT := $(abspath .)
 SCRIPTS_DIR := $(ROOT)/scripts
 OUTPUT_DIR := $(ROOT)/output
 
-.PHONY: install test data audit county-values county-value-coverage benchmark-data benchmark-estimators selection-data select-logistic evaluate-spline-purchaser-interactions diagnose-logistic-calibration diagnose-mixture-calibration diagnose-threshold-subgroups estimate-mixture-shares train train-logistic validate classify figures all clean
+.PHONY: install test data audit county-values county-value-coverage benchmark-data benchmark-estimators selection-data select-logistic evaluate-spline-purchaser-interactions diagnose-logistic-calibration diagnose-mixture-calibration diagnose-threshold-subgroups plausibility-checks estimate-mixture-shares train train-logistic validate classify figures all clean
 
 install:
 	$(PYTHON) -m pip install -e ".[dev]"
@@ -59,6 +59,9 @@ diagnose-mixture-calibration: selection-data
 
 diagnose-threshold-subgroups: selection-data
 	$(PYTHON) $(SCRIPTS_DIR)/diagnose_threshold_subgroups.py
+
+plausibility-checks: selection-data
+	$(PYTHON) $(SCRIPTS_DIR)/run_plausibility_checks.py
 
 estimate-mixture-shares: selection-data
 	$(PYTHON) $(SCRIPTS_DIR)/estimate_mixture_shares.py

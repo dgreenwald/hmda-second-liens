@@ -39,6 +39,10 @@ changing estimator behavior or validation design.
   `make diagnose-mixture-calibration`, then `make diagnose-threshold-subgroups`.
   Reverse/forward fold parameters are cached under `output/model/mixture_folds/` and must be
   reused rather than silently refitted.
+- Historical plausibility workflow: `make plausibility-checks` applies the frozen final raw and
+  known-source-prior models to 1990--2016, writes annual aggregate shares and the 2003--2004
+  continuity table, and renders the predicted/actual series. It checkpoints annual aggregates
+  and never retains loan-level historical probabilities.
 - Legacy/full release workflow: `make data && make train && make validate && make classify &&
   make figures`; each target maps to one `scripts/*.py` CLI.
 - `pytest tests/` — must pass without real data.
@@ -70,6 +74,9 @@ changing estimator behavior or validation design.
 - Step 7 keeps the canonical 0.5 threshold frozen. Precision-recall curves are diagnostic only;
   do not select year- or subgroup-specific thresholds. Subgroup outputs use loan type,
   purchaser type, Census region, and target-year deciles of both continuous variables.
+- Step 8 treats the 2003--2004 continuity check and broader public HELOC/second-mortgage series
+  as plausibility evidence, not identification. None of the reviewed public external series
+  directly measures subordinate-lien originations in the owner-occupied home-purchase sample.
 
 ## Commit & Pull Request Guidelines
 - Short, imperative commit subjects, first line <= 72 chars.

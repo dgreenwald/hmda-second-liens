@@ -356,6 +356,27 @@ check rather than a required input, and document its coverage and limitations.
 **Deliverables:** the predicted/actual share figure and a source-comparison table
 with explicit definition mappings.
 
+**Implemented protocol:** fit no new specification. Apply the persisted final 2004--2007 raw
+logistic model and its equal-source-prior density-ratio counterpart to every year from 1990
+through 2016. Report the mixture mean probability (which equals the fitted annual mixture
+share), its hard 0.5 count share, the raw-logistic mean benchmark, and actual labeled shares.
+Checkpoint annual aggregates only. Evaluate the 2003--2004 reporting boundary explicitly and
+map each potential public comparison series to the project estimand before interpreting it.
+
+**Result:** the mixture mean rises from 9.14% in 2003 to 13.23% in 2004, a 4.09 percentage-point
+jump; the observed 2004 share is 13.54%, so the 2004 mixture error is -0.31 point. The raw mean
+also jumps by 3.52 points, indicating a substantial feature-distribution or sample-composition
+change at the boundary rather than a discontinuity unique to the mixture adjustment. Over all
+labeled years 2004--2016, the mixture mean has mean absolute annual share error 0.30 point,
+compared with 1.22 points for the raw mean. The historical mixture series rises from roughly
+3--5% in the early 1990s to about 9% in 2000--2003, then peaks at 22.32% in 2006. These patterns
+are plausible and labeled-period fit is strong, but neither continuity nor fit after 2004
+identifies pre-2004 accuracy. The reviewed FHFA NMDB, Federal Reserve Financial Accounts, New
+York Fed Consumer Credit Panel, and American Housing Survey products measure first-lien
+mortgages, balances, HELOCs, borrowers, or the housing stock; none directly measures annual
+second-lien originations among owner-occupied home-purchase loans. See
+`STEP8_PLAUSIBILITY_FINDINGS.md` and `data/public/step8_external_source_comparison.csv`.
+
 ### Step 9: Test challenger models only after the core design is stable
 
 `HistGradientBoostingClassifier` is a reasonable optional challenger once the
