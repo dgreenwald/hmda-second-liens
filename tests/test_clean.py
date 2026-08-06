@@ -142,3 +142,59 @@ def test_category_columns_are_pinned_to_full_levels_even_when_absent():
     expected_dummy_cols = sum(len(v) for v in config.CATEGORY_LEVELS.values())
     assert features.shape[1] == len(config.CONTINUOUS_VARS) + expected_dummy_cols
     assert len(names) == features.shape[1]
+
+
+def test_pin_category_levels_is_defensive_and_supports_a_subset():
+    frame = pd.DataFrame({"loan_type": [2], "purchaser_type": [3]})
+
+    pinned = clean.pin_category_levels(frame, ["loan_type"])
+
+    assert not isinstance(frame["loan_type"].dtype, pd.CategoricalDtype)
+    assert list(pinned["loan_type"].cat.categories) == config.CATEGORY_LEVELS[
+        "loan_type"
+    ]
+    assert not isinstance(pinned["purchaser_type"].dtype, pd.CategoricalDtype)
+
+
+def test_load_and_clean_year_tolerates_missing_requested_columns_and_drops_label(
+    tmp_path,
+):
+    yearly_dir = tmp_path / "yearly"
+    yearly_dir.mkdir()
+    pd.DataFrame([_base_row(extra_unused=7)]).to_parquet(
+        yearly_dir / "hmda2005.parquet"
+    )
+
+    out = clean.load_and_clean_year(
+        2005,
+        COUNTY_VALUES,
+        yearly_dir=yearly_dir,
+        columns=[
+            "asof_date",
+            "action_taken",
+            "loan_purp",
+            "occupancy",
+            *clean.BASE_VAR_LIST,
+            "missing_optional",
+        ],
+        allow_missing_columns=True,
+        label_policy="drop",
+    )
+
+    assert len(out) == 1
+    assert config.LABEL_VAR not in out
+
+
+def test_load_and_clean_year_can_require_label(tmp_path):
+    yearly_dir = tmp_path / "yearly"
+    yearly_dir.mkdir()
+    raw = pd.DataFrame([_base_row()]).drop(columns=[config.LABEL_VAR])
+    raw.to_parquet(yearly_dir / "hmda2005.parquet")
+
+    with pytest.raises(ValueError, match="missing lien_status"):
+        clean.load_and_clean_year(
+            2005,
+            COUNTY_VALUES,
+            yearly_dir=yearly_dir,
+            label_policy="require",
+        )

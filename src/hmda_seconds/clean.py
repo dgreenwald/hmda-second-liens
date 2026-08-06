@@ -18,8 +18,13 @@ the plan's original open question, no extra filter is needed here.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+from pathlib import Path
+from typing import Literal
+
 import numpy as np
 import pandas as pd
+import pyarrow.parquet as pq
 from py_tools.datasets import fhfa
 
 from . import config, county_values
@@ -134,22 +139,58 @@ def clean_frame(df_t: pd.DataFrame, df_county_values: pd.DataFrame) -> pd.DataFr
 
     df_t["loan_below_10k"] = df_t["loan_amt"] < 10
 
-    # Pin every categorical feature to its canonical levels so dummy encoding
-    # (done separately per year/split downstream) always produces the same
-    # columns in the same order -- see config.CATEGORY_LEVELS.
-    for var, categories in config.CATEGORY_LEVELS.items():
-        df_t[var] = pd.Categorical(df_t[var], categories=categories)
+    df_t = pin_category_levels(df_t)
 
     return df_t.drop(columns=["county_code"])
 
 
-def load_and_clean_year(
-    year: int, df_county_values: pd.DataFrame, yearly_dir=None
+def pin_category_levels(
+    frame: pd.DataFrame, variables: Iterable[str] | None = None
 ) -> pd.DataFrame:
-    """Read one year's raw HMDA extract and apply :func:`clean_frame`."""
+    """Reapply canonical levels without mutating the caller's frame.
+
+    This remains necessary at encoding boundaries because parquet round trips
+    and caller-created subsets may lose pandas categorical metadata.
+    """
+    if variables is None:
+        variables = config.CATEGORY_LEVELS
+    pinned = frame.copy(deep=False)
+    for variable in variables:
+        if variable in config.CATEGORY_LEVELS:
+            pinned[variable] = pd.Categorical(
+                frame[variable], categories=config.CATEGORY_LEVELS[variable]
+            )
+    return pinned
+
+
+def load_and_clean_year(
+    year: int,
+    df_county_values: pd.DataFrame,
+    yearly_dir=None,
+    *,
+    columns: Iterable[str] | None = None,
+    allow_missing_columns: bool = False,
+    label_policy: Literal["allow", "drop", "require"] = "allow",
+) -> pd.DataFrame:
+    """Read one annual extract with an explicit label/schema policy, then clean it."""
     if yearly_dir is None:
         yearly_dir = config.HMDA_YEARLY_DIR
-    df_t = pd.read_parquet(f"{yearly_dir}/hmda{year:d}.parquet")
+    if label_policy not in {"allow", "drop", "require"}:
+        raise ValueError(f"Unknown label_policy {label_policy!r}")
+    path = Path(yearly_dir) / f"hmda{year:d}.parquet"
+    selected_columns = None
+    if columns is not None:
+        requested = list(dict.fromkeys(columns))
+        if allow_missing_columns:
+            available = set(pq.read_schema(path).names)
+            selected_columns = [column for column in requested if column in available]
+        else:
+            selected_columns = requested
+    df_t = pd.read_parquet(path, columns=selected_columns)
+    if label_policy == "drop":
+        df_t = df_t.drop(columns=[config.LABEL_VAR], errors="ignore")
+    elif label_policy == "require" and config.LABEL_VAR not in df_t:
+        raise ValueError(f"Annual extract {path} is missing {config.LABEL_VAR}")
     return clean_frame(df_t, df_county_values)
 
 

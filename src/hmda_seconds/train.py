@@ -15,7 +15,7 @@ from py_tools.econometrics.machine_learning import (
     complete_estimation,
 )
 
-from . import config
+from . import clean, config
 from .density_ratio import artifacts
 from .density_ratio.protocols import ModelConfiguration
 
@@ -78,7 +78,7 @@ def fit_full(
     if not rf_kwargs:
         rf_kwargs = config.RF_KWARGS
 
-    encoded = _pin_category_levels(df, category_vars)
+    encoded = clean.pin_category_levels(df, category_vars)
     wrapper = RandomForestWrapper(data=encoded, **rf_kwargs)
     wrapper.set_labels_features(label_var, continuous_vars, category_vars)
     wrapper.train_test_split(train_size=None, test_size=None)
@@ -86,18 +86,6 @@ def fit_full(
     if outfile is not None:
         _save_random_forest(wrapper, df, outfile, "full_sample")
     return wrapper
-
-
-def _pin_category_levels(
-    df: pd.DataFrame, category_vars: list[str]
-) -> pd.DataFrame:
-    encoded = df.copy(deep=False)
-    for var in category_vars:
-        if var in config.CATEGORY_LEVELS:
-            encoded[var] = pd.Categorical(
-                df[var], categories=config.CATEGORY_LEVELS[var]
-            )
-    return encoded
 
 
 def _save_random_forest(

@@ -19,7 +19,7 @@ duplication and unnecessary dependency layers.
 ## Baseline status
 
 The Step 8 add/add conflicts identified during the initial audit have been resolved. Ruff,
-Python compilation, and all 158 synthetic tests pass. Streamlining work should preserve this
+Python compilation, and all 161 synthetic tests pass. Streamlining work should preserve this
 baseline and continue to use the bounded real-data family-parity checks where estimator code is
 moved.
 
@@ -116,17 +116,16 @@ equal-within-horizon, then equal-across-horizon weighting.
 
 ### 5. Centralize categorical pinning and annual-load schema handling
 
-Canonical category levels are reapplied in `clean.py`, `logistic.py`, and `train.py`. The
-prediction-time copies are intentional: parquet round trips and caller-created subsets may lose
-pandas categorical metadata, so relying exclusively on `clean.clean_frame` would make dummy
-columns unsafe. Extract a public `clean.pin_category_levels(frame, variables)` helper and use it
-at both cleaning and encoding boundaries rather than deleting the defensive prediction-time
-step.
+**Status: completed.**
 
-`plausibility._load_and_clean_application_year` also contains specialized annual-load logic for
-pre-2004 schemas and selective columns. Consider extending `clean.load_and_clean_year` with an
-optional column set and explicit missing-label policy, then delegate the plausibility loader to
-it. Preserve the narrow-column read because historical files are large.
+Canonical category levels are now reapplied through
+`clean.pin_category_levels(frame, variables)` at both cleaning and encoding boundaries. The
+defensive prediction-time calls remain because parquet round trips and caller-created subsets
+may lose pandas categorical metadata.
+
+`clean.load_and_clean_year` now accepts an optional column set, a missing-column policy, and an
+explicit `allow`/`drop`/`require` label policy. The plausibility loader delegates to it, retains
+narrow historical reads, and explicitly drops the unreliable pre-2004 label.
 
 Do **not** add an in-process `lru_cache` around `build_county_value_panel` without stronger
 evidence. Its DataFrame result is mutable, its year arguments are not consistently hashable,
@@ -183,7 +182,7 @@ dead code.
    boundary.
 2. **Completed:** introduce and adopt common checkpoint/table utilities, including plausibility
    outputs.
-3. Centralize categorical pinning and, if cleanly expressible, annual schema-tolerant loading.
+3. **Completed:** centralize categorical pinning and annual schema-tolerant loading.
 4. Move estimator primitives into the three `density_ratio/families/` modules and consolidate
    artifact boilerplate at the same boundary.
 5. Introduce and adopt a common calibration-diagnostic cell evaluator.

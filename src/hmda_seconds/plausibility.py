@@ -11,7 +11,6 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import pyarrow.parquet as pq
 
 from . import clean, config, mixture, model_selection
 from .density_ratio import adapters, checkpoints, evaluation
@@ -228,13 +227,15 @@ def render_annual_shares(annual: pd.DataFrame, output_file: str | Path) -> None:
 def _load_and_clean_application_year(
     year: int, yearly_dir: Path, county_values: pd.DataFrame
 ) -> pd.DataFrame:
-    path = yearly_dir / f"hmda{year}.parquet"
-    available = set(pq.read_schema(path).names)
-    columns = [column for column in HISTORICAL_REQUIRED_COLUMNS if column in available]
-    raw = pd.read_parquet(path, columns=columns)
-    if year < REPORTING_START_YEAR and config.LABEL_VAR in raw:
-        raw = raw.drop(columns=[config.LABEL_VAR])
-    return clean.clean_frame(raw, county_values)
+    label_policy = "drop" if year < REPORTING_START_YEAR else "allow"
+    return clean.load_and_clean_year(
+        year,
+        county_values,
+        yearly_dir=yearly_dir,
+        columns=HISTORICAL_REQUIRED_COLUMNS,
+        allow_missing_columns=True,
+        label_policy=label_policy,
+    )
 
 
 def _application_order(years: tuple[int, ...]) -> list[int]:

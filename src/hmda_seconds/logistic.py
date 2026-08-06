@@ -14,7 +14,7 @@ import pandas as pd
 from py_tools.econometrics.machine_learning import get_labels_features
 from sklearn.linear_model import LogisticRegression
 
-from . import config
+from . import clean, config
 from .density_ratio import artifacts
 from .density_ratio.protocols import ModelConfiguration
 
@@ -37,7 +37,7 @@ def fit(
     if category_vars is None:
         category_vars = config.CATEGORY_VARS
 
-    encoded = _pin_category_levels(df, category_vars)
+    encoded = clean.pin_category_levels(df, category_vars)
     labels, features, feature_names = get_labels_features(
         encoded, label_var, continuous_vars, category_vars
     )
@@ -143,7 +143,7 @@ def feature_matrix(
         continuous_vars = config.CONTINUOUS_VARS
     if category_vars is None:
         category_vars = config.CATEGORY_VARS
-    encoded = _pin_category_levels(df, category_vars)
+    encoded = clean.pin_category_levels(df, category_vars)
     _, features, _ = get_labels_features(
         encoded,
         config.LABEL_VAR,
@@ -152,22 +152,3 @@ def feature_matrix(
         features_only=True,
     )
     return features
-
-
-def _pin_category_levels(
-    df: pd.DataFrame, category_vars: list[str]
-) -> pd.DataFrame:
-    """Ensure encoded batches have the same dummy columns as training data.
-
-    Persisted parquet files and caller-created subsets do not necessarily
-    retain pandas categorical metadata. Reapply the canonical levels here so
-    prediction remains safe even when a batch contains only some categories.
-    The shallow copy shares all unmodified columns with the input frame.
-    """
-    encoded = df.copy(deep=False)
-    for var in category_vars:
-        if var in config.CATEGORY_LEVELS:
-            encoded[var] = pd.Categorical(
-                df[var], categories=config.CATEGORY_LEVELS[var]
-            )
-    return encoded
