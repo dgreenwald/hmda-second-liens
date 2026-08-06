@@ -17,7 +17,7 @@ from sklearn.linear_model import LogisticRegression
 from threadpoolctl import threadpool_limits
 
 from . import clean, config
-from .density_ratio import artifacts
+from .density_ratio import artifacts, numerical
 from .density_ratio import folds as temporal_folds
 from .density_ratio.protocols import ModelConfiguration, TemporalFold
 from .logistic_features import (
@@ -51,8 +51,9 @@ class SelectedLogisticModel:
 
     def predict_proba_second_lien(self, df: pd.DataFrame) -> np.ndarray:
         features = self.transformer.transform(df)
-        column = list(self.classifier.classes_).index(config.SECOND_LIEN_CLASS)
-        return self.classifier.predict_proba(features)[:, column]
+        return numerical.predict_class_probability(
+            self.classifier, features, config.SECOND_LIEN_CLASS
+        )
 
     def predict(self, df: pd.DataFrame) -> np.ndarray:
         probability = self.predict_proba_second_lien(df)
@@ -255,9 +256,9 @@ def _evaluate_fold_specification(
             ):
                 continue
             start = time.perf_counter()
-            probability = model.predict_proba(validation_features)[
-                :, list(model.classes_).index(config.SECOND_LIEN_CLASS)
-            ]
+            probability = numerical.predict_class_probability(
+                model, validation_features, config.SECOND_LIEN_CLASS
+            )
             prediction_seconds = time.perf_counter() - start
             diagnostics = fit_diagnostics[regularization_c]
             rows.append(

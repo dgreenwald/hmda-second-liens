@@ -130,15 +130,11 @@ def run_historical_plausibility(
             frame = _load_and_clean_application_year(
                 year, yearly_dir, county_values
             )
-        features = known.transformer.transform(frame)
         log_ratio = known.log_ratio(frame)
         evaluated = evaluation.adjust_log_ratio(log_ratio)
         estimate = evaluated.mixture_estimate
         adjusted = evaluated.probability
-        second_column = list(raw.classifier.classes_).index(
-            config.SECOND_LIEN_CLASS
-        )
-        raw_probability = raw.classifier.predict_proba(features)[:, second_column]
+        raw_probability = raw.predict_proba_second_lien(frame)
         row = annual_prediction_summary(
             frame, raw_probability, adjusted, estimate.share
         )

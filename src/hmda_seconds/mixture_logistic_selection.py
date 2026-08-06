@@ -12,15 +12,12 @@ import pandas as pd
 from . import calibration, config, mixture, model_selection
 from .density_ratio import checkpoints, evaluation
 from .density_ratio import folds as temporal_folds
-from .density_ratio.families.logistic import fit_candidate_path
 from .density_ratio.pipeline import run_grid
 from .density_ratio.protocols import ModelConfiguration
 from .logistic_features import (
     FeatureSpecification,
     core_specifications,
 )
-
-__all__ = ["fit_candidate_path"]
 
 CHALLENGER = FeatureSpecification(
     "spline_lti", "purchaser_type_spline_lti"

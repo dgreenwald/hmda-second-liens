@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 
 from .. import mixture
+from . import numerical
 from .protocols import EvaluationResult, FittedDensityRatioModel, TemporalFold
 
 PROBABILITY_FLOOR = 1e-12
@@ -82,7 +83,7 @@ def evaluate_log_ratio(
         raise ValueError(f"Year {target_year} is not a target in {fold.fold_id}")
     if not 0.0 <= threshold <= 1.0:
         raise ValueError("threshold must lie in [0, 1]")
-    log_ratio = _finite_vector(log_ratio, "log_ratio")
+    log_ratio = numerical.finite_vector(log_ratio, "log_ratio")
     y_second = np.asarray(y_second, dtype=bool)
     if y_second.ndim != 1 or len(y_second) != len(log_ratio):
         raise ValueError("labels and log ratios must be aligned one-dimensional arrays")
@@ -127,7 +128,7 @@ def evaluate_log_ratio(
 
 def adjust_log_ratio(log_ratio: np.ndarray) -> AdjustedProbabilities:
     """Estimate the mixture share and return adjusted probabilities."""
-    log_ratio = _finite_vector(log_ratio, "log_ratio")
+    log_ratio = numerical.finite_vector(log_ratio, "log_ratio")
     estimate = mixture.estimate_mixture_share(log_ratio)
     probability = mixture.adjusted_probability(log_ratio, estimate.share)
     return AdjustedProbabilities(estimate, probability)
@@ -269,15 +270,6 @@ def _target_year(target: pd.DataFrame, fold: TemporalFold) -> int:
     if year not in fold.target_years:
         raise ValueError(f"Year {year} is not a target in {fold.fold_id}")
     return year
-
-
-def _finite_vector(values: np.ndarray, name: str) -> np.ndarray:
-    values = np.asarray(values, dtype=float)
-    if values.ndim != 1 or not len(values):
-        raise ValueError(f"{name} must be a nonempty one-dimensional array")
-    if not np.isfinite(values).all():
-        raise ValueError(f"{name} contains non-finite values")
-    return values
 
 
 def _finite_or_none(value: float) -> float | None:

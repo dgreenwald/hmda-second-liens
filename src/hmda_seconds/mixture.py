@@ -14,7 +14,7 @@ from scipy.special import expit, logit
 from sklearn.linear_model import LogisticRegression
 
 from . import config, model_selection
-from .density_ratio import artifacts, checkpoints
+from .density_ratio import artifacts, checkpoints, numerical
 from .density_ratio import folds as temporal_folds
 from .density_ratio.families.logistic import (
     KnownSourcePriorModel,
@@ -64,10 +64,9 @@ class DensityRatioModels:
         return self.transformer.transform(frame)
 
     def raw_probability(self, features: np.ndarray) -> np.ndarray:
-        column = list(self.raw_classifier.classes_).index(
-            config.SECOND_LIEN_CLASS
+        return numerical.predict_class_probability(
+            self.raw_classifier, features, config.SECOND_LIEN_CLASS
         )
-        return self.raw_classifier.predict_proba(features)[:, column]
 
 
 @dataclass(frozen=True)
@@ -274,7 +273,7 @@ def estimate_mixture_share(
     max_em_iterations: int = 100,
 ) -> MixtureShareEstimate:
     """Estimate one target second-lien share by likelihood and EM."""
-    log_ratio = _finite_vector(log_ratio, "log_ratio")
+    log_ratio = numerical.finite_vector(log_ratio, "log_ratio")
 
     def negative_mean_likelihood(share: float) -> float:
         return -mean_mixture_log_likelihood(log_ratio, share)
@@ -317,7 +316,7 @@ def estimate_mixture_share_em(
     max_iterations: int = 10_000,
 ) -> tuple[float, bool, int]:
     """Estimate the target share by posterior-responsibility iteration."""
-    log_ratio = _finite_vector(log_ratio, "log_ratio")
+    log_ratio = numerical.finite_vector(log_ratio, "log_ratio")
     if not 0 < initial_share < 1:
         raise ValueError("initial_share must lie strictly between zero and one")
     share = float(initial_share)
@@ -333,7 +332,7 @@ def adjusted_probability(log_ratio: np.ndarray, share: float) -> np.ndarray:
     """Return target posterior probabilities for a proposed target share."""
     if not 0 < share < 1:
         raise ValueError("share must lie strictly between zero and one")
-    return expit(_finite_vector(log_ratio, "log_ratio") + logit(share))
+    return expit(numerical.finite_vector(log_ratio, "log_ratio") + logit(share))
 
 
 def mean_mixture_log_likelihood(log_ratio: np.ndarray, share: float) -> float:
@@ -589,10 +588,10 @@ def _normalized_ratio_variant(
     score = features @ coefficients
     first_score = score[~y_second]
     second_score = score[y_second]
-    offset = -_log_mean_exp(first_score)
-    mean_ratio_first = float(np.exp(_log_mean_exp(first_score + offset)))
+    offset = -numerical.log_mean_exp(first_score)
+    mean_ratio_first = float(np.exp(numerical.log_mean_exp(first_score + offset)))
     mean_inverse_ratio_second = float(
-        np.exp(_log_mean_exp(-second_score - offset))
+        np.exp(numerical.log_mean_exp(-second_score - offset))
     )
     return RatioVariant(
         name=name,
@@ -643,21 +642,6 @@ def _year_indicator_matrix(
     return np.column_stack(
         [(observed_years == year).astype(float) * scale for year in levels[1:]]
     )
-
-
-def _log_mean_exp(values: np.ndarray) -> float:
-    values = _finite_vector(values, "values")
-    maximum = float(values.max())
-    return maximum + float(np.log(np.exp(values - maximum).mean()))
-
-
-def _finite_vector(values: np.ndarray, name: str) -> np.ndarray:
-    array = np.asarray(values, dtype=float)
-    if array.ndim != 1 or len(array) == 0:
-        raise ValueError(f"{name} must be a nonempty one-dimensional array")
-    if not np.isfinite(array).all():
-        raise ValueError(f"{name} contains non-finite values")
-    return array
 
 
 def _cell_present(

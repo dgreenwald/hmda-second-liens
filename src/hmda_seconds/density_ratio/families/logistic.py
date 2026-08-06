@@ -13,7 +13,7 @@ from sklearn.linear_model import LogisticRegression
 
 from ... import config, model_selection
 from ...logistic_features import FeatureSpecification, LogisticFeatureTransformer
-from .. import artifacts
+from .. import artifacts, numerical
 from ..protocols import FittedDensityRatioModel, ModelConfiguration
 from ..weighting import equal_source_prior_weights
 from ._validation import require_parameters, validate_request
@@ -73,8 +73,10 @@ def classifier_ratio_variant(
         name=name,
         feature_coefficients=coefficients,
         log_ratio_offset=offset,
-        mean_ratio_first=float(np.exp(_log_mean_exp(score[~y_second]))),
-        mean_inverse_ratio_second=float(np.exp(_log_mean_exp(-score[y_second]))),
+        mean_ratio_first=float(np.exp(numerical.log_mean_exp(score[~y_second]))),
+        mean_inverse_ratio_second=float(
+            np.exp(numerical.log_mean_exp(-score[y_second]))
+        ),
     )
 
 
@@ -179,14 +181,6 @@ def known_source_prior_model_path(
         f"known_source_prior__{specification.name}__c_{c_label}"
         f"__train_{min(years)}_{max(years)}.pkl"
     )
-
-
-def _log_mean_exp(values: np.ndarray) -> float:
-    values = np.asarray(values, dtype=float)
-    if values.ndim != 1 or not len(values) or not np.isfinite(values).all():
-        raise ValueError("values must be a nonempty finite vector")
-    maximum = float(values.max())
-    return maximum + float(np.log(np.exp(values - maximum).mean()))
 
 
 def _number_label(value: float) -> str:

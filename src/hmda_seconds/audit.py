@@ -8,7 +8,6 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pyarrow.parquet as pq
-from py_tools.datasets import fhfa
 
 from . import clean, config
 
@@ -266,9 +265,7 @@ def run_sample_audit(
     if years is None:
         years = config.APPLY_YEARS
     years = list(years)
-    df_fhfa = fhfa.load("county", data_dir=f"{config.FHFA_DATA_DIR}/").reset_index()
-    df_fhfa["year"] = df_fhfa["date"].dt.year
-    df_fhfa["fips"] = df_fhfa["fips"].astype("Int64")
+    df_fhfa = clean.load_fhfa_county_hpi()
     balanced_fips, yearly_fips = fhfa_coverage_sets(df_fhfa, years)
 
     stages = []

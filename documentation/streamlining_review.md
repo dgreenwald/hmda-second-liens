@@ -12,9 +12,9 @@ stands.
 
 The repository currently contains approximately:
 
-- 8,512 lines under `src/hmda_seconds/`;
+- 8,515 lines under `src/hmda_seconds/`;
 - 762 lines under `scripts/`; and
-- 2,738 lines under `tests/`.
+- 2,789 lines under `tests/`.
 
 Large modules are not automatically redundant. In particular, splitting a large module can
 improve navigation without reducing total code. The recommendations below prioritize actual
@@ -22,7 +22,7 @@ duplication and unnecessary dependency layers.
 
 ## Baseline status
 
-All nine original streamlining findings are complete. Ruff, Python compilation, and all 129
+All nine original streamlining findings are complete. Ruff, Python compilation, and all 133
 synthetic tests pass. Streamlining work should preserve this baseline and continue to use the
 bounded real-data family-parity checks where estimator code is moved.
 
@@ -166,35 +166,32 @@ completed. They are ordered from lowest to highest implementation risk.
 
 ### 10. Remove the migration re-export in `mixture_logistic_selection.py`
 
-**Status: open.**
+**Status: completed.**
 
-`mixture_logistic_selection` imports `fit_candidate_path` from
-`density_ratio.families.logistic` and immediately re-exports it via `__all__`. Production code
-does not use the alias, but `tests/test_mixture_logistic_selection.py` still calls it through
-the orchestration module. This is a test-visible migration re-export rather than an orphan.
-
-**Recommendation:** Update those tests to import the family primitive directly, then delete the
-orchestration-module import and `__all__` entry.
+The orchestration module previously re-exported the family-owned `fit_candidate_path`. Only
+`tests/test_mixture_logistic_selection.py` used that migration alias; production code did not.
+Those tests now import the family primitive directly, and the orchestration-module import and
+`__all__` entry have been removed, leaving the family module as the single owner.
 
 **Risk:** Very low.
 
 ### 11. Route the sample-audit FHFA load through the canonical loader
 
-**Status: open.**
+**Status: completed.**
 
 `audit.run_sample_audit` directly calls `fhfa.load("county", ...)`, formats `year` and `fips`,
 and uses the result — duplicating `clean.load_fhfa_county_hpi`, which performs the same three
 steps. The only difference is that `audit.py` hard-codes `config.FHFA_DATA_DIR` while
 `clean.load_fhfa_county_hpi` accepts an optional `data_dir` argument.
 
-**Recommendation:** Replace the inline block in `audit.run_sample_audit` with a call to
-`clean.load_fhfa_county_hpi()`.
+`audit.run_sample_audit` now calls `clean.load_fhfa_county_hpi()`. The duplicate direct dataset
+load and year/FIPS normalization have been removed from `audit.py`.
 
 **Risk:** Very low.
 
 ### 12. Centralize class-aware probability and numerical primitives
 
-**Status: open.**
+**Status: completed.**
 
 Second-lien probability extraction still repeats the scikit-learn class lookup in selected
 logistic, density-ratio logistic, boosting, Random Forest, plausibility, threshold, and mixture
@@ -202,11 +199,11 @@ paths. `mixture._finite_vector` and `density_ratio.evaluation._finite_vector` al
 same validation, while `mixture._log_mean_exp` and
 `density_ratio.families.logistic._log_mean_exp` duplicate the same stable calculation.
 
-**Recommendation:** Add a neutral `density_ratio/numerical.py` containing public, directly
-tested finite-vector, log-mean-exp, and class-aware probability helpers. Keep fitted-model
-prediction methods as the public model interface and use the helpers inside them. Do not put
-the shared numerical functions in `density_ratio.evaluation`: that module already imports
-`mixture`, so importing it back from `mixture.py` would create a circular dependency.
+The neutral `density_ratio/numerical.py` now owns finite-vector validation, stable log-mean-exp,
+and class-aware probability extraction. Model-facing prediction methods remain the public
+interface and delegate to these primitives. Direct tests cover reversed class order, missing
+classes, probability-column alignment, vector validation, and numerical stability. Keeping the
+module independent also avoids a circular dependency between `mixture` and `evaluation`.
 
 **Risk:** Very low.
 
@@ -318,10 +315,11 @@ would lose the floating-point-safe C comparison.
 
 ## Recommended sequence for remaining work
 
-1. **Item 10** (remove migration re-export) — update the direct tests, then remove the alias.
-2. **Item 11** (audit FHFA load) — three-line substitution, no risk.
-3. **Item 12** (probability and numerical primitives) — add the neutral utility and direct unit
-   tests, then migrate each caller.
+1. **Completed: Item 10** (remove migration re-export) — tests now use the family owner and the
+   alias has been removed.
+2. **Completed: Item 11** (audit FHFA load) — the audit now uses the canonical loader.
+3. **Completed: Item 12** (probability and numerical primitives) — shared helpers and direct
+   tests are in place, and all callers have been migrated.
 4. **Item 13** (pairwise comparison helper) — moderate refactor, low risk; requires verifying
    output schemas are unchanged.
 5. **Item 14** (two-stage horizon aggregation) — medium risk; run parity tests after each caller

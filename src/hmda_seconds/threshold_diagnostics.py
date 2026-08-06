@@ -384,7 +384,6 @@ def _run_design(
             raise RuntimeError("Raw and known-prior fold feature columns differ")
         for validation_year in missing:
             target = data_by_year[validation_year]
-            features = known.transformer.transform(target)
             evaluated = evaluation.evaluate_target(
                 known,
                 target,
@@ -393,10 +392,7 @@ def _run_design(
                 second_lien_class=config.SECOND_LIEN_CLASS,
             )
             adjusted_probability = evaluated.probability
-            second_column = list(raw.classifier.classes_).index(
-                config.SECOND_LIEN_CLASS
-            )
-            raw_probability = raw.classifier.predict_proba(features)[:, second_column]
+            raw_probability = raw.predict_proba_second_lien(target)
             y_second = (
                 target[config.LABEL_VAR].to_numpy() == config.SECOND_LIEN_CLASS
             )

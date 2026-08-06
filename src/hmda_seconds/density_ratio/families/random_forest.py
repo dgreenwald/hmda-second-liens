@@ -14,7 +14,7 @@ from scipy.special import logit
 from sklearn.ensemble import RandomForestClassifier
 
 from ... import config
-from .. import artifacts
+from .. import artifacts, numerical
 from ..protocols import FittedDensityRatioModel, ModelConfiguration
 from ..weighting import equal_source_prior_weights
 from ._validation import require_parameters, validate_request
@@ -45,11 +45,10 @@ class RandomForestDensityRatioModel:
         features, names = forest_features(frame)
         if names != self.feature_names:
             raise RuntimeError("Random Forest feature columns changed")
-        second_column = list(self.classifier.classes_).index(
-            config.SECOND_LIEN_CLASS
-        )
         with parallel_backend("threading"):
-            probability = self.classifier.predict_proba(features)[:, second_column]
+            probability = numerical.predict_class_probability(
+                self.classifier, features, config.SECOND_LIEN_CLASS
+            )
         probability = np.clip(
             probability, PROBABILITY_EPSILON, 1.0 - PROBABILITY_EPSILON
         )

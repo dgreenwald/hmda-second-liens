@@ -3,6 +3,7 @@ import pandas as pd
 import pytest
 
 from hmda_seconds import logistic_features, mixture_logistic_selection
+from hmda_seconds.density_ratio.families import logistic as logistic_family
 
 
 def synthetic_frame(n=1_000, year=2005, seed=17):
@@ -28,7 +29,7 @@ def test_candidate_path_retains_every_penalty():
     )
     specification = logistic_features.FeatureSpecification("linear", "none")
 
-    models, diagnostics = mixture_logistic_selection.fit_candidate_path(
+    models, diagnostics = logistic_family.fit_candidate_path(
         training, specification, [0.1, 1.0]
     )
 
@@ -49,7 +50,7 @@ def test_shared_grid_translation_matches_existing_cell_evaluation(tmp_path):
     fold = mixture_logistic_selection.temporal_folds.temporal_fold(
         (2005, 2006), (2004,), direction="reverse"
     )
-    direct_models, diagnostics = mixture_logistic_selection.fit_candidate_path(
+    direct_models, diagnostics = logistic_family.fit_candidate_path(
         training, specification, [0.1]
     )
     direct = mixture_logistic_selection.evaluate_target(
