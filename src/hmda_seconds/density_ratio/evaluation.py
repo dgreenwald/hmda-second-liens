@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 import numpy as np
@@ -24,6 +25,7 @@ class EvaluatedTarget:
     mixture_estimate: mixture.MixtureShareEstimate
     log_ratio: np.ndarray
     probability: np.ndarray
+    metrics: dict[str, float | int]
     log_ratio_seconds: float
     evaluation_seconds: float
 
@@ -92,7 +94,7 @@ def evaluate_log_ratio(
     adjusted = adjust_log_ratio(log_ratio)
     estimate = adjusted.mixture_estimate
     probability = adjusted.probability
-    metrics = probability_metrics(y_second, probability)
+    metrics = evaluate_sample(y_second, probability)
     result = EvaluationResult(
         model_id=model_id,
         fold_id=fold.fold_id,
@@ -117,6 +119,7 @@ def evaluate_log_ratio(
         mixture_estimate=estimate,
         log_ratio=log_ratio,
         probability=probability,
+        metrics=metrics,
         log_ratio_seconds=log_ratio_seconds,
         evaluation_seconds=time.perf_counter() - started,
     )
@@ -130,10 +133,10 @@ def adjust_log_ratio(log_ratio: np.ndarray) -> AdjustedProbabilities:
     return AdjustedProbabilities(estimate, probability)
 
 
-def probability_metrics(
+def evaluate_sample(
     y_second: np.ndarray, probability: np.ndarray
 ) -> dict[str, float | int]:
-    """Return the common proper-score and calibration diagnostics."""
+    """Compute the canonical metrics for one labeled probability sample."""
     y = np.asarray(y_second, dtype=bool)
     probability = np.asarray(probability, dtype=float)
     validate_probability_inputs(y, probability)
@@ -153,6 +156,39 @@ def probability_metrics(
         "calibration_intercept": intercept,
         "calibration_slope": slope,
     }
+
+
+# Compatibility alias for callers using the former public name.
+probability_metrics = evaluate_sample
+
+
+def metric_record(
+    y_second: np.ndarray,
+    probability: np.ndarray,
+    *,
+    metadata: Mapping[str, object],
+    additional: Mapping[str, object] | None = None,
+) -> dict[str, object]:
+    """Combine canonical sample metrics with cell metadata and extensions."""
+    metrics = evaluate_sample(y_second, probability)
+    return metric_record_from_metrics(metrics, metadata=metadata, additional=additional)
+
+
+def metric_record_from_metrics(
+    metrics: Mapping[str, float | int],
+    *,
+    metadata: Mapping[str, object],
+    additional: Mapping[str, object] | None = None,
+) -> dict[str, object]:
+    """Build a cell record from metrics already computed by this module."""
+    additional = {} if additional is None else additional
+    groups = (metadata, metrics, additional)
+    keys = [key for group in groups for key in group]
+    duplicates = {key for key in keys if keys.count(key) > 1}
+    if duplicates:
+        names = ", ".join(sorted(duplicates))
+        raise ValueError(f"metric record fields overlap: {names}")
+    return {**metadata, **metrics, **additional}
 
 
 def validate_probability_inputs(

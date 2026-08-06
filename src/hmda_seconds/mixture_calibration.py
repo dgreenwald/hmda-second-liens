@@ -66,7 +66,7 @@ def run_mixture_calibration_diagnostics(
     reverse_horizon_bins = calibration.aggregate_reliability_bins(
         reverse_bins, ["horizon"]
     )
-    forward_summary = _simple_summary(forward_metrics)
+    forward_summary = calibration.aggregate_forward_metrics(forward_metrics)
     outputs = {
         "reverse_metrics": reverse_metrics,
         "reverse_bins": reverse_bins,
@@ -173,13 +173,15 @@ def _run_design(
             }
             metric_row = pd.DataFrame(
                 [
-                    {
-                        **metadata,
-                        **evaluation.probability_metrics(y_second, probability),
-                        "mixture_share": evaluated.result.mixture_share,
-                        "share_optimizer_converged": share.optimizer_converged,
-                        "share_at_boundary": share.at_boundary,
-                    }
+                    evaluation.metric_record_from_metrics(
+                        evaluated.metrics,
+                        metadata=metadata,
+                        additional={
+                            "mixture_share": evaluated.result.mixture_share,
+                            "share_optimizer_converged": share.optimizer_converged,
+                            "share_at_boundary": share.at_boundary,
+                        },
+                    )
                 ]
             )
             bin_rows = calibration.reliability_bins(
@@ -204,18 +206,6 @@ def _tail_metrics(log_ratio: np.ndarray) -> dict[str, float]:
     result["share_log_ratio_gt_10"] = float(np.mean(log_ratio > 10))
     result["share_log_ratio_lt_minus_10"] = float(np.mean(log_ratio < -10))
     return result
-
-
-def _simple_summary(metrics: pd.DataFrame) -> pd.DataFrame:
-    return pd.DataFrame(
-        [
-            {
-                **{column: metrics[column].mean() for column in calibration.METRIC_COLUMNS},
-                "n_cells": len(metrics),
-                "weighting": "equal_across_validation_years",
-            }
-        ]
-    )
 
 
 def _cell_complete(

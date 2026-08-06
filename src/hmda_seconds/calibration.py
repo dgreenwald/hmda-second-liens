@@ -28,9 +28,8 @@ METRIC_COLUMNS = [
 ]
 
 
-def probability_metrics(y_second: np.ndarray, probability: np.ndarray) -> dict:
-    """Return the Step 6 proper-score and calibration diagnostics."""
-    return evaluation.probability_metrics(y_second, probability)
+# Compatibility alias for callers using the former public location.
+probability_metrics = evaluation.evaluate_sample
 
 
 def reliability_bins(
@@ -122,6 +121,19 @@ def aggregate_reverse_metrics(
         ]
     )
     return by_horizon, overall
+
+
+def aggregate_forward_metrics(metrics: pd.DataFrame) -> pd.DataFrame:
+    """Average forward-validation cells with equal weight across years."""
+    return pd.DataFrame(
+        [
+            {
+                **{column: metrics[column].mean() for column in METRIC_COLUMNS},
+                "n_cells": len(metrics),
+                "weighting": "equal_across_validation_years",
+            }
+        ]
+    )
 
 
 def run_calibration_diagnostics(
@@ -257,7 +269,13 @@ def _run_reverse_diagnostics(
                 "validation_year": validation_year,
                 "horizon": fold.horizon_for(validation_year),
             }
-            metric_row = pd.DataFrame([{**metadata, **probability_metrics(y_second, probability)}])
+            metric_row = pd.DataFrame(
+                [
+                    evaluation.metric_record(
+                        y_second, probability, metadata=metadata
+                    )
+                ]
+            )
             bin_rows = reliability_bins(y_second, probability, n_bins).assign(**metadata)
             if not _bin_complete(bins, fold.train_start, validation_year):
                 bins = _append_checkpoint(bins, bin_rows, bins_file)
@@ -301,7 +319,13 @@ def _run_forward_diagnostics(
             "validation_year": validation_year,
             "horizon": fold.horizon_for(validation_year),
         }
-        metric_row = pd.DataFrame([{**metadata, **probability_metrics(y_second, probability)}])
+        metric_row = pd.DataFrame(
+            [
+                evaluation.metric_record(
+                    y_second, probability, metadata=metadata
+                )
+            ]
+        )
         bin_rows = reliability_bins(y_second, probability, n_bins).assign(**metadata)
         if not _bin_complete(bins, fold.train_start, validation_year):
             bins = _append_checkpoint(bins, bin_rows, bins_file)

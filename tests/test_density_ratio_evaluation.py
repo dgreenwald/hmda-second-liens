@@ -53,6 +53,34 @@ def test_shared_evaluator_calls_model_once_and_matches_primitives():
     )
     assert evaluated.result.fold_id == fold.fold_id
     assert evaluated.result.horizon == 1
+    assert evaluated.metrics == evaluation.evaluate_sample(
+        target["lien_status"].to_numpy() == 2, direct_probability
+    )
+
+
+def test_metric_record_combines_canonical_metrics_and_cell_fields():
+    y_second = np.array([False, True, False, True])
+    probability = np.array([0.1, 0.2, 0.7, 0.8])
+
+    record = evaluation.metric_record(
+        y_second,
+        probability,
+        metadata={"evaluation_design": "forward_robustness"},
+        additional={"mixture_share": 0.4},
+    )
+
+    assert record["n"] == 4
+    assert record["evaluation_design"] == "forward_robustness"
+    assert record["mixture_share"] == pytest.approx(0.4)
+
+
+def test_metric_record_rejects_field_collisions():
+    with pytest.raises(ValueError, match="fields overlap: n"):
+        evaluation.metric_record(
+            np.array([False, True]),
+            np.array([0.2, 0.8]),
+            metadata={"n": 2},
+        )
 
 
 def test_shared_evaluator_rejects_misaligned_model_and_target_years():

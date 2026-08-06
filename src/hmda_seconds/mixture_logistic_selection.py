@@ -416,7 +416,7 @@ def run_mixture_logistic_selection(
     forward_metrics = evaluate_forward(
         final_model, data_by_year, output_dir / "mixture_logistic_forward_metrics.csv"
     )
-    forward_summary = _simple_summary(forward_metrics)
+    forward_summary = calibration.aggregate_forward_metrics(forward_metrics)
 
     survivor_table = pd.DataFrame(
         [
@@ -508,44 +508,31 @@ def evaluate_forward(
         )
         row = pd.DataFrame(
             [
-                {
-                    "evaluation_design": "forward_robustness",
-                    "specification": model.specification.name,
-                    "regularization_c": model.regularization_c,
-                    "train_start": min(model.train_years),
-                    "train_end": max(model.train_years),
-                    "validation_year": year,
-                    "horizon": fold.horizon_for(year),
-                    **evaluation.probability_metrics(
-                        target[config.LABEL_VAR].to_numpy()
-                        == config.SECOND_LIEN_CLASS,
-                        evaluated.probability,
-                    ),
-                    "mixture_share": evaluated.result.mixture_share,
-                    "share_optimizer_converged": (
-                        evaluated.result.optimizer_converged
-                    ),
-                    "share_at_boundary": evaluated.result.mixture_at_boundary,
-                }
+                evaluation.metric_record_from_metrics(
+                    evaluated.metrics,
+                    metadata={
+                        "evaluation_design": "forward_robustness",
+                        "specification": model.specification.name,
+                        "regularization_c": model.regularization_c,
+                        "train_start": min(model.train_years),
+                        "train_end": max(model.train_years),
+                        "validation_year": year,
+                        "horizon": fold.horizon_for(year),
+                    },
+                    additional={
+                        "mixture_share": evaluated.result.mixture_share,
+                        "share_optimizer_converged": (
+                            evaluated.result.optimizer_converged
+                        ),
+                        "share_at_boundary": (
+                            evaluated.result.mixture_at_boundary
+                        ),
+                    },
+                )
             ]
         )
         metrics = _replace_forward(metrics, row, checkpoint_file)
     return metrics
-
-
-def _simple_summary(metrics: pd.DataFrame) -> pd.DataFrame:
-    return pd.DataFrame(
-        [
-            {
-                **{
-                    column: metrics[column].mean()
-                    for column in calibration.METRIC_COLUMNS
-                },
-                "n_cells": len(metrics),
-                "weighting": "equal_across_validation_years",
-            }
-        ]
-    )
 
 
 def _read(path: Path) -> pd.DataFrame:

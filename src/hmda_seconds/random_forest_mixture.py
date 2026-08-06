@@ -189,7 +189,7 @@ def run_random_forest_mixture(
             forward_bins_file,
             n_bins,
         )
-    forward_summary = _simple_summary(forward_metrics)
+    forward_summary = calibration.aggregate_forward_metrics(forward_metrics)
     comparison = estimator_comparison(
         reverse_metrics,
         output_dir / "mixture_calibration_reverse_metrics.csv",
@@ -402,15 +402,17 @@ def _evaluate_cell(
     }
     metric_row = pd.DataFrame(
         [
-            {
-                **metadata,
-                **evaluation.probability_metrics(y_second, probability),
-                "mixture_share": evaluated.result.mixture_share,
-                "adjusted_hard_share_050": evaluated.result.hard_share_050,
-                "share_optimizer_converged": estimate.optimizer_converged,
-                "share_at_boundary": estimate.at_boundary,
-                "mixture_em_difference": estimate.share - estimate.em_share,
-            }
+            evaluation.metric_record_from_metrics(
+                evaluated.metrics,
+                metadata=metadata,
+                additional={
+                    "mixture_share": evaluated.result.mixture_share,
+                    "adjusted_hard_share_050": evaluated.result.hard_share_050,
+                    "share_optimizer_converged": estimate.optimizer_converged,
+                    "share_at_boundary": estimate.at_boundary,
+                    "mixture_em_difference": estimate.share - estimate.em_share,
+                },
+            )
         ]
     )
     bin_rows = calibration.reliability_bins(
@@ -419,21 +421,6 @@ def _evaluate_cell(
     metrics = _replace_cell(metrics, metric_row, metrics_file)
     bins = _replace_cell(bins, bin_rows, bins_file)
     return metrics, bins
-
-
-def _simple_summary(metrics: pd.DataFrame) -> pd.DataFrame:
-    return pd.DataFrame(
-        [
-            {
-                **{
-                    column: metrics[column].mean()
-                    for column in calibration.METRIC_COLUMNS
-                },
-                "n_cells": len(metrics),
-                "weighting": "equal_across_validation_years",
-            }
-        ]
-    )
 
 
 def _read(path: Path) -> pd.DataFrame:

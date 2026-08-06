@@ -77,6 +77,24 @@ def test_reverse_metric_summary_weights_horizons_equally():
     assert overall["n_cells"].item() == 3
 
 
+def test_forward_metric_summary_weights_validation_years_equally():
+    metrics = pd.DataFrame(
+        {
+            "n": [10, 90],
+            **{
+                column: [0.2, 0.8]
+                for column in calibration.METRIC_COLUMNS
+            },
+        }
+    )
+
+    summary = calibration.aggregate_forward_metrics(metrics)
+
+    assert summary["brier_score"].item() == pytest.approx(0.5)
+    assert summary["n_cells"].item() == 2
+    assert summary["weighting"].item() == "equal_across_validation_years"
+
+
 def test_probability_metrics_rejects_single_class_sample():
     with pytest.raises(ValueError, match="both outcome classes"):
         calibration.probability_metrics(

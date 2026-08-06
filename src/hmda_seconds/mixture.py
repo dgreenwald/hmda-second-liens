@@ -621,7 +621,7 @@ def _evaluate_target_year(
         target[config.LABEL_VAR].to_numpy() == config.SECOND_LIEN_CLASS
     )
     actual_share = float(actual_second.mean())
-    raw_metrics = evaluation.probability_metrics(actual_second, raw_probability)
+    raw_metrics = evaluation.evaluate_sample(actual_second, raw_probability)
     row = {
         "specification": fitted.specification.name,
         "regularization_c": fitted.regularization_c,

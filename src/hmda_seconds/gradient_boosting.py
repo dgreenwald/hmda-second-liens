@@ -435,18 +435,7 @@ def run_boosting_diagnostics(
             forward_bins_file,
             n_bins,
         )
-    forward_summary = pd.DataFrame(
-        [
-            {
-                **{
-                    column: forward_metrics[column].mean()
-                    for column in calibration.METRIC_COLUMNS
-                },
-                "n_cells": len(forward_metrics),
-                "weighting": "equal_across_validation_years",
-            }
-        ]
-    )
+    forward_summary = calibration.aggregate_forward_metrics(forward_metrics)
     outputs = {
         "boosting_reverse_metrics": reverse_metrics,
         "boosting_reverse_bins": reverse_bins,
@@ -510,13 +499,15 @@ def _diagnose_cell(
     }
     metric_row = pd.DataFrame(
         [
-            {
-                **metadata,
-                **evaluation.probability_metrics(y_second, probability),
-                "mixture_share": evaluated.result.mixture_share,
-                "share_optimizer_converged": estimate.optimizer_converged,
-                "share_at_boundary": estimate.at_boundary,
-            }
+            evaluation.metric_record_from_metrics(
+                evaluated.metrics,
+                metadata=metadata,
+                additional={
+                    "mixture_share": evaluated.result.mixture_share,
+                    "share_optimizer_converged": estimate.optimizer_converged,
+                    "share_at_boundary": estimate.at_boundary,
+                },
+            )
         ]
     )
     bin_rows = calibration.reliability_bins(
