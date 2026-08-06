@@ -33,9 +33,31 @@ def test_aggregation_weights_horizons_equally():
 
     by_horizon, summary = model_selection.aggregate_brier_cells(cells)
 
+    assert list(by_horizon) == [
+        "specification",
+        "continuous_form",
+        "interactions",
+        "geography",
+        "regularization_c",
+        "horizon",
+        "mean_brier",
+        "n_cells",
+        "min_brier",
+        "max_brier",
+    ]
     assert by_horizon.set_index("horizon").loc[1, "mean_brier"] == pytest.approx(
         0.2
     )
+    assert list(summary) == [
+        "specification",
+        "continuous_form",
+        "interactions",
+        "geography",
+        "regularization_c",
+        "selection_brier",
+        "n_horizons",
+        "n_cells",
+    ]
     assert summary["selection_brier"].item() == pytest.approx(0.5)
 
 

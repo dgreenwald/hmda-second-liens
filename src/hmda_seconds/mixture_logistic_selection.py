@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 
 from . import calibration, config, mixture, model_selection
-from .density_ratio import checkpoints, evaluation
+from .density_ratio import aggregation, checkpoints, evaluation
 from .density_ratio import folds as temporal_folds
 from .density_ratio.pipeline import run_grid
 from .density_ratio.protocols import ModelConfiguration
@@ -177,24 +177,29 @@ def aggregate_candidates(
         "interactions",
         "regularization_c",
     ]
+    horizons, summary = aggregation.two_stage_horizon_means(
+        cells,
+        candidate_columns=keys,
+        metric_columns=("brier_score", "log_loss", "mixture_share_error"),
+        count_column="validation_year",
+    )
     horizons = (
-        cells.groupby([*keys, "horizon"], as_index=False)
-        .agg(
-            mean_brier=("brier_score", "mean"),
-            mean_log_loss=("log_loss", "mean"),
-            mean_share_error=("mixture_share_error", "mean"),
-            n_cells=("validation_year", "size"),
+        horizons.rename(
+            columns={
+                "brier_score": "mean_brier",
+                "log_loss": "mean_log_loss",
+                "mixture_share_error": "mean_share_error",
+            }
         )
         .sort_values(["specification", "regularization_c", "horizon"])
     )
     summary = (
-        horizons.groupby(keys, as_index=False)
-        .agg(
-            selection_brier=("mean_brier", "mean"),
-            selection_log_loss=("mean_log_loss", "mean"),
-            selection_share_error=("mean_share_error", "mean"),
-            n_horizons=("horizon", "nunique"),
-            n_cells=("n_cells", "sum"),
+        summary.rename(
+            columns={
+                "brier_score": "selection_brier",
+                "log_loss": "selection_log_loss",
+                "mixture_share_error": "selection_share_error",
+            }
         )
         .sort_values("selection_brier")
         .reset_index(drop=True)

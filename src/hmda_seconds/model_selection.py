@@ -17,7 +17,7 @@ from sklearn.linear_model import LogisticRegression
 from threadpoolctl import threadpool_limits
 
 from . import clean, config
-from .density_ratio import artifacts, numerical
+from .density_ratio import aggregation, artifacts, numerical
 from .density_ratio import folds as temporal_folds
 from .density_ratio.protocols import ModelConfiguration, TemporalFold
 from .logistic_features import (
@@ -336,32 +336,30 @@ def aggregate_brier_cells(
     cells: pd.DataFrame,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Average equally within horizon and then equally across horizons."""
-    group = [
+    candidate_group = [
         "specification",
         "continuous_form",
         "interactions",
         "geography",
         "regularization_c",
-        "horizon",
     ]
-    by_horizon = (
-        cells.groupby(group, as_index=False)
-        .agg(
-            mean_brier=("brier_score", "mean"),
-            n_cells=("brier_score", "size"),
-            min_brier=("brier_score", "min"),
-            max_brier=("brier_score", "max"),
-        )
-        .sort_values(group)
+    by_horizon, summary = aggregation.two_stage_horizon_means(
+        cells,
+        candidate_columns=candidate_group,
+        metric_columns=("brier_score",),
+        count_column="brier_score",
     )
-    candidate_group = group[:-1]
+    extremes = cells.groupby([*candidate_group, "horizon"], as_index=False).agg(
+        min_brier=("brier_score", "min"),
+        max_brier=("brier_score", "max"),
+    )
+    by_horizon = (
+        by_horizon.rename(columns={"brier_score": "mean_brier"})
+        .merge(extremes, on=[*candidate_group, "horizon"], validate="one_to_one")
+        .sort_values([*candidate_group, "horizon"])
+    )
     summary = (
-        by_horizon.groupby(candidate_group, as_index=False)
-        .agg(
-            selection_brier=("mean_brier", "mean"),
-            n_horizons=("horizon", "nunique"),
-            n_cells=("n_cells", "sum"),
-        )
+        summary.rename(columns={"brier_score": "selection_brier"})
         .sort_values("selection_brier")
         .reset_index(drop=True)
     )

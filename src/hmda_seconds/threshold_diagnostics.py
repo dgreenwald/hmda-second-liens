@@ -15,7 +15,7 @@ from scipy.special import expit
 from sklearn.metrics import average_precision_score
 
 from . import config, mixture, model_selection
-from .density_ratio import checkpoints, evaluation
+from .density_ratio import aggregation, checkpoints, evaluation
 from .density_ratio import folds as temporal_folds
 from .logistic_features import CENSUS_REGION_BY_STATE, REGION_LEVELS
 
@@ -221,24 +221,24 @@ def aggregate_threshold_metrics(
     cells: pd.DataFrame,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Average cells within horizon, then horizons equally by estimator."""
+    horizons, summary = aggregation.two_stage_horizon_means(
+        cells,
+        candidate_columns=("estimator",),
+        metric_columns=METRIC_COLUMNS,
+        count_column="validation_year",
+    )
+    loan_counts = cells.groupby(["estimator", "horizon"], as_index=False).agg(
+        n_loans=("n", "sum")
+    )
     horizons = (
-        cells.groupby(["estimator", "horizon"], as_index=False)
-        .agg(
-            **{column: (column, "mean") for column in METRIC_COLUMNS},
-            n_cells=("validation_year", "size"),
-            n_loans=("n", "sum"),
+        horizons.merge(
+            loan_counts,
+            on=["estimator", "horizon"],
+            validate="one_to_one",
         )
         .sort_values(["estimator", "horizon"])
     )
-    summary = (
-        horizons.groupby("estimator", as_index=False)
-        .agg(
-            **{column: (column, "mean") for column in METRIC_COLUMNS},
-            n_horizons=("horizon", "nunique"),
-            n_cells=("n_cells", "sum"),
-        )
-        .sort_values("estimator")
-    )
+    summary = summary.sort_values("estimator")
     return horizons, summary
 
 

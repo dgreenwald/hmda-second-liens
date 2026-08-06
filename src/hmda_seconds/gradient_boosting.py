@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 
 from . import calibration, config, model_selection
-from .density_ratio import checkpoints, diagnostics, evaluation
+from .density_ratio import aggregation, checkpoints, diagnostics, evaluation
 from .density_ratio import folds as temporal_folds
 from .density_ratio.families.gradient_boosting import (
     BoostingDensityRatioModel,
@@ -122,22 +122,27 @@ def aggregate_brier(
         "l2_regularization",
         "min_samples_leaf",
     ]
+    horizons, summary = aggregation.two_stage_horizon_means(
+        cells,
+        candidate_columns=parameter_columns,
+        metric_columns=("adjusted_brier", "mixture_share_error"),
+        count_column="adjusted_brier",
+    )
     horizons = (
-        cells.groupby([*parameter_columns, "horizon"], as_index=False)
-        .agg(
-            mean_brier=("adjusted_brier", "mean"),
-            mean_share_error=("mixture_share_error", "mean"),
-            n_cells=("adjusted_brier", "size"),
+        horizons.rename(
+            columns={
+                "adjusted_brier": "mean_brier",
+                "mixture_share_error": "mean_share_error",
+            }
         )
         .sort_values(["parameter_id", "horizon"])
     )
     summary = (
-        horizons.groupby(parameter_columns, as_index=False)
-        .agg(
-            selection_brier=("mean_brier", "mean"),
-            selection_share_error=("mean_share_error", "mean"),
-            n_horizons=("horizon", "nunique"),
-            n_cells=("n_cells", "sum"),
+        summary.rename(
+            columns={
+                "adjusted_brier": "selection_brier",
+                "mixture_share_error": "selection_share_error",
+            }
         )
         .sort_values("selection_brier")
         .reset_index(drop=True)

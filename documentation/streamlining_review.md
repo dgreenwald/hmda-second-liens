@@ -12,9 +12,9 @@ stands.
 
 The repository currently contains approximately:
 
-- 8,522 lines under `src/hmda_seconds/`;
+- 8,587 lines under `src/hmda_seconds/`;
 - 762 lines under `scripts/`; and
-- 2,867 lines under `tests/`.
+- 3,010 lines under `tests/`.
 
 Large modules are not automatically redundant. In particular, splitting a large module can
 improve navigation without reducing total code. The recommendations below prioritize actual
@@ -22,7 +22,7 @@ duplication and unnecessary dependency layers.
 
 ## Baseline status
 
-All nine original streamlining findings are complete. Ruff, Python compilation, and all 135
+All nine original streamlining findings are complete. Ruff, Python compilation, and all 139
 synthetic tests pass. Streamlining work should preserve this baseline and continue to use the
 bounded real-data family-parity checks where estimator code is moved.
 
@@ -234,7 +234,7 @@ duplicate-cell rejection.
 
 ### 14. Consolidate the two-stage reverse-horizon aggregation protocol
 
-**Status: open.**
+**Status: completed.**
 
 Four functions independently implement equal-within-horizon then equal-across-horizons
 aggregation:
@@ -250,11 +250,13 @@ aggregation:
 `mixture.aggregate_share_errors` also uses two stages but first constructs a distinct long-form
 error table, so it need not be forced through the initial migration.
 
-**Recommendation:** Put a family-neutral primitive in `density_ratio/aggregation.py` (or, if a
-new module is not warranted, `density_ratio/evaluation.py`). It should accept candidate key
-columns and explicit aggregation mappings for multiple metrics, output names, and counts—not a
-single `metric_col`. Keep family-specific sorting and presentation in the callers. Migrate one
-caller at a time with numerical and schema parity tests.
+The family-neutral `density_ratio.aggregation.two_stage_horizon_means` now owns within-horizon
+means, equal-across-horizon means, cell counts, and candidate horizon-completeness validation.
+It accepts multiple metric columns but deliberately does not own output renaming, extrema, loan
+counts, sorting, or presentation. Logistic selection, mixture-logistic reselection, boosting,
+and threshold diagnostics now use the primitive while retaining those family-specific pieces.
+Tests cover unequal cell counts, inconsistent candidate coverage, an explicit external horizon
+plan, numerical parity, and exact caller schemas.
 
 This duplication is more than cosmetic: it allows the scientific weighting protocol to drift
 between estimators.
@@ -323,8 +325,8 @@ would lose the floating-point-safe C comparison.
    tests are in place, and all callers have been migrated.
 4. **Completed: Item 13** (pairwise comparison helper) — the three canonical comparisons use
    the shared pure-DataFrame primitive with schema tests.
-5. **Item 14** (two-stage horizon aggregation) — medium risk; run parity tests after each caller
-   is migrated.
+5. **Completed: Item 14** (two-stage horizon aggregation) — the narrow shared primitive is in
+   place with completeness, numerical-parity, and schema tests.
 
 After each step, run `pytest tests/` to confirm the synthetic suite continues to pass.
 Do not combine any of these with changes to specifications, folds, weighting, thresholds,

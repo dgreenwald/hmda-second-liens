@@ -103,7 +103,18 @@ def test_boosting_aggregation_weights_horizons_equally():
 
     horizons, summary = gradient_boosting.aggregate_brier(cells)
 
+    assert list(horizons)[-3:] == [
+        "mean_brier",
+        "mean_share_error",
+        "n_cells",
+    ]
     assert horizons.set_index("horizon").loc[1, "mean_brier"] == pytest.approx(0.2)
+    assert list(summary)[-4:] == [
+        "selection_brier",
+        "selection_share_error",
+        "n_horizons",
+        "n_cells",
+    ]
     assert summary.iloc[0]["selection_brier"] == pytest.approx(0.5)
 
 

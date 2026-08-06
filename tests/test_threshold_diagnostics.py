@@ -84,3 +84,35 @@ def test_subgroup_aggregation_does_not_require_ranking_metric():
 
     assert horizons["n_cells"].item() == 1
     assert summary["precision_second"].item() == 0.5
+def test_threshold_aggregation_preserves_schema_and_equal_horizon_weights():
+    rows = []
+    for estimator in threshold_diagnostics.ESTIMATORS:
+        for horizon, value in ((1, 0.2), (1, 0.4), (2, 0.8)):
+            row = {
+                "estimator": estimator,
+                "horizon": horizon,
+                "validation_year": 2004,
+                "n": 10,
+            }
+            row.update(
+                {column: value for column in threshold_diagnostics.METRIC_COLUMNS}
+            )
+            rows.append(row)
+    cells = pd.DataFrame(rows)
+
+    horizons, summary = threshold_diagnostics.aggregate_threshold_metrics(cells)
+
+    assert list(horizons) == [
+        "estimator",
+        "horizon",
+        *threshold_diagnostics.METRIC_COLUMNS,
+        "n_cells",
+        "n_loans",
+    ]
+    assert list(summary) == [
+        "estimator",
+        *threshold_diagnostics.METRIC_COLUMNS,
+        "n_horizons",
+        "n_cells",
+    ]
+    assert set(summary[threshold_diagnostics.METRIC_COLUMNS[0]]) == {0.55}

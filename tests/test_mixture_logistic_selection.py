@@ -115,5 +115,18 @@ def test_candidate_aggregation_weights_horizons_equally():
 
     horizons, summary = mixture_logistic_selection.aggregate_candidates(cells)
 
+    assert list(horizons)[-4:] == [
+        "mean_brier",
+        "mean_log_loss",
+        "mean_share_error",
+        "n_cells",
+    ]
     assert horizons.set_index("horizon").loc[1, "mean_brier"] == pytest.approx(0.2)
+    assert list(summary)[-5:] == [
+        "selection_brier",
+        "selection_log_loss",
+        "selection_share_error",
+        "n_horizons",
+        "n_cells",
+    ]
     assert summary.iloc[0]["selection_brier"] == pytest.approx(0.5)
