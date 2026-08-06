@@ -32,6 +32,20 @@ class PlannedJob:
         if self.job.train_years != self.fold.train_years:
             raise ValueError("job training years do not match its fold")
 
+    def to_dict(self) -> dict[str, object]:
+        """Return a stable manifest representation."""
+        return {"job": self.job.to_dict(), "fold": self.fold.to_dict()}
+
+    @classmethod
+    def from_dict(cls, values: Mapping[str, object]) -> PlannedJob:
+        """Restore and validate one manifest entry."""
+        job_values = _mapping(values, "job")
+        fold_values = _mapping(values, "fold")
+        return cls(
+            JobSpecification.from_dict(job_values),
+            _fold_from_dict(fold_values),
+        )
+
 
 @dataclass(frozen=True)
 class ShardModel:
@@ -120,14 +134,7 @@ class ResultShard:
         fold_values = _mapping(values, "fold")
         model_values = _list(values, "models")
         result_values = _list(values, "results")
-        fold = TemporalFold(
-            fold_id=str(fold_values["fold_id"]),
-            train_years=tuple(int(year) for year in fold_values["train_years"]),
-            target_years=tuple(int(year) for year in fold_values["target_years"]),
-            direction=str(fold_values["direction"]),
-            horizons=tuple(int(value) for value in fold_values["horizons"]),
-            schema_version=int(fold_values.get("schema_version", SCHEMA_VERSION)),
-        )
+        fold = _fold_from_dict(fold_values)
         return cls(
             job=JobSpecification.from_dict(job_values),
             fold=fold,
@@ -299,8 +306,59 @@ def configuration_id(configuration: ModelConfiguration) -> str:
     return f"{configuration.family}__{configuration.specification}__{digest}"
 
 
+def write_manifest(planned: Iterable[PlannedJob], path: str | Path) -> Path:
+    """Write an ordered array-job manifest atomically."""
+    entries = list(planned)
+    if not entries:
+        raise ValueError("manifest cannot be empty")
+    values = _canonical(
+        {"schema_version": SCHEMA_VERSION, "jobs": [item.to_dict() for item in entries]}
+    ) + b"\n"
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, name = tempfile.mkstemp(
+        prefix=f".{path.name}.", suffix=".tmp", dir=path.parent
+    )
+    temporary = Path(name)
+    try:
+        with os.fdopen(descriptor, "wb") as file:
+            file.write(values)
+            file.flush()
+            os.fsync(file.fileno())
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+    return path
+
+
+def read_manifest(path: str | Path) -> list[PlannedJob]:
+    """Read and validate an array-job manifest."""
+    values = json.loads(Path(path).read_text())
+    if not isinstance(values, Mapping):
+        raise TypeError("manifest must contain a JSON object")
+    if int(values.get("schema_version", SCHEMA_VERSION)) != SCHEMA_VERSION:
+        raise ValueError("unsupported manifest schema")
+    jobs = _list(values, "jobs")
+    planned = [PlannedJob.from_dict(item) for item in jobs]
+    keys = [_job_key(item.job) for item in planned]
+    if len(keys) != len(set(keys)):
+        raise ValueError("manifest contains duplicate logical jobs")
+    return planned
+
+
 def _job_key(job: JobSpecification) -> tuple[str, str, str, tuple[int, ...]]:
     return (job.stage, job.family, job.specification, job.train_years)
+
+
+def _fold_from_dict(values: Mapping[str, object]) -> TemporalFold:
+    return TemporalFold(
+        fold_id=str(values["fold_id"]),
+        train_years=tuple(int(year) for year in values["train_years"]),
+        target_years=tuple(int(year) for year in values["target_years"]),
+        direction=str(values["direction"]),
+        horizons=tuple(int(value) for value in values["horizons"]),
+        schema_version=int(values.get("schema_version", SCHEMA_VERSION)),
+    )
 
 
 def _canonical(values: object) -> bytes:

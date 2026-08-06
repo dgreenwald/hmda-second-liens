@@ -1,0 +1,102 @@
+import json
+import runpy
+from argparse import Namespace
+from pathlib import Path
+
+import pytest
+
+from hmda_seconds.density_ratio.cluster import (
+    COARSE_C_VALUES,
+    PILOT_SPECIFICATIONS,
+    configurations_from_json,
+    expand_job_paths,
+    pilot_jobs,
+    write_slurm_array,
+)
+from hmda_seconds.density_ratio.shards import read_manifest
+
+
+def test_pilot_manifest_has_simple_and_spline_heavy_jobs(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    jobs = pilot_jobs(data_dir="$TEST_DATA/selection", output_root="$TEST_OUT")
+    manifest, script = write_slurm_array(
+        jobs,
+        destination=Path("slurm"),
+        repo_dir="$TEST_REPO",
+        activate="/cluster/venv/bin/activate",
+    )
+
+    restored = read_manifest(manifest)
+    assert [item.job.specification for item in restored] == list(
+        PILOT_SPECIFICATIONS
+    )
+    assert all(len(item.job.configurations) == len(COARSE_C_VALUES) for item in restored)
+    assert all(item.job.train_years == (2013, 2014, 2015, 2016) for item in restored)
+    contents = script.read_text()
+    assert "#SBATCH --time=8:00:00" in contents
+    assert "#SBATCH --mem=32G" in contents
+    assert "#SBATCH --array=0-1" in contents
+    assert "/usr/bin/time -v python scripts/run_density_ratio_job.py" in contents
+    assert "sbatch " not in contents
+    assert 'cd "$TEST_REPO"' in contents
+
+
+def test_manifest_paths_expand_only_at_execution(monkeypatch):
+    monkeypatch.setenv("CLUSTER_ROOT", "/cluster/project")
+    planned = pilot_jobs(
+        data_dir="$CLUSTER_ROOT/data", output_root="$CLUSTER_ROOT/output"
+    )[0]
+
+    expanded = expand_job_paths(planned)
+
+    assert dict(expanded.job.input_paths)["selection_data_dir"] == (
+        "/cluster/project/data"
+    )
+    assert expanded.job.output_root == "/cluster/project/output"
+    assert planned.job.output_root == "$CLUSTER_ROOT/output"
+
+
+def test_configuration_json_supports_seed_and_rejects_non_objects():
+    values = configurations_from_json(
+        "hist_gradient_boosting",
+        "primitive_continuous_and_native_categories",
+        ['{"max_iter": 10, "random_seed": 17}'],
+    )
+    assert values[0].parameter_dict() == {"max_iter": 10}
+    assert values[0].random_seed == 17
+    with pytest.raises(TypeError, match="JSON object"):
+        configurations_from_json("logistic", "linear__none", [json.dumps([1])])
+
+
+def test_slurm_destination_must_be_repository_relative(tmp_path):
+    jobs = pilot_jobs(data_dir="data", output_root="output")
+    with pytest.raises(ValueError, match="relative"):
+        write_slurm_array(
+            jobs,
+            destination=tmp_path,
+            repo_dir="/cluster/repo",
+            activate="/cluster/venv/bin/activate",
+        )
+
+
+def test_worker_explicit_arguments_override_environment(tmp_path, monkeypatch):
+    monkeypatch.setenv("HMDA_DENSITY_RATIO_STAGE", "environment-stage")
+    monkeypatch.setenv("HMDA_DENSITY_RATIO_TRAIN_START", "2012")
+    script = Path(__file__).parents[1] / "scripts" / "run_density_ratio_job.py"
+    planned_job = runpy.run_path(str(script))["planned_job"]
+    args = Namespace(
+        manifest=None,
+        job_index=None,
+        stage="cli-stage",
+        family="logistic",
+        specification="linear__none",
+        train_start=2013,
+        output_root=tmp_path,
+        data_dir=tmp_path / "data",
+        configuration=['{"C": 0.1}'],
+    )
+
+    planned = planned_job(args)
+
+    assert planned.job.stage == "cli-stage"
+    assert planned.job.train_years == (2013, 2014, 2015, 2016)

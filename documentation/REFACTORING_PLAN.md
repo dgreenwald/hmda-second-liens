@@ -307,6 +307,15 @@ incompatible plans, local multi-job execution, and aggregation independent of sh
 - Pilot one simple and one spline-heavy logistic specification to measure memory, runtime, and
   shared-input contention before submitting the complete grid.
 
+Status: implementation completed; cluster execution pending. The worker accepts either a
+manifest-array index or explicit arguments/environment variables, with command-line values
+taking precedence. The generator writes a two-task Slurm array for the linear/no-interaction
+and spline-heavy purchaser-interaction pilots, using the template's eight-hour and 32 GB
+defaults and `/usr/bin/time -v` resource logging. It only generates files and never submits
+jobs. A separate aggregation command validates the complete manifest before atomically writing
+the consolidated cell, horizon, and summary tables. Pilot resource and shared-input-contention
+evidence must be collected later on the cluster before the complete grid is submitted.
+
 ### 9. Migrate pipeline commands and remove duplication
 
 - Point Makefile targets and diagnostic scripts at the common runner/evaluator.

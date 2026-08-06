@@ -12,6 +12,10 @@ rationale, and porting plan, and [AGENTS.md](AGENTS.md) for repository conventio
 plans, frozen protocols, implementation findings, and refactoring documentation live under
 [`documentation/`](documentation/).
 
+Cluster execution uses immutable result shards and a generated Slurm array; see the
+[density-ratio cluster workflow](documentation/DENSITY_RATIO_CLUSTER.md). Generation never
+submits jobs automatically.
+
 Status: scaffolding in progress. Usage instructions will be filled in once the pipeline runs
 end to end (see the migration plan's "Execution order").
 
