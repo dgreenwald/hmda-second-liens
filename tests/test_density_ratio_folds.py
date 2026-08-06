@@ -2,7 +2,7 @@ from collections import Counter
 
 import pytest
 
-from hmda_seconds import config, model_selection
+from hmda_seconds import config
 from hmda_seconds.density_ratio import folds
 from hmda_seconds.density_ratio.protocols import TemporalFold
 
@@ -37,18 +37,6 @@ def test_forward_design_uses_configured_release_source_and_targets():
     assert fold.target_years == tuple(config.VALIDATE_YEARS)
     assert fold.horizons == tuple(range(1, 10))
     assert fold.horizon_for(2016) == 9
-
-
-def test_legacy_model_selection_api_delegates_to_shared_design():
-    shared = folds.reverse_folds()
-    legacy = model_selection.reverse_folds()
-
-    assert [fold.to_dict() for fold in legacy] == [
-        fold.to_dict() for fold in shared
-    ]
-    constructed = model_selection.ReverseFold((2005, 2006), (2004,))
-    assert constructed.direction == "reverse"
-    assert constructed.horizon_for(2004) == 1
 
 
 def test_explicit_fold_rejects_interleaved_years_and_wrong_horizons():

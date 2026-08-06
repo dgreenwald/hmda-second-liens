@@ -2,8 +2,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from hmda_seconds import model_selection, random_forest_mixture
+from hmda_seconds import random_forest_mixture
 from hmda_seconds.density_ratio import artifacts
+from hmda_seconds.density_ratio import folds as temporal_folds
 
 
 def synthetic_frame(n=1_000, year=2005, seed=17):
@@ -64,7 +65,7 @@ def test_reverse_runner_translation_matches_shared_evaluation(tmp_path):
         2005: training.loc[training["year"] == 2005],
         2006: training.loc[training["year"] == 2006],
     }
-    fold = model_selection.ReverseFold((2005, 2006), (2004,))
+    fold = temporal_folds.temporal_fold((2005, 2006), (2004,))
 
     translated = random_forest_mixture._reverse_metrics_from_runner(
         data, [fold], tmp_path / "models"

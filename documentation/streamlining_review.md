@@ -19,7 +19,7 @@ duplication and unnecessary dependency layers.
 ## Baseline status
 
 The Step 8 add/add conflicts identified during the initial audit have been resolved. Ruff,
-Python compilation, and all 164 synthetic tests pass. Streamlining work should preserve this
+Python compilation, and all 163 synthetic tests pass. Streamlining work should preserve this
 baseline and continue to use the bounded real-data family-parity checks where estimator code is
 moved.
 
@@ -128,13 +128,11 @@ metrics.
 
 ### 7. Reassess the legacy fold compatibility layer
 
-`model_selection.ReverseFold` and `model_selection.reverse_folds()` now delegate to
-`density_ratio.folds`. Their remaining call sites are primarily tests and legacy type
-annotations.
+**Status: completed.**
 
-If these names are not part of a supported external API, migrate remaining callers to
-`density_ratio.folds.TemporalFold` and remove the shim. If external users may import them,
-retain explicit deprecated aliases until a planned compatibility break.
+All production and test setup now uses `density_ratio.folds.TemporalFold` and the canonical
+constructors directly. The single-user project does not require an external compatibility
+period, so `model_selection.ReverseFold` and `model_selection.reverse_folds()` have been removed.
 
 ### 8. Keep command-line scripts thin
 
@@ -170,7 +168,7 @@ dead code.
 4. **Completed:** move estimator primitives into the three `density_ratio/families/` modules
    and consolidate artifact boilerplate at the same boundary.
 5. **Completed:** introduce and adopt a common calibration-diagnostic cell evaluator.
-6. Remove the fold compatibility shim if it is not public API.
+6. **Completed:** migrate to canonical folds and remove the legacy fold shim.
 7. Move substantive logic out of older scripts.
 8. Decide separately whether documented legacy workflows should be deprecated or removed.
 

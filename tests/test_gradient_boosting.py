@@ -2,8 +2,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from hmda_seconds import gradient_boosting, model_selection
+from hmda_seconds import gradient_boosting
 from hmda_seconds.density_ratio import artifacts
+from hmda_seconds.density_ratio import folds as temporal_folds
 
 
 def synthetic_frame(n=2_000, year=2005, seed=17):
@@ -69,7 +70,7 @@ def test_target_evaluation_applies_mixture_adjustment():
     fitted, diagnostics = gradient_boosting.fit_boosting_ratio_model(
         training, parameters
     )
-    fold = model_selection.ReverseFold((2005, 2006), (2004,))
+    fold = temporal_folds.temporal_fold((2005, 2006), (2004,))
 
     result = gradient_boosting.evaluate_target_year(
         fitted, target, fold, diagnostics
@@ -123,7 +124,7 @@ def test_shared_grid_translation_matches_existing_target_evaluation(tmp_path):
         max_iter=8,
         min_samples_leaf=10,
     )
-    fold = model_selection.ReverseFold((2005, 2006), (2004,))
+    fold = temporal_folds.temporal_fold((2005, 2006), (2004,))
     fitted, diagnostics = gradient_boosting.fit_boosting_ratio_model(
         training, parameters
     )

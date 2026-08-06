@@ -4,10 +4,11 @@ import pytest
 
 from hmda_seconds import logistic_features, model_selection
 from hmda_seconds.density_ratio import artifacts
+from hmda_seconds.density_ratio import folds as temporal_folds
 
 
 def test_reverse_folds_form_triangular_backward_design():
-    folds = model_selection.reverse_folds()
+    folds = temporal_folds.reverse_folds()
 
     assert len(folds) == 9
     assert folds[0].train_years == (2005, 2006, 2007, 2008)
@@ -52,7 +53,7 @@ def test_candidate_grid_returns_every_validation_cell(training_frame, tmp_path):
     frame_2005 = training_frame.copy()
     frame_2005["year"] = 2005
     specification = logistic_features.FeatureSpecification("linear", "none")
-    fold = model_selection.ReverseFold((2005,), (2004,))
+    fold = temporal_folds.temporal_fold((2005,), (2004,))
 
     cells = model_selection.evaluate_candidate_grid(
         {2004: frame_2004, 2005: frame_2005},
@@ -94,7 +95,7 @@ def test_candidate_grid_resumes_from_checkpoint(training_frame, tmp_path):
     frame_2004 = training_frame.assign(year=2004)
     frame_2005 = training_frame.assign(year=2005)
     specification = logistic_features.FeatureSpecification("linear", "none")
-    fold = model_selection.ReverseFold((2005,), (2004,))
+    fold = temporal_folds.temporal_fold((2005,), (2004,))
     checkpoint = tmp_path / "cells.csv"
     data = {2004: frame_2004, 2005: frame_2005}
 

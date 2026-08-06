@@ -36,24 +36,6 @@ SELECTION_COLUMNS = [
 ]
 
 
-class ReverseFold(TemporalFold):
-    """Compatibility constructor for the former model-selection fold class."""
-
-    def __init__(
-        self,
-        train_years: tuple[int, ...],
-        validation_years: tuple[int, ...],
-    ) -> None:
-        fold = temporal_folds.temporal_fold(train_years, validation_years)
-        super().__init__(
-            fold_id=fold.fold_id,
-            train_years=fold.train_years,
-            target_years=fold.target_years,
-            direction=fold.direction,
-            horizons=fold.horizons,
-        )
-
-
 @dataclass
 class SelectedLogisticModel:
     """Serializable fitted transformer and logistic classifier."""
@@ -79,22 +61,6 @@ class SelectedLogisticModel:
             config.SECOND_LIEN_CLASS,
             config.FIRST_LIEN_CLASS,
         )
-
-
-def reverse_folds(
-    first_labeled_year: int = 2004,
-    last_labeled_year: int = 2016,
-    training_window: int = 4,
-) -> list[ReverseFold]:
-    """Return shared folds through the legacy model-selection API."""
-    return [
-        ReverseFold(fold.train_years, fold.target_years)
-        for fold in temporal_folds.reverse_folds(
-            first_labeled_year,
-            last_labeled_year,
-            training_window,
-        )
-    ]
 
 
 def load_selection_years(
@@ -145,7 +111,7 @@ def prepare_selection_data(
 def evaluate_candidate_grid(
     data_by_year: dict[int, pd.DataFrame],
     candidate_c: dict[FeatureSpecification, Iterable[float]],
-    folds: Iterable[ReverseFold] | None = None,
+    folds: Iterable[TemporalFold] | None = None,
     checkpoint_file: str | Path | None = None,
     model_dir: str | Path | None = None,
     n_jobs: int = config.LOGISTIC_SELECTION_JOBS,
@@ -156,7 +122,7 @@ def evaluate_candidate_grid(
     every fold/specification and reused on a resumed run.
     """
     if folds is None:
-        folds = reverse_folds()
+        folds = temporal_folds.reverse_folds()
     folds = list(folds)
     checkpoint_file = Path(checkpoint_file) if checkpoint_file else None
     model_dir = Path(model_dir) if model_dir is not None else None
@@ -237,7 +203,7 @@ def _evaluate_fold_specification(
     training: pd.DataFrame,
     labels: np.ndarray,
     data_by_year: dict[int, pd.DataFrame],
-    fold: ReverseFold,
+    fold: TemporalFold,
     specification: FeatureSpecification,
     c_values: Iterable[float],
     completed: pd.DataFrame,
@@ -890,7 +856,7 @@ def coefficient_stability(
 ) -> pd.DataFrame:
     """Refit best geographic challengers and record coefficients by window."""
     rows = []
-    for fold in reverse_folds():
+    for fold in temporal_folds.reverse_folds():
         training = pd.concat(
             [data_by_year[year] for year in fold.train_years],
             ignore_index=True,
@@ -940,7 +906,7 @@ def _fold_candidate_complete(
     completed: pd.DataFrame,
     specification: str,
     regularization_c: float,
-    fold: ReverseFold,
+    fold: TemporalFold,
 ) -> bool:
     return all(
         _cell_complete(

@@ -248,8 +248,8 @@ fitted classes without moving or modifying their pickle-visible definitions.
 - Verify exactly 45 reverse cells and parity with existing result identifiers.
 
 Status: completed. `src/hmda_seconds/density_ratio/folds.py` now owns reverse and forward fold
-construction. Estimator and diagnostic modules consume these shared objects, while the former
-`model_selection.ReverseFold` API remains as a compatibility shim.
+construction. Estimator, diagnostic, and model-selection modules consume these shared objects;
+the former `model_selection.ReverseFold` compatibility API has been removed.
 
 ### 4. Centralize mixture evaluation
 
