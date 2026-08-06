@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 
 from . import calibration, config, mixture, model_selection
-from .density_ratio import adapters, checkpoints, diagnostics, evaluation
+from .density_ratio import checkpoints, diagnostics, evaluation
 from .density_ratio import folds as temporal_folds
 
 ESTIMATOR = "known_source_prior_mixture"
@@ -149,7 +149,7 @@ def _run_design(
         for validation_year in missing:
             target = data_by_year[validation_year]
             evaluated = evaluation.evaluate_target(
-                adapters.adapt_known_source_prior_model(fitted),
+                fitted,
                 target,
                 fold,
                 label_var=config.LABEL_VAR,

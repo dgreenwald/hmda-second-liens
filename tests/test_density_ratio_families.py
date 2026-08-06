@@ -86,7 +86,7 @@ def test_logistic_family_reuses_path_and_matches_existing_fit(tmp_path, monkeypa
     assert all(isinstance(model, FittedDensityRatioModel) for model in fitted.values())
     direct, _ = original(training, specification, [0.1, 1.0])
     for model in fitted.values():
-        c_value = model.fitted.regularization_c
+        c_value = model.regularization_c
         assert model.log_ratio(training) == pytest.approx(
             direct[c_value].log_ratio(training), abs=1e-12
         )

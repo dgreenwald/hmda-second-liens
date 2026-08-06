@@ -13,7 +13,7 @@ from scipy.special import logit
 from sklearn.ensemble import HistGradientBoostingClassifier
 
 from ... import config
-from .. import adapters, artifacts
+from .. import artifacts
 from ..protocols import FittedDensityRatioModel, ModelConfiguration
 from ..weighting import equal_source_prior_weights
 from ._validation import require_parameters, validate_request
@@ -62,6 +62,13 @@ class BoostingDensityRatioModel:
     n_training: int = 0
     n_first_lien: int = 0
     n_second_lien: int = 0
+
+    @property
+    def model_id(self) -> str:
+        return (
+            f"boosting__{self.parameters.identifier}"
+            f"__train_{min(self.train_years)}_{max(self.train_years)}"
+        )
 
     def log_ratio(self, frame: pd.DataFrame) -> np.ndarray:
         features = boosting_features(frame)
@@ -137,11 +144,10 @@ def save_boosting_model(
     model: BoostingDensityRatioModel, model_file: str | Path
 ) -> None:
     model_file = Path(model_file)
-    adapted = adapters.adapt_boosting_model(model)
     artifacts.save_fitted_model(
         model,
         model_file,
-        model_id=adapted.model_id,
+        model_id=model.model_id,
         configuration=ModelConfiguration.from_mapping(
             "hist_gradient_boosting",
             SPECIFICATION,
@@ -166,7 +172,7 @@ def load_boosting_model(model_file: str | Path) -> BoostingDensityRatioModel:
     )
     artifacts.validate_metadata_identity(
         metadata,
-        model_id=adapters.adapt_boosting_model(model).model_id,
+        model_id=model.model_id,
         train_years=model.train_years,
     )
     return model
@@ -234,10 +240,9 @@ class GradientBoostingFamily:
                 model = load_boosting_model(path)
             else:
                 model, _ = fit_boosting_ratio_model(training, parameters)
-            if not path.exists() or artifacts.load_metadata(path) is None:
+            if not path.exists():
                 save_boosting_model(model, path)
-            adapted = adapters.adapt_boosting_model(model)
-            if adapted.model_id in result:
-                raise ValueError(f"Duplicate model_id: {adapted.model_id}")
-            result[adapted.model_id] = adapted
+            if model.model_id in result:
+                raise ValueError(f"Duplicate model_id: {model.model_id}")
+            result[model.model_id] = model
         return result

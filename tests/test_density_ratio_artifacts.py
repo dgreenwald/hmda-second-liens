@@ -49,16 +49,17 @@ def test_hash_validation_rejects_modified_payload(tmp_path):
         artifacts.load_pickle_artifact(path, dict)
 
 
-def test_metadata_free_legacy_pickle_remains_readable(tmp_path):
+def test_metadata_free_pickle_is_rejected_by_default(tmp_path):
     path = tmp_path / "legacy.pkl"
     path.write_bytes(pickle.dumps([1, 2, 3]))
 
-    restored, metadata = artifacts.load_pickle_artifact(path, list)
-
+    with pytest.raises(FileNotFoundError, match="Missing artifact metadata"):
+        artifacts.load_pickle_artifact(path, list)
+    restored, metadata = artifacts.load_pickle_artifact(
+        path, list, allow_legacy=True
+    )
     assert restored == [1, 2, 3]
     assert metadata is None
-    with pytest.raises(FileNotFoundError, match="Missing artifact metadata"):
-        artifacts.load_pickle_artifact(path, list, allow_legacy=False)
 
 
 def test_training_counts_reject_unknown_lien_classes():

@@ -1,10 +1,9 @@
 # hmda-second-liens
 
 A validated classifier for imputing lien status (first vs. second lien) in HMDA mortgage
-records, 1990-2016, for the years HMDA does not reliably report it (pre-2004). A fair
-full-sample benchmark makes logistic regression the provisional primary estimator and retains
-the Random Forest as a substantive robustness model; see
-[Benchmark findings](documentation/BENCHMARK_FINDINGS.md).
+records, 1990-2016, for the years HMDA does not reliably report it (pre-2004). The frozen ridge
+logistic model is the primary loan-level estimator; known-source-prior mixture adjustment is
+used for annual shares, with boosting and Random Forest density-ratio robustness models.
 
 This repo is being ported and extended from an exploratory script into a standalone,
 citable letter. See the [migration plan](documentation/MIGRATION_PLAN.md) for the full scope,
@@ -16,9 +15,6 @@ Cluster execution uses immutable result shards and a generated Slurm array; see 
 [density-ratio cluster workflow](documentation/DENSITY_RATIO_CLUSTER.md). Generation never
 submits jobs automatically.
 
-Status: scaffolding in progress. Usage instructions will be filled in once the pipeline runs
-end to end (see the migration plan's "Execution order").
-
-The estimator comparison is reproduced with `make benchmark-estimators`. This first rebuilds
-the separate common benchmark extract, then fits both models and writes the `benchmark_*`
-model and metric artifacts without replacing the historical RF outputs.
+The original full-release Random Forest train/classify/validate workflow has been removed after
+the replacement estimators were validated through the common temporal-fold and metric
+protocols. Current commands are documented in [AGENTS.md](AGENTS.md).

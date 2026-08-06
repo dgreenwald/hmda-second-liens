@@ -10,7 +10,7 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-from .. import mixture, validate
+from .. import mixture
 from .protocols import EvaluationResult, FittedDensityRatioModel, TemporalFold
 
 PROBABILITY_FLOOR = 1e-12
@@ -141,7 +141,7 @@ def evaluate_sample(
     probability = np.asarray(probability, dtype=float)
     validate_probability_inputs(y, probability)
     clipped = np.clip(probability, PROBABILITY_FLOOR, 1 - PROBABILITY_FLOOR)
-    intercept, slope = validate.calibration_coefficients(y, probability)
+    intercept, slope = calibration_coefficients(y, probability)
     observed = float(y.mean())
     predicted = float(probability.mean())
     return {
@@ -205,6 +205,58 @@ def validate_probability_inputs(
         raise ValueError("Probabilities must lie in [0, 1]")
     if np.unique(y_second).size < 2:
         raise ValueError("Calibration sample must contain both outcome classes")
+
+
+def calibration_coefficients(
+    y_true_second: np.ndarray,
+    probability: np.ndarray,
+    tolerance: float = 1e-10,
+    max_iter: int = 100,
+) -> tuple[float, float]:
+    """Fit ``y ~ intercept + slope * logit(p)`` by Newton iteration."""
+    y = np.asarray(y_true_second, dtype=float)
+    probability = np.clip(np.asarray(probability, dtype=float), 1e-12, 1 - 1e-12)
+    score = np.log(probability / (1.0 - probability))
+    prevalence = np.clip(y.mean(), 1e-12, 1 - 1e-12)
+    coefficients = np.array([np.log(prevalence / (1.0 - prevalence)), 0.0])
+
+    def objective(candidate: np.ndarray) -> float:
+        linear = candidate[0] + candidate[1] * score
+        return float(np.sum(y * linear - np.logaddexp(0.0, linear)))
+
+    for _ in range(max_iter):
+        linear = coefficients[0] + coefficients[1] * score
+        fitted = np.empty_like(linear)
+        positive = linear >= 0
+        fitted[positive] = 1.0 / (1.0 + np.exp(-linear[positive]))
+        exp_linear = np.exp(linear[~positive])
+        fitted[~positive] = exp_linear / (1.0 + exp_linear)
+        weight = fitted * (1.0 - fitted)
+        gradient = np.array([(y - fitted).sum(), np.dot(score, y - fitted)])
+        information = np.array(
+            [
+                [weight.sum(), np.dot(weight, score)],
+                [np.dot(weight, score), np.dot(weight, score * score)],
+            ]
+        )
+        try:
+            step = np.linalg.solve(information, gradient)
+        except np.linalg.LinAlgError:
+            return np.nan, np.nan
+        current_objective = objective(coefficients)
+        step_scale = 1.0
+        while step_scale >= 2.0**-20:
+            candidate = coefficients + step_scale * step
+            if objective(candidate) >= current_objective - 1e-8:
+                break
+            step_scale /= 2.0
+        else:
+            return np.nan, np.nan
+        accepted_step = step_scale * step
+        coefficients = candidate
+        if np.max(np.abs(accepted_step)) < tolerance:
+            break
+    return float(coefficients[0]), float(coefficients[1])
 
 
 def _target_year(target: pd.DataFrame, fold: TemporalFold) -> int:

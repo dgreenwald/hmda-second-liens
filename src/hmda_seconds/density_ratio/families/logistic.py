@@ -13,7 +13,7 @@ from sklearn.linear_model import LogisticRegression
 
 from ... import config, model_selection
 from ...logistic_features import FeatureSpecification, LogisticFeatureTransformer
-from .. import adapters, artifacts
+from .. import artifacts
 from ..protocols import FittedDensityRatioModel, ModelConfiguration
 from ..weighting import equal_source_prior_weights
 from ._validation import require_parameters, validate_request
@@ -46,6 +46,14 @@ class KnownSourcePriorModel:
     n_training: int = 0
     n_first_lien: int = 0
     n_second_lien: int = 0
+
+    @property
+    def model_id(self) -> str:
+        c_label = _number_label(self.regularization_c)
+        return (
+            f"logistic__{self.specification.name}__c_{c_label}"
+            f"__train_{min(self.train_years)}_{max(self.train_years)}"
+        )
 
     def log_ratio(self, frame: pd.DataFrame) -> np.ndarray:
         return self.ratio.log_ratio(self.transformer.transform(frame))
@@ -128,11 +136,10 @@ def save_known_source_prior_model(
     model: KnownSourcePriorModel, model_file: str | Path
 ) -> None:
     model_file = Path(model_file)
-    adapted = adapters.adapt_known_source_prior_model(model)
     artifacts.save_fitted_model(
         model,
         model_file,
-        model_id=adapted.model_id,
+        model_id=model.model_id,
         configuration=ModelConfiguration.from_mapping(
             "logistic", model.specification.name, {"C": model.regularization_c}
         ),
@@ -152,7 +159,7 @@ def load_known_source_prior_model(model_file: str | Path) -> KnownSourcePriorMod
     model, metadata = artifacts.load_pickle_artifact(model_file, KnownSourcePriorModel)
     artifacts.validate_metadata_identity(
         metadata,
-        model_id=adapters.adapt_known_source_prior_model(model).model_id,
+        model_id=model.model_id,
         train_years=model.train_years,
     )
     return model
@@ -234,9 +241,6 @@ class LogisticFamily:
                 )
                 if path.exists():
                     model = load_known_source_prior_model(path)
-                    # Upgrade metadata-free legacy artifacts at the compatibility boundary.
-                    if artifacts.load_metadata(path) is None:
-                        save_known_source_prior_model(model, path)
                     fitted[regularization_c] = model
                 else:
                     missing.append(regularization_c)
@@ -248,12 +252,11 @@ class LogisticFamily:
                 path = known_source_prior_model_path(
                     train_years, specification, regularization_c, self.artifact_dir
                 )
-                if not path.exists() or artifacts.load_metadata(path) is None:
+                if not path.exists():
                     save_known_source_prior_model(model, path)
-                adapted = adapters.adapt_known_source_prior_model(model)
-                if adapted.model_id in result:
-                    raise ValueError(f"Duplicate model_id: {adapted.model_id}")
-                result[adapted.model_id] = adapted
+                if model.model_id in result:
+                    raise ValueError(f"Duplicate model_id: {model.model_id}")
+                result[model.model_id] = model
         return result
 
 

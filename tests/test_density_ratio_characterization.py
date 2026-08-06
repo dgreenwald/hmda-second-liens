@@ -12,9 +12,6 @@ from hmda_seconds import (
 )
 from hmda_seconds.density_ratio import (
     FittedDensityRatioModel,
-    adapt_boosting_model,
-    adapt_known_source_prior_model,
-    adapt_random_forest_model,
     evaluation,
     folds,
 )
@@ -95,9 +92,9 @@ def test_pre_refactor_density_ratio_family_outputs_are_frozen():
     forest, _ = random_forest_mixture.fit_forest_ratio_model(training)
 
     fitted = {
-        "logistic": adapt_known_source_prior_model(logistic, "logistic_test"),
-        "gradient_boosting": adapt_boosting_model(boosting, "boosting_test"),
-        "random_forest": adapt_random_forest_model(forest, "forest_test"),
+        "logistic": logistic,
+        "gradient_boosting": boosting,
+        "random_forest": forest,
     }
     assert all(isinstance(model, FittedDensityRatioModel) for model in fitted.values())
     fold = folds.temporal_fold((2005, 2006), (2004,), direction="reverse")

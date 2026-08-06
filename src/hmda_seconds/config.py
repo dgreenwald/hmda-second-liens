@@ -31,13 +31,11 @@ RF_MIXTURE_FOLD_MODEL_DIR = MODEL_DIR / "rf_mixture_folds"
 MIXTURE_LOGISTIC_SELECTION_MODEL_DIR = MODEL_DIR / "mixture_logistic_selection"
 RAW_LOGISTIC_SELECTION_MODEL_DIR = MODEL_DIR / "raw_logistic_selection"
 RAW_LOGISTIC_DIAGNOSTIC_MODEL_DIR = MODEL_DIR / "raw_logistic_diagnostics"
-LEGACY_VALIDATION_MODEL_DIR = MODEL_DIR / "legacy_validation"
 FIGURE_DIR = OUTPUT_DIR / "figures"
 TABLE_DIR = OUTPUT_DIR / "tables"
 
-# Large, regenerable, non-public intermediate files (the concatenated
-# training extract, per-year classified outputs) live outside the repo
-# entirely rather than under output/, following the same convention the
+# Large, regenerable, non-public intermediate files live outside the repo
+# rather than under output/, following the same convention the
 # original project used for /data/hmda/. Defaults to a repo-relative
 # fallback so the pipeline still runs for someone without that local
 # convention; override via HMDA_SECONDS_EXTERNAL_DIR (see .env).
@@ -67,11 +65,6 @@ ZILLOW_VINTAGE = os.environ.get("HMDA_SECONDS_ZILLOW_VINTAGE", "202608")
 ZILLOW_ANCHOR_YEAR = 2017
 ZILLOW_MIN_OVERLAP_YEARS = 1
 
-MODEL_FILE = MODEL_DIR / "rf_fit.pkl"
-LOGISTIC_MODEL_FILE = MODEL_DIR / "logistic_fit.pkl"
-BENCHMARK_RF_MODEL_FILE = MODEL_DIR / "benchmark_rf_full.pkl"
-BENCHMARK_LOGISTIC_MODEL_FILE = MODEL_DIR / "benchmark_logistic_full.pkl"
-
 # Lien status is reliably reported in HMDA starting in 2004. Train on the
 # same 2004-2007 window as the original script; unlike the original script,
 # separately hold out every other labeled year (2008-2016) for out-of-time
@@ -83,25 +76,11 @@ APPLY_YEARS = range(1990, 2017)
 assert set(TRAIN_YEARS).isdisjoint(VALIDATE_YEARS)
 assert set(TRAIN_YEARS) | set(VALIDATE_YEARS) <= set(APPLY_YEARS)
 
-TRAIN_PARQUET = (
-    INTERMEDIATE_DIR / f"hmda_train_{min(TRAIN_YEARS)}_{max(TRAIN_YEARS)}.parquet"
-)
-BENCHMARK_TRAIN_PARQUET = INTERMEDIATE_DIR / (
-    f"hmda_train_{min(TRAIN_YEARS)}_{max(TRAIN_YEARS)}_county_value.parquet"
-)
 SELECTION_DATA_DIR = INTERMEDIATE_DIR / "logistic_selection"
 SELECTED_LOGISTIC_MODEL_FILE = MODEL_DIR / "logistic_selected.pkl"
 SELECTED_BOOSTING_MODEL_FILE = MODEL_DIR / "boosting_challenger.pkl"
 RF_MIXTURE_MODEL_FILE = MODEL_DIR / "rf_mixture_challenger.pkl"
 MIXTURE_SELECTED_LOGISTIC_MODEL_FILE = MODEL_DIR / "logistic_mixture_selected.pkl"
-CLASSIFY_PARQUET = (
-    INTERMEDIATE_DIR / f"hmda_classified_{min(APPLY_YEARS)}_{max(APPLY_YEARS)}.parquet"
-)
-# Small, aggregated (bin counts only, no loan-level data) -- unlike the
-# other pipeline artifacts, this is a plausible candidate to vendor
-# publicly alongside the letter for full figure reproducibility.
-HISTOGRAM_CELLS_PARQUET = TABLE_DIR / "hmda_lti_histogram_cells.parquet"
-
 LABEL_VAR = "lien_status"
 CONTINUOUS_VARS = ["log_lti", "log_county_value_to_loan"]
 # has_edit_status and loan_below_10k were dropped from the feature list after
@@ -114,10 +93,10 @@ CONTINUOUS_VARS = ["log_lti", "log_county_value_to_loan"]
 # diagnostics; they're just no longer fed to the model.
 CATEGORY_VARS = ["purchaser_type", "loan_type"]
 
-# Canonical levels for each categorical feature. py_tools.get_labels_features
-# builds dummy columns via pd.get_dummies(df[var]), which only creates
+# Canonical levels for each categorical feature. Dummy encoding via
+# pd.get_dummies(df[var]) only creates
 # columns for values actually present in whatever slice it's given -- unsafe
-# once classify.py/validate.py encode one year (or one held-out split) at a
+# when an estimator encodes one year (or one held-out split) at a
 # time, since a category value absent from a particular slice would silently
 # produce a differently-shaped or misaligned feature matrix instead of an
 # error. clean.py pins every CATEGORY_VARS column to a pandas Categorical

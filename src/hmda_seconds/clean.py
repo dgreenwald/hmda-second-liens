@@ -1,5 +1,4 @@
 """HMDA sample restrictions and feature construction.
-
 Ports ``clean_data``/``load_and_clean`` from the original ``classify_seconds.py``
 research script. Two changes from the original, both recorded in
 MIGRATION_PLAN.md:
@@ -192,38 +191,3 @@ def load_and_clean_year(
     elif label_policy == "require" and config.LABEL_VAR not in df_t:
         raise ValueError(f"Annual extract {path} is missing {config.LABEL_VAR}")
     return clean_frame(df_t, df_county_values)
-
-
-def build_training_data(
-    years=None,
-    panel_years=None,
-    yearly_dir=None,
-) -> pd.DataFrame:
-    """Build one consistently cleaned multi-year training extract."""
-    if years is None:
-        years = config.TRAIN_YEARS
-    if panel_years is None:
-        panel_years = config.APPLY_YEARS
-    df_county_values = build_county_value_panel(panel_years)
-    frames = [
-        load_and_clean_year(year, df_county_values, yearly_dir=yearly_dir)
-        for year in years
-    ]
-    return pd.concat(frames, axis=0, ignore_index=True)
-
-
-def prepare_training_data(
-    output: str | Path = config.TRAIN_PARQUET,
-    *,
-    years=None,
-    panel_years=None,
-    yearly_dir=None,
-) -> pd.DataFrame:
-    """Build and persist the legacy combined training extract."""
-    frame = build_training_data(
-        years=years, panel_years=panel_years, yearly_dir=yearly_dir
-    )
-    output = Path(output)
-    output.parent.mkdir(parents=True, exist_ok=True)
-    frame.to_parquet(output, index=False)
-    return frame

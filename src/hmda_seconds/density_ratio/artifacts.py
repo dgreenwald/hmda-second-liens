@@ -135,7 +135,7 @@ def load_pickle_artifact(
     artifact_path: str | Path,
     expected_type: type[T],
     *,
-    allow_legacy: bool = True,
+    allow_legacy: bool = False,
 ) -> tuple[T, ModelArtifactMetadata | None]:
     """Load a trusted pickle after validating any available sidecar."""
     path = Path(artifact_path)
@@ -154,7 +154,7 @@ def load_pickle_artifact(
 
 
 def load_metadata(
-    artifact_path: str | Path, *, allow_legacy: bool = True
+    artifact_path: str | Path, *, allow_legacy: bool = False
 ) -> ModelArtifactMetadata | None:
     """Load a sidecar, optionally accepting a metadata-free legacy artifact."""
     sidecar = metadata_path(artifact_path)
@@ -188,7 +188,7 @@ def write_sidecar_for_existing_artifact(
 
 
 def validate_existing_artifact(
-    artifact_path: str | Path, *, allow_legacy: bool = True
+    artifact_path: str | Path, *, allow_legacy: bool = False
 ) -> ModelArtifactMetadata | None:
     """Validate an external-format artifact against its optional sidecar."""
     path = Path(artifact_path)

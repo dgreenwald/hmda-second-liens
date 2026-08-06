@@ -14,7 +14,7 @@ from scipy.special import logit
 from sklearn.ensemble import RandomForestClassifier
 
 from ... import config
-from .. import adapters, artifacts
+from .. import artifacts
 from ..protocols import FittedDensityRatioModel, ModelConfiguration
 from ..weighting import equal_source_prior_weights
 from ._validation import require_parameters, validate_request
@@ -33,6 +33,13 @@ class RandomForestDensityRatioModel:
     n_training: int = 0
     n_first_lien: int = 0
     n_second_lien: int = 0
+
+    @property
+    def model_id(self) -> str:
+        return (
+            "random_forest__rf_50_depth_10"
+            f"__train_{min(self.train_years)}_{max(self.train_years)}"
+        )
 
     def log_ratio(self, frame: pd.DataFrame) -> np.ndarray:
         features, names = forest_features(frame)
@@ -107,11 +114,10 @@ def save_forest_model(
     model: RandomForestDensityRatioModel, model_file: str | Path
 ) -> None:
     model_file = Path(model_file)
-    adapted = adapters.adapt_random_forest_model(model)
     artifacts.save_fitted_model(
         model,
         model_file,
-        model_id=adapted.model_id,
+        model_id=model.model_id,
         configuration=ModelConfiguration.from_mapping(
             "random_forest",
             SPECIFICATION,
@@ -139,7 +145,7 @@ def load_forest_model(model_file: str | Path) -> RandomForestDensityRatioModel:
     )
     artifacts.validate_metadata_identity(
         metadata,
-        model_id=adapters.adapt_random_forest_model(model).model_id,
+        model_id=model.model_id,
         train_years=model.train_years,
     )
     return model
@@ -200,7 +206,6 @@ class RandomForestFamily:
             model = load_forest_model(path)
         else:
             model, _ = fit_forest_ratio_model(training)
-        if not path.exists() or artifacts.load_metadata(path) is None:
+        if not path.exists():
             save_forest_model(model, path)
-        adapted = adapters.adapt_random_forest_model(model)
-        return {adapted.model_id: adapted}
+        return {model.model_id: model}

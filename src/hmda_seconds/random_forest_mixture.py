@@ -7,7 +7,7 @@ from pathlib import Path
 import pandas as pd
 
 from . import calibration, config, model_selection
-from .density_ratio import adapters, checkpoints, diagnostics, evaluation
+from .density_ratio import checkpoints, diagnostics, evaluation
 from .density_ratio import folds as temporal_folds
 from .density_ratio.families.random_forest import (
     RandomForestDensityRatioModel,
@@ -245,7 +245,7 @@ def _evaluate_cell(
     ):
         return metrics, bins
     evaluated = evaluation.evaluate_target(
-        adapters.adapt_random_forest_model(model),
+        model,
         target,
         fold,
         label_var=config.LABEL_VAR,

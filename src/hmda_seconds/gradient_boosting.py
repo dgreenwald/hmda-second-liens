@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 
 from . import calibration, config, model_selection
-from .density_ratio import adapters, checkpoints, diagnostics, evaluation
+from .density_ratio import checkpoints, diagnostics, evaluation
 from .density_ratio import folds as temporal_folds
 from .density_ratio.families.gradient_boosting import (
     BoostingDensityRatioModel,
@@ -77,7 +77,7 @@ def evaluate_target_year(
 ) -> pd.DataFrame:
     """Estimate the target mixture share and score adjusted probabilities."""
     evaluated = evaluation.evaluate_target(
-        adapters.adapt_boosting_model(fitted),
+        fitted,
         target,
         fold,
         label_var=config.LABEL_VAR,
@@ -383,7 +383,7 @@ def _diagnose_cell(
     ):
         return metrics, bins
     evaluated = evaluation.evaluate_target(
-        adapters.adapt_boosting_model(model),
+        model,
         target,
         fold,
         label_var=config.LABEL_VAR,

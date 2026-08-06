@@ -3,8 +3,8 @@
 ## Scope
 
 This review examines the current Python codebase for dead code, duplicated helpers, overlapping
-responsibilities, and compatibility layers that may now be removable. It is a read-only review:
-no streamlining changes were made as part of the audit.
+responsibilities, and compatibility layers that may now be removable. The initial findings are
+retained below, with implementation status updated as the streamlining steps are completed.
 
 The repository currently contains approximately:
 
@@ -19,7 +19,7 @@ duplication and unnecessary dependency layers.
 ## Baseline status
 
 The Step 8 add/add conflicts identified during the initial audit have been resolved. Ruff,
-Python compilation, and all 164 synthetic tests pass. Streamlining work should preserve this
+Python compilation, and all 129 remaining synthetic tests pass. Streamlining work should preserve this
 baseline and continue to use the bounded real-data family-parity checks where estimator code is
 moved.
 
@@ -149,16 +149,16 @@ already call one domain operation and only serialize its returned tables.
 
 ### 9. Treat adapters and legacy workflows as explicit policy decisions
 
-The fitted-model adapters add approximately 100 lines and could eventually be replaced by
-`model_id` properties directly on the fitted family classes. They currently provide a clear
-pickle-compatibility boundary, however, so removing them is lower priority until artifact
-migration is complete.
+**Status: completed.**
 
-Likewise, the legacy Random Forest training/classification/validation workflow and the raw
-logistic-selection workflow account for substantial code but remain documented Makefile paths.
-Deleting them would create the largest reduction, but only if the project explicitly drops
-their reproducibility and compatibility commitments. They should not be treated as accidental
-dead code.
+The fitted family classes now expose `model_id` directly and satisfy the shared protocol without
+adapters. The adapter module and metadata-free artifact compatibility path have been removed;
+local fitted artifacts must be regenerated after this hard switch.
+
+The legacy full-release Random Forest training, classification, validation, figure, and
+full-sample benchmark workflows have also been removed. The formal frozen logistic selection
+and diagnostics remain because they define the primary estimator rather than a compatibility
+workflow.
 
 ## Recommended sequence
 
@@ -173,7 +173,7 @@ dead code.
 5. **Completed:** introduce and adopt a common calibration-diagnostic cell evaluator.
 6. **Completed:** migrate to canonical folds and remove the legacy fold shim.
 7. **Completed:** move substantive logic out of older scripts.
-8. Decide separately whether documented legacy workflows should be deprecated or removed.
+8. **Completed:** remove adapters and the superseded legacy full-release workflows.
 
 After each phase, run the full synthetic suite and the existing bounded family-parity checks.
 Do not combine estimator relocation with changes to specifications, folds, weighting,

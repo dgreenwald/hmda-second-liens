@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 
 from . import clean, config, mixture, model_selection
-from .density_ratio import adapters, checkpoints, evaluation
+from .density_ratio import checkpoints, evaluation
 
 REPORTING_START_YEAR = 2004
 HISTORICAL_REQUIRED_COLUMNS = [
@@ -131,7 +131,7 @@ def run_historical_plausibility(
                 year, yearly_dir, county_values
             )
         features = known.transformer.transform(frame)
-        log_ratio = adapters.adapt_known_source_prior_model(known).log_ratio(frame)
+        log_ratio = known.log_ratio(frame)
         evaluated = evaluation.adjust_log_ratio(log_ratio)
         estimate = evaluated.mixture_estimate
         adjusted = evaluated.probability

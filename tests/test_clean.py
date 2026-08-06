@@ -1,7 +1,6 @@
 import numpy as np
 import pandas as pd
 import pytest
-from py_tools.econometrics.machine_learning import get_labels_features
 
 from hmda_seconds import clean, config
 
@@ -128,7 +127,7 @@ def test_category_columns_are_pinned_to_full_levels_even_when_absent():
     # column present. Without pinning (config.CATEGORY_LEVELS), dummy
     # encoding this slice would produce one column per variable instead of
     # the full training-time set -- exactly the bug that would silently
-    # misalign features when classify.py encodes one year at a time.
+    # misalign features when an estimator encodes one year at a time.
     df = pd.DataFrame([_base_row(purchaser_type=3, loan_type=2)])
     out = clean.clean_frame(df, COUNTY_VALUES)
 
@@ -136,12 +135,9 @@ def test_category_columns_are_pinned_to_full_levels_even_when_absent():
         assert isinstance(out[var].dtype, pd.CategoricalDtype)
         assert list(out[var].cat.categories) == categories
 
-    _, features, names = get_labels_features(
-        out, config.LABEL_VAR, config.CONTINUOUS_VARS, config.CATEGORY_VARS
-    )
+    dummy_columns = pd.get_dummies(out[config.CATEGORY_VARS]).shape[1]
     expected_dummy_cols = sum(len(v) for v in config.CATEGORY_LEVELS.values())
-    assert features.shape[1] == len(config.CONTINUOUS_VARS) + expected_dummy_cols
-    assert len(names) == features.shape[1]
+    assert dummy_columns == expected_dummy_cols
 
 
 def test_pin_category_levels_is_defensive_and_supports_a_subset():

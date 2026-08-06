@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 
 from . import calibration, config, mixture, model_selection
-from .density_ratio import adapters, checkpoints, evaluation
+from .density_ratio import checkpoints, evaluation
 from .density_ratio import folds as temporal_folds
 from .density_ratio.families.logistic import fit_candidate_path
 from .density_ratio.pipeline import run_grid
@@ -131,7 +131,7 @@ def evaluate_target(
 ) -> pd.DataFrame:
     """Estimate a target share and score one adjusted candidate cell."""
     evaluated = evaluation.evaluate_target(
-        adapters.adapt_known_source_prior_model(fitted),
+        fitted,
         target,
         fold,
         label_var=config.LABEL_VAR,
@@ -459,7 +459,7 @@ def evaluate_forward(
             continue
         target = data_by_year[year]
         evaluated = evaluation.evaluate_target(
-            adapters.adapt_known_source_prior_model(model),
+            model,
             target,
             fold,
             label_var=config.LABEL_VAR,

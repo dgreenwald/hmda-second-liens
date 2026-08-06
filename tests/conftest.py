@@ -5,7 +5,7 @@ import pytest
 
 @pytest.fixture
 def training_frame():
-    """A small synthetic frame with the same schema train.fit()/classify expect.
+    """A small synthetic frame with the schema expected by the estimators.
 
     log_lti is constructed to cleanly separate the two classes so tests can
     check the classifier actually learns something, not just that it runs.

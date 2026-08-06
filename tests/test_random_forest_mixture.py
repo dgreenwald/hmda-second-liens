@@ -76,7 +76,7 @@ def test_reverse_runner_translation_matches_shared_evaluation(tmp_path):
         )
     )
     direct = random_forest_mixture.evaluation.evaluate_target(
-        random_forest_mixture.adapters.adapt_random_forest_model(fitted),
+        fitted,
         target,
         fold,
         label_var="lien_status",

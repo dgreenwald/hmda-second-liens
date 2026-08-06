@@ -74,8 +74,8 @@ class FittedDensityRatioModel(Protocol):
 
 Concrete logistic, boosting, and Random Forest fitted-model classes do not inherit from this
 protocol. A class satisfies it by exposing the named attributes and method. This keeps model
-artifacts independent of a shared superclass and allows lightweight adapters around existing
-saved objects. Protocol checking is primarily static; deterministic contract tests will
+artifacts independent of a shared superclass. Protocol checking is primarily static;
+deterministic contract tests will
 provide runtime enforcement because the repository does not currently require mypy or
 pyright.
 
@@ -177,9 +177,9 @@ Use deterministic paths derived from model ID and fold ID. Never overwrite one c
 another, and write through a temporary file followed by an atomic rename. Aggregators should
 reject duplicate logical keys with conflicting contents rather than silently choosing one.
 
-Existing fitted artifacts should remain readable during the migration. Where practical, wrap
-them in adapters instead of refitting solely to change class layout. New fits use the new
-metadata contract.
+Existing fitted artifacts remained readable during the migration. Step 8 completed the hard
+switch: current family models implement the protocol directly, and pre-refactor artifacts must
+be regenerated with the metadata contract.
 
 ## Cluster execution and result shards
 
@@ -234,12 +234,12 @@ Status: completed before structural changes. The numerical characterization is i
 
 - Add `protocols.py` and the frozen records described above.
 - Write contract tests using a minimal fake fitted model.
-- Add adapters for existing fitted logistic, boosting, and Random Forest objects without
-  changing their numerical behavior.
+- Make existing fitted logistic, boosting, and Random Forest objects satisfy the protocol
+  without changing their numerical behavior.
 
 Status: completed. The structural interfaces and frozen, schema-versioned records are in
-`src/hmda_seconds/density_ratio/protocols.py`. Compatibility adapters delegate to the existing
-fitted classes without moving or modifying their pickle-visible definitions.
+`src/hmda_seconds/density_ratio/protocols.py`. The family-owned fitted classes now satisfy the
+protocol directly; the temporary compatibility adapters were removed in Step 8.
 
 ### 3. Centralize fold construction
 
@@ -267,14 +267,15 @@ schemas, and the pre-refactor numerical characterization remains the parity test
 
 - Add deterministic model IDs, metadata, atomic writes, and load-time validation.
 - Ensure every tuning, validation, diagnostic, and final refit is persisted.
-- Retain backward-compatible loaders or adapters for current artifacts.
+- Validate existing artifacts during migration, then require regeneration at the hard switch.
 
 Status: completed. `src/hmda_seconds/density_ratio/artifacts.py` provides atomic pickle writes,
-versioned JSON sidecars, SHA-256 validation, deterministic identity checks, and legacy loading.
-New family, tuning, validation, diagnostic, and final fits record source counts, feature schema,
+versioned JSON sidecars, SHA-256 validation, and deterministic identity checks. Production
+loaders require sidecar metadata; pre-refactor artifacts must be regenerated. New family,
+tuning, validation, diagnostic, and final fits record source counts, feature schema,
 weighting/prior conventions, configuration, and software versions.
 
-### 6. Introduce family adapters
+### 6. Introduce model families
 
 - Implement logistic, gradient-boosting, and Random Forest family objects.
 - Preserve logistic design-matrix reuse and warm-start opportunities through `fit_many`.
@@ -351,7 +352,7 @@ resume mixture-logistic model selection. See `REFACTORING_PARITY.md`.
 The refactor is complete when:
 
 - all current unit tests pass without real HMDA data;
-- new tests prove that each fitted-model adapter satisfies the runtime contract;
+- new tests prove that each fitted family model satisfies the runtime contract;
 - all families consume identical fold definitions;
 - the shared evaluator reproduces existing mixture shares, adjusted probabilities, Brier
   scores, and horizon aggregates within documented tolerances;

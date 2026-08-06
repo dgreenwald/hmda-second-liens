@@ -13,11 +13,10 @@ count shares and mixture-adjusted probabilities. Read `documentation/MIGRATION_P
 ## Project Structure & Module Organization
 - `src/hmda_seconds/` — the package: `config.py` (paths, features, hyperparameters), `clean.py`
   and `county_values.py` (sample construction and Zillow-scaled FHFA county values),
-  `logistic.py`, `logistic_features.py`, and `model_selection.py` (formal logistic estimator and
+  `logistic_features.py` and `model_selection.py` (formal logistic estimator and
   frozen reverse-time selection), `calibration.py` (raw-probability diagnostics), `mixture.py`
   (known-source-prior density-ratio shares), `mixture_calibration.py` (adjusted-probability
-  diagnostics), plus the RF compatibility, classification, validation, and figure modules.
-  `density_ratio/` owns the cross-family protocols, family adapters, temporal folds, mixture
+  diagnostics). `density_ratio/` owns the cross-family protocols, temporal folds, mixture
   evaluation, atomic artifact/metadata contract, immutable shards, local/cluster runners, and
   deterministic aggregation. Model-family modules retain feature construction, fitting, and
   compatibility-table/diagnostic translation; they must not rebuild orchestration loops.
@@ -38,9 +37,7 @@ count shares and mixture-adjusted probabilities. Read `documentation/MIGRATION_P
 
 ## Build, Test, and Development Commands
 - `pip install -e ".[dev]"` — editable install with test tooling.
-- Depends on `dgreenwald-py-tools[ml,datasets]` for the RF wrapper and HMDA/FHFA loaders — reuse
-  those rather than reimplementing (see `documentation/MIGRATION_PLAN.md`, "What already
-  exists").
+- Depends on `dgreenwald-py-tools[datasets]` for the HMDA/FHFA/Zillow loaders.
 - Core logistic workflow: `make selection-data`, `make select-logistic`,
   `make diagnose-logistic-calibration`.
 - Mixture workflow: `make estimate-mixture-shares`, then
@@ -51,7 +48,7 @@ count shares and mixture-adjusted probabilities. Read `documentation/MIGRATION_P
   `density_ratio.artifacts`. Each pickle has a sibling `.metadata.json` sidecar containing its
   schema version, SHA-256 payload digest, model/configuration identity, source years, training
   counts, feature schema, weighting/prior convention, and software versions. Loaders accept
-  metadata-free legacy pickles for compatibility, but must validate a sidecar whenever present.
+  metadata-free pickles are not supported; regenerate artifacts after incompatible refactors.
 - Density-ratio grids run through `density_ratio.pipeline.run_grid`, which delegates each
   `(specification, source window)` job to the shared family/runner/shard path. Existing pipeline
   CSVs are compatibility views derived from shard results rather than independent checkpoints.
@@ -67,8 +64,6 @@ count shares and mixture-adjusted probabilities. Read `documentation/MIGRATION_P
 - Random Forest mixture robustness: `make evaluate-rf-mixture` applies equal source-year class
   priors and annual target mixture shares to the fixed 50-tree, depth-10 full-sample forest.
   Reuse saved fits in `output/model/rf_mixture_folds/`; do not reopen RF tuning automatically.
-- Legacy/full release workflow: `make data && make train && make validate && make classify &&
-  make figures`; each target maps to one `scripts/*.py` CLI.
 - `pytest tests/` — must pass without real data.
 - Set `PY_TOOLS_DATA_DIR` (or copy `.env.example` to `.env`) to point `py_tools` dataset loaders
   at `data/raw/`.
@@ -86,8 +81,7 @@ count shares and mixture-adjusted probabilities. Read `documentation/MIGRATION_P
   the sample-filter edge cases (e.g. `lien_status` restricted to `{1, 2}`, see
   `documentation/MIGRATION_PLAN.md`) and the validation/metric logic, not visual inspection of
   plots.
-- Real-data end-to-end runs (`make validate`, etc.) are a manual verification step, not part of
-  the automated test suite.
+- Real-data estimator runs are manual verification steps, not part of the automated test suite.
 - The frozen logistic specification is `spline_lti__purchaser_type` with ridge `C=0.1`:
   restricted-cubic-spline `log_lti`, linear `log_county_value_to_loan`, purchaser- and loan-type
   reference indicators, and linear interactions of both continuous variables with purchaser

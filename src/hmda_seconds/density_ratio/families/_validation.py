@@ -1,4 +1,4 @@
-"""Validation shared by the small family adapters."""
+"""Validation shared by the density-ratio model families."""
 
 from __future__ import annotations
 

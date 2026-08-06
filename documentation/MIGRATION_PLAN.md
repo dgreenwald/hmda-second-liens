@@ -1,5 +1,10 @@
 # Migration Plan: HMDA Second-Lien Classifier -> Standalone Letter
 
+> Historical note: this plan records the original port. The legacy full-release Random Forest
+> training, classification, validation, benchmark, and figure workflow described below was
+> removed after the formal logistic and density-ratio workflows replaced it. Use the current
+> Makefile and `AGENTS.md` for supported commands.
+
 ## Context
 
 `~/research/frm/hmda_seconds` contains an exploratory script (`classify_seconds.py`, plus
