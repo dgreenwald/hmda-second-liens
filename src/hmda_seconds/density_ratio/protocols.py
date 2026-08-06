@@ -372,6 +372,30 @@ class JobSpecification:
             "schema_version": self.schema_version,
         }
 
+    @classmethod
+    def from_dict(cls, values: Mapping[str, object]) -> JobSpecification:
+        """Restore and validate a job from its JSON representation."""
+        configurations = values.get("configurations")
+        input_paths = values.get("input_paths", {})
+        if not isinstance(configurations, list):
+            raise TypeError("configurations must be a list")
+        if not isinstance(input_paths, Mapping):
+            raise TypeError("input_paths must be a mapping")
+        return cls(
+            stage=str(values["stage"]),
+            family=str(values["family"]),
+            specification=str(values["specification"]),
+            train_years=tuple(int(year) for year in values["train_years"]),
+            configurations=tuple(
+                ModelConfiguration.from_dict(item) for item in configurations
+            ),
+            input_paths=tuple(
+                sorted((str(name), str(path)) for name, path in input_paths.items())
+            ),
+            output_root=str(values["output_root"]),
+            schema_version=int(values.get("schema_version", SCHEMA_VERSION)),
+        )
+
 
 def _require_name(value: str, field: str) -> None:
     if not isinstance(value, str) or not value.strip():

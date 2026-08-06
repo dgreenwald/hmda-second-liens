@@ -293,6 +293,13 @@ parity with the established family-specific fit functions.
 - Test interrupted jobs, duplicate shards, missing cells, and aggregation independent of shard
   order.
 
+Status: completed. `density_ratio/runner.py` now provides a family-neutral single-fold worker
+and sequential local runner. `density_ratio/shards.py` defines complete immutable JSON shards,
+atomic publish-without-overwrite behavior, artifact/configuration references, strict planned-
+matrix validation, and deterministic equal-horizon aggregation. Tests cover interrupted
+evaluation, idempotent retries, conflicting and duplicate shards, missing or malformed cells,
+incompatible plans, local multi-job execution, and aggregation independent of shard order.
+
 ### 8. Add cluster-facing entry points
 
 - Add a thin CLI that maps arguments or environment variables into `JobSpecification`.

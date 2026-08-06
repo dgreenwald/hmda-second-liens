@@ -4,9 +4,14 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from hmda_seconds import config, gradient_boosting, logistic_features, mixture
-from hmda_seconds import mixture_logistic_selection
-from hmda_seconds import random_forest_mixture
+from hmda_seconds import (
+    config,
+    gradient_boosting,
+    logistic_features,
+    mixture,
+    mixture_logistic_selection,
+    random_forest_mixture,
+)
 from hmda_seconds.density_ratio import (
     DensityRatioFamily,
     FittedDensityRatioModel,
