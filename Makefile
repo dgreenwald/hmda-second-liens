@@ -11,7 +11,7 @@ ROOT := $(abspath .)
 SCRIPTS_DIR := $(ROOT)/scripts
 OUTPUT_DIR := $(ROOT)/output
 
-.PHONY: install test audit county-values county-value-coverage selection-data select-logistic select-mixture-logistic generate-density-ratio-pilot evaluate-spline-purchaser-interactions diagnose-logistic-calibration diagnose-mixture-calibration diagnose-threshold-subgroups plausibility-checks evaluate-gradient-boosting evaluate-rf-mixture estimate-mixture-shares clean
+.PHONY: install test audit county-values county-value-coverage selection-data select-logistic select-mixture-logistic generate-density-ratio-pilot generate-first-order-logistic-grid evaluate-spline-purchaser-interactions diagnose-logistic-calibration diagnose-mixture-calibration diagnose-threshold-subgroups plausibility-checks evaluate-gradient-boosting evaluate-rf-mixture estimate-mixture-shares clean
 
 install:
 	$(PYTHON) -m pip install -e ".[dev]"
@@ -44,6 +44,9 @@ select-mixture-logistic: selection-data
 
 generate-density-ratio-pilot:
 	$(PYTHON) $(SCRIPTS_DIR)/generate_density_ratio_slurm.py
+
+generate-first-order-logistic-grid:
+	$(PYTHON) $(SCRIPTS_DIR)/generate_first_order_logistic_slurm.py
 
 evaluate-spline-purchaser-interactions: selection-data
 	$(PYTHON) $(SCRIPTS_DIR)/evaluate_spline_purchaser_interactions.py

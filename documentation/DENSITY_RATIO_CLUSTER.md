@@ -69,6 +69,42 @@ the complete job matrix before results are inspected.
 
 ## Pilot decision
 
-Do not generate or submit the full grid until the two pilot logs have been compared for peak
-memory, wall time, and evidence of shared-input contention. Set final array concurrency and
-resource requests from those measurements rather than extrapolating from the local machine.
+Do not submit the first-order grid until the two pilot logs have been compared for peak memory,
+wall time, and evidence of shared-input contention. Set final array concurrency and resource
+requests from those measurements rather than extrapolating from the local machine.
+
+## Generate the first-order logistic search
+
+The frozen mixture-logistic protocol uses a coordinate-wise neighborhood rather than the full
+global grid. Generate its 63-job manifest after setting resources from the pilot:
+
+```bash
+python scripts/generate_first_order_logistic_slurm.py \
+    --repo-dir "$LABDIR/hmda-second-liens" \
+    --data-dir "$LABDIR/hmda-second-liens/data/intermediate/logistic_selection" \
+    --output-root "$LABDIR/hmda-second-liens/output/density_ratio" \
+    --activate "/scratch/projects/greenwaldlab/venvs/hmda-second-liens/bin/activate" \
+    --time "8:00:00" \
+    --memory "32G" \
+    --max-concurrent 4
+```
+
+This writes a separate manifest and Slurm script under `output/slurm/first_order/` and never
+submits them. The default four-task concurrency cap is deliberately conservative; replace it
+with the pilot-supported value before submission. Inspect both files, then submit manually:
+
+```bash
+sbatch output/slurm/first_order/density_ratio_jobs.slurm
+```
+
+When all 63 immutable shards exist, validate and aggregate the complete planned matrix:
+
+```bash
+python scripts/aggregate_density_ratio_shards.py \
+    --manifest output/slurm/first_order/density_ratio_jobs.json \
+    --output-dir output/tables/mixture_logistic_first_order
+```
+
+The summary table applies the frozen equal-within-horizon, then equal-across-horizon objective.
+Apply the stopping rule in `MIXTURE_LOGISTIC_SELECTION_PROTOCOL.md` before proposing any further
+jobs.

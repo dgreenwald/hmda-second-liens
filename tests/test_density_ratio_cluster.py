@@ -7,9 +7,14 @@ import pytest
 
 from hmda_seconds.density_ratio.cluster import (
     COARSE_C_VALUES,
+    FIRST_ORDER_FEATURE_SPECIFICATIONS,
+    FIRST_ORDER_STAGE,
+    INCUMBENT_C_VALUES,
+    INCUMBENT_SPECIFICATION,
     PILOT_SPECIFICATIONS,
     configurations_from_json,
     expand_job_paths,
+    first_order_logistic_jobs,
     pilot_jobs,
     write_slurm_array,
 )
@@ -54,6 +59,51 @@ def test_manifest_paths_expand_only_at_execution(monkeypatch):
     )
     assert expanded.job.output_root == "/cluster/project/output"
     assert planned.job.output_root == "$CLUSTER_ROOT/output"
+
+
+def test_first_order_grid_is_the_frozen_coordinate_neighborhood():
+    jobs = first_order_logistic_jobs(data_dir="data", output_root="output")
+
+    assert len(jobs) == 63
+    assert sum(len(item.job.configurations) for item in jobs) == 81
+    assert {item.job.stage for item in jobs} == {FIRST_ORDER_STAGE}
+    assert {item.job.specification for item in jobs} == {
+        INCUMBENT_SPECIFICATION,
+        *FIRST_ORDER_FEATURE_SPECIFICATIONS,
+    }
+    starts_by_specification = {}
+    for item in jobs:
+        starts_by_specification.setdefault(item.job.specification, set()).add(
+            item.fold.train_start
+        )
+        c_values = tuple(
+            configuration.parameter_dict()["C"]
+            for configuration in item.job.configurations
+        )
+        expected = (
+            INCUMBENT_C_VALUES
+            if item.job.specification == INCUMBENT_SPECIFICATION
+            else (0.1,)
+        )
+        assert c_values == expected
+    assert all(starts == set(range(2005, 2014)) for starts in starts_by_specification.values())
+
+
+def test_first_order_slurm_array_has_a_concurrency_cap(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    jobs = first_order_logistic_jobs(data_dir="data", output_root="output")
+
+    manifest, script = write_slurm_array(
+        jobs,
+        destination=Path("slurm/first_order"),
+        repo_dir="/cluster/repo",
+        activate="/cluster/venv/bin/activate",
+        max_concurrent=3,
+    )
+
+    assert len(read_manifest(manifest)) == 63
+    assert "#SBATCH --array=0-62%3" in script.read_text()
+    assert "sbatch " not in script.read_text()
 
 
 def test_configuration_json_supports_seed_and_rejects_non_objects():

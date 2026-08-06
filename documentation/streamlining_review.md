@@ -12,9 +12,9 @@ stands.
 
 The repository currently contains approximately:
 
-- 8,587 lines under `src/hmda_seconds/`;
-- 762 lines under `scripts/`; and
-- 3,010 lines under `tests/`.
+- 8,637 lines under `src/hmda_seconds/`;
+- 823 lines under `scripts/`; and
+- 3,059 lines under `tests/`.
 
 Large modules are not automatically redundant. In particular, splitting a large module can
 improve navigation without reducing total code. The recommendations below prioritize actual
@@ -22,7 +22,7 @@ duplication and unnecessary dependency layers.
 
 ## Baseline status
 
-All nine original streamlining findings are complete. Ruff, Python compilation, and all 139
+All nine original streamlining findings are complete. Ruff, Python compilation, and all 141
 synthetic tests pass. Streamlining work should preserve this baseline and continue to use the
 bounded real-data family-parity checks where estimator code is moved.
 

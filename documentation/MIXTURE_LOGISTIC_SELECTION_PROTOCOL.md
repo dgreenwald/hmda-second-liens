@@ -6,10 +6,17 @@ uses equal source priors and a separately estimated target-year mixture share.
 
 ## Candidates and objective
 
-Evaluate the original 12 core specifications formed by crossing three continuous functional
-forms with four interaction structures, plus the previously tested full LTI-spline-by-
-purchaser challenger. Continue to exclude geography, year, HPI growth, edit status, small-loan
-status, lender, MSA, and tract features.
+Use a first-order, coordinate-wise neighborhood around the incumbent
+`spline_lti__purchaser_type` specification with ridge `C=0.1`. Change exactly one declared
+component at a time:
+
+- continuous form: `linear__purchaser_type` or `spline_both__purchaser_type`, each at `C=0.1`;
+- interaction structure: `spline_lti__none`, `spline_lti__loan_type`,
+  `spline_lti__both`, or `spline_lti__purchaser_type_spline_lti`, each at `C=0.1`; and
+- regularization: the incumbent specification at `C=0.01` or `C=1.0`.
+
+Include the incumbent itself as the benchmark. Continue to exclude geography, year, HPI
+growth, edit status, small-loan status, lender, MSA, and tract features.
 
 For every source window, give first and second liens equal total weight within each source year.
 Use the complete balanced-prior logistic log odds as the density-ratio score. Estimate a
@@ -17,29 +24,27 @@ separate mixture share from every target year's covariates and score the resulti
 probabilities. The sole selection statistic is raw adjusted Brier, averaged within backward
 horizon and then equally across horizons 1--9.
 
-## Staged grid
+## First-order stopping rule
 
-Screen all 13 specifications at the existing coarse ridge grid
-`C in {1e-4, 1e-2, 1, 100}` on the 2013--2016 source window, which exposes every backward
-horizon from one through nine. Within each specification, retain its best coarse penalty.
+Evaluate all eight one-coordinate alternatives and the incumbent over the complete 45-cell
+reverse design. Any strictly lower equal-horizon adjusted Brier counts as a local improvement.
+If no alternative improves on the incumbent, stop the search and retain the incumbent. The
+absence of a coordinate-wise improvement is a computational stopping rule, not proof that no
+joint change could improve the objective.
 
-Carry four specifications into the complete 45-cell design. The current selected
-`spline_lti__purchaser_type` specification is guaranteed a place; fill the other places with
-the best screen specifications not already included. Evaluate all four coarse penalties for
-every survivor in all 45 cells.
+If one or more alternatives improve, refine only the improving coordinate or coordinates. A
+combined-change search is permitted only when at least two distinct coordinates improve on
+their own, and its candidates must be declared before their results are inspected. Forward
+results remain diagnostics and never enter selection.
 
-For each survivor, identify its best coarse penalty using the complete reverse design and add
-the two adjacent decades around it, following the original logistic refinement rule. Evaluate
-those refinements in all 45 cells. Select the specification/penalty pair with the lowest
-equal-horizon adjusted Brier among all fully evaluated coarse and refined candidates.
-
-The latest-window screen controls computation but does not provide the final score. Report the
-screened-out specifications and the guaranteed survival of the existing primary explicitly.
+The cluster manifest groups configurations that share a transformed design matrix. It contains
+63 `(specification, source window)` jobs and 81 fitted models: nine incumbent jobs carrying
+`C in {0.01, 0.1, 1}` and 54 single-configuration feature-neighbor jobs.
 
 ## Artifacts and diagnostics
 
-Save every fitted specification/penalty/source-window model under
-`output/model/mixture_logistic_selection/`. Save the final 2004--2007 refit as
+Save every fitted specification/penalty/source-window model under the cluster output root's
+`models/logistic/` tree. Save any final 2004--2007 refit as
 `output/model/logistic_mixture_selected.pkl`. Do not overwrite the existing selected logistic
 artifact until the final estimator decision.
 

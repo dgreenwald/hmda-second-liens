@@ -25,6 +25,17 @@ PILOT_SPECIFICATIONS = (
     "linear__none",
     "spline_lti__purchaser_type_spline_lti",
 )
+FIRST_ORDER_STAGE = "mixture_logistic_first_order"
+INCUMBENT_SPECIFICATION = "spline_lti__purchaser_type"
+INCUMBENT_C_VALUES = (0.01, 0.1, 1.0)
+FIRST_ORDER_FEATURE_SPECIFICATIONS = (
+    "linear__purchaser_type",
+    "spline_both__purchaser_type",
+    "spline_lti__none",
+    "spline_lti__loan_type",
+    "spline_lti__both",
+    "spline_lti__purchaser_type_spline_lti",
+)
 
 
 def reverse_fold_for_start(train_start: int):
@@ -80,6 +91,39 @@ def pilot_jobs(
         )
         for specification in PILOT_SPECIFICATIONS
     ]
+
+
+def first_order_logistic_jobs(
+    *, data_dir: str | Path, output_root: str | Path
+) -> list[PlannedJob]:
+    """Return the frozen one-coordinate neighborhood over all reverse folds."""
+    specifications = (INCUMBENT_SPECIFICATION, *FIRST_ORDER_FEATURE_SPECIFICATIONS)
+    jobs = []
+    for specification in specifications:
+        regularization_values = (
+            INCUMBENT_C_VALUES
+            if specification == INCUMBENT_SPECIFICATION
+            else (0.1,)
+        )
+        configurations = tuple(
+            ModelConfiguration.from_mapping(
+                "logistic", specification, {"C": regularization_c}
+            )
+            for regularization_c in regularization_values
+        )
+        for fold in reverse_folds():
+            jobs.append(
+                make_job(
+                    stage=FIRST_ORDER_STAGE,
+                    family="logistic",
+                    specification=specification,
+                    train_start=fold.train_start,
+                    configurations=configurations,
+                    data_dir=data_dir,
+                    output_root=output_root,
+                )
+            )
+    return jobs
 
 
 def family_for(job: JobSpecification, artifact_root: str | Path):
@@ -147,10 +191,13 @@ def write_slurm_array(
     time_limit: str = "8:00:00",
     memory: str = "32G",
     job_name: str = "hmda-density-ratio-pilot",
+    max_concurrent: int | None = None,
 ) -> tuple[Path, Path]:
     """Write a manifest and one Slurm array script; never submit either."""
     if not planned:
         raise ValueError("planned jobs cannot be empty")
+    if max_concurrent is not None and max_concurrent <= 0:
+        raise ValueError("max_concurrent must be positive")
     destination = Path(destination)
     if destination.is_absolute():
         raise ValueError("destination must be relative to the repository root")
@@ -159,13 +206,16 @@ def write_slurm_array(
     script = destination / "density_ratio_jobs.slurm"
     manifest_on_cluster = f"{repo_dir}/{manifest.as_posix()}"
     log_dir = f"{repo_dir}/{destination.as_posix()}"
+    array = f"0-{len(planned) - 1}"
+    if max_concurrent is not None:
+        array += f"%{max_concurrent}"
     contents = f"""#!/bin/bash
 #SBATCH --time={time_limit}
 #SBATCH --job-name={job_name}
 #SBATCH --output={log_dir}/%x_%A_%a.out
 #SBATCH --error={log_dir}/%x_%A_%a.err
 #SBATCH --mem={memory}
-#SBATCH --array=0-{len(planned) - 1}
+#SBATCH --array={array}
 
 set -euo pipefail
 source {_expandable_quote(activate)}

@@ -53,7 +53,9 @@ count shares and mixture-adjusted probabilities. Read `documentation/MIGRATION_P
   `(specification, source window)` job to the shared family/runner/shard path. Existing pipeline
   CSVs are compatibility views derived from shard results rather than independent checkpoints.
   Use `make generate-density-ratio-pilot` to generate—but never submit—the two-job Slurm pilot;
-  see `documentation/DENSITY_RATIO_CLUSTER.md`.
+  use `make generate-first-order-logistic-grid` to generate—but never submit—the frozen
+  63-job coordinate-search array after reviewing pilot resources. See
+  `documentation/DENSITY_RATIO_CLUSTER.md`.
 - Historical plausibility workflow: `make plausibility-checks` applies the frozen final raw and
   known-source-prior models to 1990--2016, writes annual aggregate shares and the 2003--2004
   continuity table, and renders the predicted/actual series. It checkpoints annual aggregates
