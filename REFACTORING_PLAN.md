@@ -279,6 +279,13 @@ weighting/prior conventions, configuration, and software versions.
 - Keep feature construction and estimator-specific hyperparameters inside each family.
 - Run family contract and numerical parity tests.
 
+Status: completed. `density_ratio/families/` now provides logistic, histogram-gradient-
+boosting, and Random Forest family objects. Logistic requests are grouped by feature
+specification so each group shares its transformed design matrix and ascending warm-start
+ridge path. Every returned fit is saved first through the atomic artifact contract, and
+family tests cover structural typing, request validation, artifact sidecars, and numerical
+parity with the established family-specific fit functions.
+
 ### 7. Add the common runner and immutable shards
 
 - Implement a single-fold worker and a local multi-job runner.
