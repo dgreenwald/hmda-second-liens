@@ -6,6 +6,7 @@ from .adapters import (
     adapt_known_source_prior_model,
     adapt_random_forest_model,
 )
+from .folds import forward_fold, reverse_folds, temporal_fold
 from .protocols import (
     DensityRatioFamily,
     EvaluationResult,
@@ -28,4 +29,7 @@ __all__ = [
     "adapt_boosting_model",
     "adapt_known_source_prior_model",
     "adapt_random_forest_model",
+    "forward_fold",
+    "reverse_folds",
+    "temporal_fold",
 ]

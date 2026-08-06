@@ -15,6 +15,7 @@ from scipy.special import logit
 from sklearn.ensemble import RandomForestClassifier
 
 from . import calibration, config, mixture, model_selection
+from .density_ratio import folds as temporal_folds
 
 PROBABILITY_EPSILON = 1e-12
 ESTIMATOR = "random_forest_mixture"
@@ -117,7 +118,7 @@ def run_random_forest_mixture(
     reverse_bins_file = output_dir / "rf_mixture_reverse_bins.csv"
     reverse_metrics = _read(reverse_metrics_file)
     reverse_bins = _read(reverse_bins_file)
-    for fold in reversed(model_selection.reverse_folds()):
+    for fold in reversed(temporal_folds.reverse_folds()):
         path = forest_model_path(fold.train_years, fold_model_dir)
         if path.exists():
             model = load_forest_model(path)
@@ -163,8 +164,8 @@ def run_random_forest_mixture(
     forward_bins_file = output_dir / "rf_mixture_forward_bins.csv"
     forward_metrics = _read(forward_metrics_file)
     forward_bins = _read(forward_bins_file)
-    forward_fold = model_selection.ReverseFold(
-        final_years, tuple(config.VALIDATE_YEARS)
+    forward_fold = temporal_folds.forward_fold(
+        final_years, config.VALIDATE_YEARS
     )
     for validation_year in forward_fold.validation_years:
         forward_metrics, forward_bins = _evaluate_cell(
@@ -272,7 +273,7 @@ def forest_model_path(
 def _evaluate_cell(
     model: RandomForestDensityRatioModel,
     target: pd.DataFrame,
-    fold: model_selection.ReverseFold,
+    fold: temporal_folds.TemporalFold,
     design: str,
     metrics: pd.DataFrame,
     bins: pd.DataFrame,
@@ -289,9 +290,7 @@ def _evaluate_cell(
     estimate = mixture.estimate_mixture_share(log_ratio)
     probability = mixture.adjusted_probability(log_ratio, estimate.share)
     y_second = target[config.LABEL_VAR].to_numpy() == config.SECOND_LIEN_CLASS
-    horizon = (
-        fold.train_start - year if design == "reverse" else year - fold.train_end
-    )
+    horizon = fold.horizon_for(year)
     metadata = {
         "evaluation_design": design,
         "estimator": ESTIMATOR,

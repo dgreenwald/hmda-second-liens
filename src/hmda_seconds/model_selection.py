@@ -18,6 +18,8 @@ from sklearn.linear_model import LogisticRegression
 from threadpoolctl import threadpool_limits
 
 from . import clean, config
+from .density_ratio import folds as temporal_folds
+from .density_ratio.protocols import TemporalFold
 from .logistic_features import (
     CENSUS_REGION_BY_STATE,
     FeatureSpecification,
@@ -34,20 +36,22 @@ SELECTION_COLUMNS = [
 ]
 
 
-@dataclass(frozen=True)
-class ReverseFold:
-    """Four later training years and every available earlier validation year."""
+class ReverseFold(TemporalFold):
+    """Compatibility constructor for the former model-selection fold class."""
 
-    train_years: tuple[int, ...]
-    validation_years: tuple[int, ...]
-
-    @property
-    def train_start(self) -> int:
-        return self.train_years[0]
-
-    @property
-    def train_end(self) -> int:
-        return self.train_years[-1]
+    def __init__(
+        self,
+        train_years: tuple[int, ...],
+        validation_years: tuple[int, ...],
+    ) -> None:
+        fold = temporal_folds.temporal_fold(train_years, validation_years)
+        super().__init__(
+            fold_id=fold.fold_id,
+            train_years=fold.train_years,
+            target_years=fold.target_years,
+            direction=fold.direction,
+            horizons=fold.horizons,
+        )
 
 
 @dataclass
@@ -78,15 +82,14 @@ def reverse_folds(
     last_labeled_year: int = 2016,
     training_window: int = 4,
 ) -> list[ReverseFold]:
-    """Create the frozen triangular reverse-validation design."""
-    first_training_year = first_labeled_year + 1
-    last_training_year = last_labeled_year - training_window + 1
+    """Return shared folds through the legacy model-selection API."""
     return [
-        ReverseFold(
-            train_years=tuple(range(start, start + training_window)),
-            validation_years=tuple(range(first_labeled_year, start)),
+        ReverseFold(fold.train_years, fold.target_years)
+        for fold in temporal_folds.reverse_folds(
+            first_labeled_year,
+            last_labeled_year,
+            training_window,
         )
-        for start in range(first_training_year, last_training_year + 1)
     ]
 
 
@@ -268,7 +271,7 @@ def _evaluate_fold_specification(
                     "train_start": fold.train_start,
                     "train_end": fold.train_end,
                     "validation_year": validation_year,
-                    "horizon": fold.train_start - validation_year,
+                    "horizon": fold.horizon_for(validation_year),
                     "n_validation": len(validation),
                     "brier_score": np.mean(
                         (probability - validation_second) ** 2

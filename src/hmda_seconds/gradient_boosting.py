@@ -14,6 +14,7 @@ from scipy.special import logit
 from sklearn.ensemble import HistGradientBoostingClassifier
 
 from . import calibration, config, mixture, model_selection
+from .density_ratio import folds as temporal_folds
 
 BOOSTING_FEATURES = [*config.CONTINUOUS_VARS, *config.CATEGORY_VARS]
 CATEGORICAL_MASK = np.array([False, False, True, True])
@@ -151,7 +152,7 @@ def fit_boosting_ratio_model(
 def evaluate_target_year(
     fitted: BoostingDensityRatioModel,
     target: pd.DataFrame,
-    fold: model_selection.ReverseFold,
+    fold: temporal_folds.TemporalFold,
     fit_diagnostics: dict,
 ) -> pd.DataFrame:
     """Estimate the target mixture share and score adjusted probabilities."""
@@ -170,7 +171,7 @@ def evaluate_target_year(
         "train_start": fold.train_start,
         "train_end": fold.train_end,
         "validation_year": int(target["year"].iloc[0]),
-        "horizon": fold.train_start - int(target["year"].iloc[0]),
+        "horizon": fold.horizon_for(int(target["year"].iloc[0])),
         "n_validation": len(target),
         "actual_second_share": actual_share,
         "mixture_share": estimate.share,
@@ -237,7 +238,7 @@ def run_boosting_challenger(
     output_dir.mkdir(parents=True, exist_ok=True)
     fold_model_dir.mkdir(parents=True, exist_ok=True)
     data_by_year = model_selection.load_selection_years(data_dir=data_dir)
-    folds = list(reversed(model_selection.reverse_folds()))
+    folds = list(reversed(temporal_folds.reverse_folds()))
     cells_file = output_dir / "boosting_challenger_checkpoint_cells.csv"
     cells = _read_csv_if_exists(cells_file)
     if cells.empty:
@@ -364,7 +365,7 @@ def run_boosting_diagnostics(
     reverse_bins_file = output_dir / "boosting_calibration_reverse_bins.csv"
     reverse_metrics = _read_csv_if_exists(reverse_metrics_file)
     reverse_bins = _read_csv_if_exists(reverse_bins_file)
-    for fold in reversed(model_selection.reverse_folds()):
+    for fold in reversed(temporal_folds.reverse_folds()):
         model = load_boosting_model(
             boosting_model_path(fold.train_years, parameters, fold_model_dir)
         )
@@ -391,8 +392,8 @@ def run_boosting_diagnostics(
     forward_bins_file = output_dir / "boosting_calibration_forward_bins.csv"
     forward_metrics = _read_csv_if_exists(forward_metrics_file)
     forward_bins = _read_csv_if_exists(forward_bins_file)
-    forward_fold = model_selection.ReverseFold(
-        tuple(config.TRAIN_YEARS), tuple(config.VALIDATE_YEARS)
+    forward_fold = temporal_folds.forward_fold(
+        config.TRAIN_YEARS, config.VALIDATE_YEARS
     )
     for validation_year in forward_fold.validation_years:
         forward_metrics, forward_bins = _diagnose_cell(
@@ -446,7 +447,7 @@ def run_boosting_diagnostics(
 def _diagnose_cell(
     model: BoostingDensityRatioModel,
     target: pd.DataFrame,
-    fold: model_selection.ReverseFold,
+    fold: temporal_folds.TemporalFold,
     design: str,
     metrics: pd.DataFrame,
     bins: pd.DataFrame,
@@ -463,11 +464,7 @@ def _diagnose_cell(
     estimate = mixture.estimate_mixture_share(log_ratio)
     probability = mixture.adjusted_probability(log_ratio, estimate.share)
     y_second = target[config.LABEL_VAR].to_numpy() == config.SECOND_LIEN_CLASS
-    horizon = (
-        fold.train_start - validation_year
-        if design == "reverse"
-        else validation_year - fold.train_end
-    )
+    horizon = fold.horizon_for(validation_year)
     metadata = {
         "evaluation_design": design,
         "estimator": "hist_gradient_boosting_mixture",
@@ -498,7 +495,7 @@ def _diagnose_cell(
 
 def evaluate_grid(
     data_by_year: dict[int, pd.DataFrame],
-    folds: Iterable[model_selection.ReverseFold],
+    folds: Iterable[temporal_folds.TemporalFold],
     candidates: Iterable[BoostingParameters],
     cells: pd.DataFrame,
     checkpoint_file: str | Path,

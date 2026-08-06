@@ -126,6 +126,40 @@ class TemporalFold:
             raise ValueError("horizons must align one-to-one with target_years")
         if any(horizon <= 0 for horizon in self.horizons):
             raise ValueError("horizons must be positive")
+        boundary = self.train_start if self.direction == "reverse" else self.train_end
+        expected = tuple(
+            boundary - year
+            if self.direction == "reverse"
+            else year - boundary
+            for year in self.target_years
+        )
+        if self.horizons != expected:
+            raise ValueError(
+                "horizons do not match the fold direction and year boundaries"
+            )
+
+    @property
+    def train_start(self) -> int:
+        """Return the first source year."""
+        return self.train_years[0]
+
+    @property
+    def train_end(self) -> int:
+        """Return the last source year."""
+        return self.train_years[-1]
+
+    @property
+    def validation_years(self) -> tuple[int, ...]:
+        """Return the target years under the legacy public name."""
+        return self.target_years
+
+    def horizon_for(self, target_year: int) -> int:
+        """Return the precomputed horizon for one target year."""
+        try:
+            index = self.target_years.index(target_year)
+        except ValueError as error:
+            raise ValueError(f"Year {target_year} is not a target in {self.fold_id}") from error
+        return self.horizons[index]
 
     def to_dict(self) -> dict[str, object]:
         """Return a JSON-compatible representation."""

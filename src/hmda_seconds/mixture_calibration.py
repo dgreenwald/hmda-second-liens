@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 
 from . import calibration, config, mixture, model_selection
+from .density_ratio import folds as temporal_folds
 
 ESTIMATOR = "known_source_prior_mixture"
 TAIL_QUANTILES = (0.0, 0.001, 0.01, 0.5, 0.99, 0.999, 1.0)
@@ -31,7 +32,7 @@ def run_mixture_calibration_diagnostics(
 
     reverse_metrics, reverse_bins, reverse_tails = _run_design(
         data_by_year=data_by_year,
-        folds=list(reversed(model_selection.reverse_folds())),
+        folds=list(reversed(temporal_folds.reverse_folds())),
         specification=selected.specification,
         regularization_c=selected.regularization_c,
         metrics_file=output_dir / "mixture_calibration_reverse_metrics.csv",
@@ -41,9 +42,9 @@ def run_mixture_calibration_diagnostics(
         design="reverse",
         fold_model_dir=Path(fold_model_dir),
     )
-    forward_fold = model_selection.ReverseFold(
-        train_years=tuple(config.TRAIN_YEARS),
-        validation_years=tuple(config.VALIDATE_YEARS),
+    forward_fold = temporal_folds.forward_fold(
+        train_years=config.TRAIN_YEARS,
+        target_years=config.VALIDATE_YEARS,
     )
     forward_metrics, forward_bins, forward_tails = _run_design(
         data_by_year=data_by_year,
@@ -107,7 +108,7 @@ def run_mixture_calibration_diagnostics(
 
 def _run_design(
     data_by_year: dict[int, pd.DataFrame],
-    folds: list[model_selection.ReverseFold],
+    folds: list[temporal_folds.TemporalFold],
     specification: model_selection.FeatureSpecification,
     regularization_c: float,
     metrics_file: Path,
@@ -152,11 +153,7 @@ def _run_design(
             y_second = (
                 target[config.LABEL_VAR].to_numpy() == config.SECOND_LIEN_CLASS
             )
-            horizon = (
-                fold.train_start - validation_year
-                if design == "reverse"
-                else validation_year - fold.train_end
-            )
+            horizon = fold.horizon_for(validation_year)
             metadata = {
                 "evaluation_design": design,
                 "estimator": ESTIMATOR,

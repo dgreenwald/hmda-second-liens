@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 
 from . import calibration, config, mixture, model_selection
+from .density_ratio import folds as temporal_folds
 from .logistic_features import (
     FeatureSpecification,
     LogisticFeatureTransformer,
@@ -63,7 +64,7 @@ def fit_candidate_path(
 
 def evaluate_grid(
     data_by_year: dict[int, pd.DataFrame],
-    folds: Iterable[model_selection.ReverseFold],
+    folds: Iterable[temporal_folds.TemporalFold],
     candidate_c: dict[FeatureSpecification, Iterable[float]],
     cells: pd.DataFrame,
     checkpoint_file: str | Path,
@@ -155,7 +156,7 @@ def evaluate_grid(
 def evaluate_target(
     fitted: mixture.KnownSourcePriorModel,
     target: pd.DataFrame,
-    fold: model_selection.ReverseFold,
+    fold: temporal_folds.TemporalFold,
     fit_diagnostics: dict,
 ) -> pd.DataFrame:
     """Estimate a target share and score one adjusted candidate cell."""
@@ -179,7 +180,7 @@ def evaluate_target(
                 "train_start": fold.train_start,
                 "train_end": fold.train_end,
                 "validation_year": year,
-                "horizon": fold.train_start - year,
+                "horizon": fold.horizon_for(year),
                 "n_validation": len(target),
                 "brier_score": float(np.mean((probability - y_second) ** 2)),
                 "log_loss": float(
@@ -282,7 +283,7 @@ def run_mixture_logistic_selection(
     model_dir.mkdir(parents=True, exist_ok=True)
     data_by_year = model_selection.load_selection_years(data_dir=data_dir)
     incumbent = model_selection.load_selected_model(incumbent_file)
-    folds = list(reversed(model_selection.reverse_folds()))
+    folds = list(reversed(temporal_folds.reverse_folds()))
     checkpoint_file = output_dir / "mixture_logistic_selection_checkpoint.csv"
     cells = _read(checkpoint_file)
 
@@ -483,7 +484,8 @@ def evaluate_forward(
     """Apply the final mixture-native winner to every forward year."""
     checkpoint_file = Path(checkpoint_file)
     metrics = _read(checkpoint_file)
-    for year in config.VALIDATE_YEARS:
+    fold = temporal_folds.forward_fold(model.train_years, config.VALIDATE_YEARS)
+    for year in fold.target_years:
         if not metrics.empty and bool((metrics["validation_year"] == year).any()):
             continue
         target = data_by_year[year]
@@ -500,7 +502,7 @@ def evaluate_forward(
                     "train_start": min(model.train_years),
                     "train_end": max(model.train_years),
                     "validation_year": year,
-                    "horizon": year - max(model.train_years),
+                    "horizon": fold.horizon_for(year),
                     **calibration.probability_metrics(y_second, probability),
                     "mixture_share": estimate.share,
                     "share_optimizer_converged": estimate.optimizer_converged,
@@ -531,7 +533,7 @@ def _candidate_complete(
     cells: pd.DataFrame,
     specification: str,
     regularization_c: float,
-    fold: model_selection.ReverseFold,
+    fold: temporal_folds.TemporalFold,
 ) -> bool:
     return all(
         _cell_present(

@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 
 from . import config, model_selection, validate
+from .density_ratio import folds as temporal_folds
 
 DEFAULT_N_BINS = 10
 PROBABILITY_FLOOR = 1e-12
@@ -228,7 +229,7 @@ def _run_reverse_diagnostics(
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     metrics = _load_checkpoint(metrics_file, specification.name, regularization_c)
     bins = _load_checkpoint(bins_file, specification.name, regularization_c)
-    for fold in model_selection.reverse_folds():
+    for fold in temporal_folds.reverse_folds():
         missing = [
             year
             for year in fold.validation_years
@@ -259,7 +260,7 @@ def _run_reverse_diagnostics(
                 "train_start": fold.train_start,
                 "train_end": fold.train_end,
                 "validation_year": validation_year,
-                "horizon": fold.train_start - validation_year,
+                "horizon": fold.horizon_for(validation_year),
             }
             metric_row = pd.DataFrame([{**metadata, **probability_metrics(y_second, probability)}])
             bin_rows = reliability_bins(y_second, probability, n_bins).assign(**metadata)
@@ -285,10 +286,11 @@ def _run_forward_diagnostics(
     regularization_c = selected.regularization_c
     metrics = _load_checkpoint(metrics_file, specification, regularization_c)
     bins = _load_checkpoint(bins_file, specification, regularization_c)
-    for validation_year in config.VALIDATE_YEARS:
+    fold = temporal_folds.forward_fold(config.TRAIN_YEARS, config.VALIDATE_YEARS)
+    for validation_year in fold.target_years:
         if _metric_complete(
-            metrics, 2004, validation_year
-        ) and _bin_complete(bins, 2004, validation_year):
+            metrics, fold.train_start, validation_year
+        ) and _bin_complete(bins, fold.train_start, validation_year):
             continue
         validation = data_by_year[validation_year]
         probability = selected.predict_proba_second_lien(validation)
@@ -299,16 +301,16 @@ def _run_forward_diagnostics(
             "evaluation_design": "forward_robustness",
             "specification": specification,
             "regularization_c": regularization_c,
-            "train_start": 2004,
-            "train_end": 2007,
+            "train_start": fold.train_start,
+            "train_end": fold.train_end,
             "validation_year": validation_year,
-            "horizon": validation_year - 2007,
+            "horizon": fold.horizon_for(validation_year),
         }
         metric_row = pd.DataFrame([{**metadata, **probability_metrics(y_second, probability)}])
         bin_rows = reliability_bins(y_second, probability, n_bins).assign(**metadata)
-        if not _bin_complete(bins, 2004, validation_year):
+        if not _bin_complete(bins, fold.train_start, validation_year):
             bins = _append_checkpoint(bins, bin_rows, bins_file)
-        if not _metric_complete(metrics, 2004, validation_year):
+        if not _metric_complete(metrics, fold.train_start, validation_year):
             metrics = _upsert_metric_checkpoint(metrics, metric_row, metrics_file)
     return metrics.reset_index(drop=True), bins.reset_index(drop=True)
 

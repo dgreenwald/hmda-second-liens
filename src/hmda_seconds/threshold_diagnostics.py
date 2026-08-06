@@ -15,6 +15,7 @@ from scipy.special import expit
 from sklearn.metrics import average_precision_score
 
 from . import config, mixture, model_selection
+from .density_ratio import folds as temporal_folds
 from .logistic_features import CENSUS_REGION_BY_STATE, REGION_LEVELS
 
 CANONICAL_THRESHOLD = 0.5
@@ -169,14 +170,14 @@ def run_threshold_diagnostics(
 
     reverse = _run_design(
         data_by_year,
-        list(reversed(model_selection.reverse_folds())),
+        list(reversed(temporal_folds.reverse_folds())),
         selected,
         fold_model_dir,
         output_dir,
         "reverse",
     )
-    forward_fold = model_selection.ReverseFold(
-        tuple(config.TRAIN_YEARS), tuple(config.VALIDATE_YEARS)
+    forward_fold = temporal_folds.forward_fold(
+        config.TRAIN_YEARS, config.VALIDATE_YEARS
     )
     forward = _run_design(
         data_by_year,
@@ -326,7 +327,7 @@ def render_precision_recall_panels(
 
 def _run_design(
     data_by_year: dict[int, pd.DataFrame],
-    folds: list[model_selection.ReverseFold],
+    folds: list[temporal_folds.TemporalFold],
     selected: model_selection.SelectedLogisticModel,
     fold_model_dir: Path,
     output_dir: Path,
@@ -391,11 +392,7 @@ def _run_design(
             y_second = (
                 target[config.LABEL_VAR].to_numpy() == config.SECOND_LIEN_CLASS
             )
-            horizon = (
-                fold.train_start - validation_year
-                if design == "reverse"
-                else validation_year - fold.train_end
-            )
+            horizon = fold.horizon_for(validation_year)
             metadata = {
                 "evaluation_design": design,
                 "specification": selected.specification.name,

@@ -15,6 +15,7 @@ from scipy.special import expit, logit
 from sklearn.linear_model import LogisticRegression
 
 from . import config, model_selection
+from .density_ratio import folds as temporal_folds
 from .logistic_features import FeatureSpecification, LogisticFeatureTransformer
 
 YEAR_EFFECT_SCALE = 100.0
@@ -398,7 +399,7 @@ def run_reverse_mixture_validation(
     intercepts = _read_csv_if_exists(intercepts_file)
     ratio_diagnostics = _read_csv_if_exists(ratio_file)
 
-    folds = list(reversed(model_selection.reverse_folds()))
+    folds = list(reversed(temporal_folds.reverse_folds()))
     if train_starts is not None:
         requested = set(train_starts)
         available = {fold.train_start for fold in folds}
@@ -530,7 +531,7 @@ def aggregate_share_errors(
 def _evaluate_target_year(
     fitted: DensityRatioModels,
     target: pd.DataFrame,
-    fold: model_selection.ReverseFold,
+    fold: temporal_folds.TemporalFold,
     validation_year: int,
 ) -> pd.DataFrame:
     features = fitted.features(target)
@@ -545,7 +546,7 @@ def _evaluate_target_year(
         "train_start": fold.train_start,
         "train_end": fold.train_end,
         "validation_year": validation_year,
-        "horizon": fold.train_start - validation_year,
+        "horizon": fold.horizon_for(validation_year),
         "n_validation": len(target),
         "actual_second_share": actual_share,
         "raw_mean_probability": float(raw_probability.mean()),
