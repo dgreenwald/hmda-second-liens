@@ -13,10 +13,10 @@ import numpy as np
 import pandas as pd
 
 from . import config, model_selection
-from .density_ratio import checkpoints, evaluation
+from .density_ratio import checkpoints, diagnostics, evaluation
 from .density_ratio import folds as temporal_folds
 
-DEFAULT_N_BINS = 10
+DEFAULT_N_BINS = diagnostics.DEFAULT_N_BINS
 METRIC_COLUMNS = [
     "brier_score",
     "log_loss",
@@ -30,46 +30,7 @@ METRIC_COLUMNS = [
 
 # Compatibility alias for callers using the former public location.
 probability_metrics = evaluation.evaluate_sample
-
-
-def reliability_bins(
-    y_second: np.ndarray,
-    probability: np.ndarray,
-    n_bins: int = DEFAULT_N_BINS,
-) -> pd.DataFrame:
-    """Build approximate equal-count validation-probability bins."""
-    y = np.asarray(y_second, dtype=bool)
-    probability = np.asarray(probability, dtype=float)
-    _validate_probability_inputs(y, probability)
-    if n_bins < 2:
-        raise ValueError("n_bins must be at least two")
-
-    quantiles = np.quantile(probability, np.linspace(0.0, 1.0, n_bins + 1))
-    interior = np.unique(quantiles[1:-1])
-    assignment = np.searchsorted(interior, probability, side="right")
-    effective_bins = len(interior) + 1
-    count = np.bincount(assignment, minlength=effective_bins)
-    probability_sum = np.bincount(
-        assignment, weights=probability, minlength=effective_bins
-    )
-    observed_sum = np.bincount(
-        assignment, weights=y.astype(float), minlength=effective_bins
-    )
-    minimum = np.full(effective_bins, np.inf)
-    maximum = np.full(effective_bins, -np.inf)
-    np.minimum.at(minimum, assignment, probability)
-    np.maximum.at(maximum, assignment, probability)
-    keep = count > 0
-    return pd.DataFrame(
-        {
-            "probability_bin": np.arange(1, effective_bins + 1)[keep],
-            "n": count[keep].astype(np.int64),
-            "min_probability": minimum[keep],
-            "max_probability": maximum[keep],
-            "mean_predicted_probability": probability_sum[keep] / count[keep],
-            "observed_second_share": observed_sum[keep] / count[keep],
-        }
-    )
+reliability_bins = diagnostics.reliability_bins
 
 
 def aggregate_reliability_bins(
@@ -269,14 +230,11 @@ def _run_reverse_diagnostics(
                 "validation_year": validation_year,
                 "horizon": fold.horizon_for(validation_year),
             }
-            metric_row = pd.DataFrame(
-                [
-                    evaluation.metric_record(
-                        y_second, probability, metadata=metadata
-                    )
-                ]
+            diagnostic = diagnostics.evaluate_cell(
+                y_second, probability, metadata=metadata, n_bins=n_bins
             )
-            bin_rows = reliability_bins(y_second, probability, n_bins).assign(**metadata)
+            metric_row = diagnostic.metrics
+            bin_rows = diagnostic.bins
             if not _bin_complete(bins, fold.train_start, validation_year):
                 bins = checkpoints.append_rows(bins, bin_rows, bins_file)
             if not _metric_complete(
@@ -322,14 +280,11 @@ def _run_forward_diagnostics(
             "validation_year": validation_year,
             "horizon": fold.horizon_for(validation_year),
         }
-        metric_row = pd.DataFrame(
-            [
-                evaluation.metric_record(
-                    y_second, probability, metadata=metadata
-                )
-            ]
+        diagnostic = diagnostics.evaluate_cell(
+            y_second, probability, metadata=metadata, n_bins=n_bins
         )
-        bin_rows = reliability_bins(y_second, probability, n_bins).assign(**metadata)
+        metric_row = diagnostic.metrics
+        bin_rows = diagnostic.bins
         if not _bin_complete(bins, fold.train_start, validation_year):
             bins = checkpoints.append_rows(bins, bin_rows, bins_file)
         if not _metric_complete(metrics, fold.train_start, validation_year):

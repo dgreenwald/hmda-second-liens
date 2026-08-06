@@ -7,7 +7,7 @@ from pathlib import Path
 import pandas as pd
 
 from . import calibration, config, model_selection
-from .density_ratio import adapters, checkpoints, evaluation
+from .density_ratio import adapters, checkpoints, diagnostics, evaluation
 from .density_ratio import folds as temporal_folds
 from .density_ratio.families.random_forest import (
     RandomForestDensityRatioModel,
@@ -265,24 +265,22 @@ def _evaluate_cell(
         "validation_year": year,
         "horizon": horizon,
     }
-    metric_row = pd.DataFrame(
-        [
-            evaluation.metric_record_from_metrics(
-                evaluated.metrics,
-                metadata=metadata,
-                additional={
-                    "mixture_share": evaluated.result.mixture_share,
-                    "adjusted_hard_share_050": evaluated.result.hard_share_050,
-                    "share_optimizer_converged": estimate.optimizer_converged,
-                    "share_at_boundary": estimate.at_boundary,
-                    "mixture_em_difference": estimate.share - estimate.em_share,
-                },
-            )
-        ]
+    diagnostic = diagnostics.evaluate_cell(
+        y_second,
+        probability,
+        metadata=metadata,
+        n_bins=n_bins,
+        metrics=evaluated.metrics,
+        additional_metrics={
+            "mixture_share": evaluated.result.mixture_share,
+            "adjusted_hard_share_050": evaluated.result.hard_share_050,
+            "share_optimizer_converged": estimate.optimizer_converged,
+            "share_at_boundary": estimate.at_boundary,
+            "mixture_em_difference": estimate.share - estimate.em_share,
+        },
     )
-    bin_rows = calibration.reliability_bins(
-        y_second, probability, n_bins
-    ).assign(**metadata)
+    metric_row = diagnostic.metrics
+    bin_rows = diagnostic.bins
     key_columns = ("train_start", "validation_year")
     metrics = checkpoints.replace_rows(
         metrics, metric_row, metrics_file, key_columns=key_columns

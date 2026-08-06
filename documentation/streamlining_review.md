@@ -19,7 +19,7 @@ duplication and unnecessary dependency layers.
 ## Baseline status
 
 The Step 8 add/add conflicts identified during the initial audit have been resolved. Ruff,
-Python compilation, and all 162 synthetic tests pass. Streamlining work should preserve this
+Python compilation, and all 164 synthetic tests pass. Streamlining work should preserve this
 baseline and continue to use the bounded real-data family-parity checks where estimator code is
 moved.
 
@@ -44,25 +44,16 @@ comparisons, and diagnostics.
 
 ### 2. Finish consolidating common calibration-diagnostic cell generation
 
-The boosting and Random Forest modules contain nearly identical diagnostic-cell functions:
+**Status: completed.**
 
-- `gradient_boosting._diagnose_cell`;
-- `random_forest_mixture._evaluate_cell`; and
-- a more extensive variant in `mixture_calibration._run_design`.
+The shared `density_ratio.diagnostics.evaluate_cell` now constructs the canonical metric row
+and reliability bins for raw logistic, known-source-prior logistic, boosting, and Random Forest
+diagnostics. It accepts metrics already computed by `evaluation.evaluate_target`, avoiding
+recalculation, and supports named family-specific extension tables. Mixture ratio tails use
+that extension contract.
 
-The canonical sample evaluator and metric-record schema now live in
-`density_ratio.evaluation`; forward and reverse workflows share those computations and differ
-only in their aggregation rules. The remaining implementations still repeat this sequence:
-
-1. check whether aggregate outputs already exist;
-2. call the shared evaluator and metric-record builder;
-3. construct reliability bins;
-4. attach the same metadata to bins and family-specific diagnostics; and
-5. replace the corresponding checkpoint rows.
-
-Add a shared diagnostic helper that accepts a fitted density-ratio model, target frame, fold,
-metadata, and optional family-specific diagnostic callback. The callback can add ratio-tail or
-other specialized outputs without duplicating the common evaluation and reliability logic.
+Workflows retain their own completion checks and checkpoint writes because those differ by
+artifact set; the sample-level calculations and table schemas no longer do.
 
 ### 3. Consolidate CSV checkpoint utilities
 
@@ -178,7 +169,7 @@ dead code.
 3. **Completed:** centralize categorical pinning and annual schema-tolerant loading.
 4. **Completed:** move estimator primitives into the three `density_ratio/families/` modules
    and consolidate artifact boilerplate at the same boundary.
-5. Introduce and adopt a common calibration-diagnostic cell evaluator.
+5. **Completed:** introduce and adopt a common calibration-diagnostic cell evaluator.
 6. Remove the fold compatibility shim if it is not public API.
 7. Move substantive logic out of older scripts.
 8. Decide separately whether documented legacy workflows should be deprecated or removed.

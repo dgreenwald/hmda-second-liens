@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 
 from . import calibration, config, model_selection
-from .density_ratio import adapters, checkpoints, evaluation
+from .density_ratio import adapters, checkpoints, diagnostics, evaluation
 from .density_ratio import folds as temporal_folds
 from .density_ratio.families.gradient_boosting import (
     BoostingDensityRatioModel,
@@ -402,22 +402,20 @@ def _diagnose_cell(
         "validation_year": validation_year,
         "horizon": horizon,
     }
-    metric_row = pd.DataFrame(
-        [
-            evaluation.metric_record_from_metrics(
-                evaluated.metrics,
-                metadata=metadata,
-                additional={
-                    "mixture_share": evaluated.result.mixture_share,
-                    "share_optimizer_converged": estimate.optimizer_converged,
-                    "share_at_boundary": estimate.at_boundary,
-                },
-            )
-        ]
+    diagnostic = diagnostics.evaluate_cell(
+        y_second,
+        probability,
+        metadata=metadata,
+        n_bins=n_bins,
+        metrics=evaluated.metrics,
+        additional_metrics={
+            "mixture_share": evaluated.result.mixture_share,
+            "share_optimizer_converged": estimate.optimizer_converged,
+            "share_at_boundary": estimate.at_boundary,
+        },
     )
-    bin_rows = calibration.reliability_bins(
-        y_second, probability, n_bins
-    ).assign(**metadata)
+    metric_row = diagnostic.metrics
+    bin_rows = diagnostic.bins
     key_columns = ("train_start", "validation_year")
     metrics = checkpoints.replace_rows(
         metrics, metric_row, metrics_file, key_columns=key_columns

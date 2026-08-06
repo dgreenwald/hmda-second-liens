@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 
 from . import calibration, config, mixture, model_selection
-from .density_ratio import adapters, checkpoints, evaluation
+from .density_ratio import adapters, checkpoints, diagnostics, evaluation
 from .density_ratio import folds as temporal_folds
 
 ESTIMATOR = "known_source_prior_mixture"
@@ -171,25 +171,24 @@ def _run_design(
                 "validation_year": validation_year,
                 "horizon": horizon,
             }
-            metric_row = pd.DataFrame(
-                [
-                    evaluation.metric_record_from_metrics(
-                        evaluated.metrics,
-                        metadata=metadata,
-                        additional={
-                            "mixture_share": evaluated.result.mixture_share,
-                            "share_optimizer_converged": share.optimizer_converged,
-                            "share_at_boundary": share.at_boundary,
-                        },
-                    )
-                ]
+            diagnostic = diagnostics.evaluate_cell(
+                y_second,
+                probability,
+                metadata=metadata,
+                n_bins=n_bins,
+                metrics=evaluated.metrics,
+                additional_metrics={
+                    "mixture_share": evaluated.result.mixture_share,
+                    "share_optimizer_converged": share.optimizer_converged,
+                    "share_at_boundary": share.at_boundary,
+                },
+                extension_records={
+                    "ratio_tails": _tail_metrics(evaluated.log_ratio)
+                },
             )
-            bin_rows = calibration.reliability_bins(
-                y_second, probability, n_bins
-            ).assign(**metadata)
-            tail_row = pd.DataFrame(
-                [{**metadata, **_tail_metrics(evaluated.log_ratio)}]
-            )
+            metric_row = diagnostic.metrics
+            bin_rows = diagnostic.bins
+            tail_row = diagnostic.extensions["ratio_tails"]
             key_columns = ("train_start", "validation_year")
             metrics = checkpoints.replace_rows(
                 metrics, metric_row, metrics_file, key_columns=key_columns
