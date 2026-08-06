@@ -27,6 +27,8 @@ OUTPUT_DIR = Path(os.environ.get("HMDA_SECONDS_OUTPUT_DIR", REPO_ROOT / "output"
 MODEL_DIR = OUTPUT_DIR / "model"
 MIXTURE_FOLD_MODEL_DIR = MODEL_DIR / "mixture_folds"
 BOOSTING_FOLD_MODEL_DIR = MODEL_DIR / "boosting_folds"
+RF_MIXTURE_FOLD_MODEL_DIR = MODEL_DIR / "rf_mixture_folds"
+MIXTURE_LOGISTIC_SELECTION_MODEL_DIR = MODEL_DIR / "mixture_logistic_selection"
 FIGURE_DIR = OUTPUT_DIR / "figures"
 TABLE_DIR = OUTPUT_DIR / "tables"
 
@@ -87,6 +89,8 @@ BENCHMARK_TRAIN_PARQUET = INTERMEDIATE_DIR / (
 SELECTION_DATA_DIR = INTERMEDIATE_DIR / "logistic_selection"
 SELECTED_LOGISTIC_MODEL_FILE = MODEL_DIR / "logistic_selected.pkl"
 SELECTED_BOOSTING_MODEL_FILE = MODEL_DIR / "boosting_challenger.pkl"
+RF_MIXTURE_MODEL_FILE = MODEL_DIR / "rf_mixture_challenger.pkl"
+MIXTURE_SELECTED_LOGISTIC_MODEL_FILE = MODEL_DIR / "logistic_mixture_selected.pkl"
 CLASSIFY_PARQUET = (
     INTERMEDIATE_DIR / f"hmda_classified_{min(APPLY_YEARS)}_{max(APPLY_YEARS)}.parquet"
 )
@@ -171,6 +175,10 @@ BOOSTING_REFINEMENT_MAX_ITER = (100, 400)
 BOOSTING_REFINEMENT_L2 = (0.0, 10.0)
 BOOSTING_SCREEN_SURVIVORS = 2
 BOOSTING_RANDOM_STATE = 17
+
+# Mixture-native logistic reselection retains four specifications after the
+# all-candidate latest-window screen, always including the current primary.
+MIXTURE_LOGISTIC_SCREEN_SURVIVORS = 4
 
 TRAIN_SIZE = 0.25
 TEST_SIZE = 0.75

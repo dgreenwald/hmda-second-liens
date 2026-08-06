@@ -414,6 +414,15 @@ logistic automatically. Step 10 should compare the historical series and extrapo
 behavior before resolving the strong backward evidence against the forward-regime warning.
 See `GRADIENT_BOOSTING_FINDINGS.md`.
 
+**Random Forest mixture revisit:** re-evaluate the established 50-tree, depth-10 full-sample
+forest using equal source-year class priors and the same annual target mixture adjustment. Its
+reverse Brier is 0.030394, improving on mixture logistic's 0.031779 in 35 of 45 cells, which
+confirms that the missing annual intercept contributed to the forest's earlier disadvantage.
+However, boosting reaches 0.026773 and beats the forest in 42 of 45 cells and at every mean
+horizon. The forest is also worst in every 2008--2016 forward year, with Brier 0.015284 versus
+0.011994 for boosting and 0.007307 for logistic. Retain the adjusted forest as the correct RF
+robustness model, but do not reopen RF tuning. See `RANDOM_FOREST_MIXTURE_FINDINGS.md`.
+
 ### Step 10: Select, document, and release the final estimator
 
 Select the final estimator using the predeclared criteria and report the full

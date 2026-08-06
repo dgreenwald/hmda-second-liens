@@ -139,7 +139,7 @@ def fit_density_ratio_models(
         features, labels, [regularization_c], sample_weight=prior_weights
     )
     prior_classifier = prior_models[regularization_c]
-    prior_variant = _classifier_ratio_variant(
+    prior_variant = classifier_ratio_variant(
         "known_source_prior", features, y_second, prior_classifier
     )
 
@@ -252,7 +252,7 @@ def fit_known_source_prior_model(
     classifier = models[regularization_c]
     fitted = KnownSourcePriorModel(
         transformer=transformer,
-        ratio=_classifier_ratio_variant(
+        ratio=classifier_ratio_variant(
             "known_source_prior", features, y_second, classifier
         ),
         fit_diagnostics=diagnostics[regularization_c],
@@ -618,7 +618,7 @@ def _normalized_ratio_variant(
     )
 
 
-def _classifier_ratio_variant(
+def classifier_ratio_variant(
     name: str,
     features: np.ndarray,
     y_second: np.ndarray,

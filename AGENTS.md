@@ -46,6 +46,9 @@ changing estimator behavior or validation design.
 - Gradient-boosting challenger: `make evaluate-gradient-boosting` runs the frozen staged
   histogram-boosting density-ratio grid, reuses per-fold artifacts in
   `output/model/boosting_folds/`, and produces reverse and forward calibration diagnostics.
+- Random Forest mixture robustness: `make evaluate-rf-mixture` applies equal source-year class
+  priors and annual target mixture shares to the fixed 50-tree, depth-10 full-sample forest.
+  Reuse saved fits in `output/model/rf_mixture_folds/`; do not reopen RF tuning automatically.
 - Legacy/full release workflow: `make data && make train && make validate && make classify &&
   make figures`; each target maps to one `scripts/*.py` CLI.
 - `pytest tests/` — must pass without real data.
@@ -84,6 +87,9 @@ changing estimator behavior or validation design.
   and the same annual mixture-share adjustment as logistic. The selected 7-leaf model improves
   Brier in all 45 reverse cells but loses to logistic in all nine forward years; retain it as a
   finalist rather than silently replacing the logistic primary estimator.
+- The mixture-adjusted fixed Random Forest improves on logistic in 35 of 45 reverse cells but
+  loses to boosting in 42 of 45 and is worst in every forward year. It is the canonical RF
+  robustness model; these results do not support another RF hyperparameter search.
 
 ## Commit & Pull Request Guidelines
 - Short, imperative commit subjects, first line <= 72 chars.

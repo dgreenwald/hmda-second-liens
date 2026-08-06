@@ -11,7 +11,7 @@ ROOT := $(abspath .)
 SCRIPTS_DIR := $(ROOT)/scripts
 OUTPUT_DIR := $(ROOT)/output
 
-.PHONY: install test data audit county-values county-value-coverage benchmark-data benchmark-estimators selection-data select-logistic evaluate-spline-purchaser-interactions diagnose-logistic-calibration diagnose-mixture-calibration diagnose-threshold-subgroups plausibility-checks evaluate-gradient-boosting estimate-mixture-shares train train-logistic validate classify figures all clean
+.PHONY: install test data audit county-values county-value-coverage benchmark-data benchmark-estimators selection-data select-logistic select-mixture-logistic evaluate-spline-purchaser-interactions diagnose-logistic-calibration diagnose-mixture-calibration diagnose-threshold-subgroups plausibility-checks evaluate-gradient-boosting evaluate-rf-mixture estimate-mixture-shares train train-logistic validate classify figures all clean
 
 install:
 	$(PYTHON) -m pip install -e ".[dev]"
@@ -48,6 +48,9 @@ selection-data:
 select-logistic: selection-data
 	$(PYTHON) $(SCRIPTS_DIR)/select_logistic.py
 
+select-mixture-logistic: selection-data
+	$(PYTHON) $(SCRIPTS_DIR)/select_mixture_logistic.py
+
 evaluate-spline-purchaser-interactions: selection-data
 	$(PYTHON) $(SCRIPTS_DIR)/evaluate_spline_purchaser_interactions.py
 
@@ -65,6 +68,9 @@ plausibility-checks: selection-data
 
 evaluate-gradient-boosting: selection-data
 	$(PYTHON) $(SCRIPTS_DIR)/evaluate_gradient_boosting.py
+
+evaluate-rf-mixture: selection-data
+	$(PYTHON) $(SCRIPTS_DIR)/evaluate_random_forest_mixture.py
 
 estimate-mixture-shares: selection-data
 	$(PYTHON) $(SCRIPTS_DIR)/estimate_mixture_shares.py
