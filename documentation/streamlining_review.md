@@ -6,8 +6,9 @@ This review examines the current Python codebase for dead code, duplicated helpe
 responsibilities, and compatibility layers that may now be removable. The initial findings are
 retained below, with implementation status updated as the streamlining steps are completed.
 
-The review was comprehensively refreshed in August 2026 after all nine original refactoring
-steps were completed. Items 10–16 reflect a fresh audit of the codebase as it currently stands.
+The review was comprehensively refreshed in August 2026 after all nine original streamlining
+findings were completed. Items 10–14 reflect a fresh audit of the codebase as it currently
+stands.
 
 The repository currently contains approximately:
 
@@ -21,10 +22,9 @@ duplication and unnecessary dependency layers.
 
 ## Baseline status
 
-The Step 8 add/add conflicts identified during the initial audit have been resolved. Ruff,
-Python compilation, and all 129 remaining synthetic tests pass. Streamlining work should preserve this
-baseline and continue to use the bounded real-data family-parity checks where estimator code is
-moved.
+All nine original streamlining findings are complete. Ruff, Python compilation, and all 129
+synthetic tests pass. Streamlining work should preserve this baseline and continue to use the
+bounded real-data family-parity checks where estimator code is moved.
 
 ## Findings
 
@@ -157,94 +157,176 @@ full-sample benchmark workflows have also been removed. The formal frozen logist
 and diagnostics remain because they define the primary estimator rather than a compatibility
 workflow.
 
-## Round 2 assessment
+---
 
-The suggestions in `streamlining_suggestions_gemini_v2.md` were checked against the post-Step-8
-tree. Some file references describe code that had already changed, so the following decisions
-are based on the live implementations rather than the suggested line numbers.
+## Remaining opportunities (fresh audit, August 2026)
 
-### 10. Centralize prediction and numerical primitives
+The following items were identified by inspecting the live codebase after all prior steps were
+completed. They are ordered from lowest to highest implementation risk.
 
-**Status: recommended.**
+### 10. Remove the migration re-export in `mixture_logistic_selection.py`
+
+**Status: open.**
+
+`mixture_logistic_selection` imports `fit_candidate_path` from
+`density_ratio.families.logistic` and immediately re-exports it via `__all__`. Production code
+does not use the alias, but `tests/test_mixture_logistic_selection.py` still calls it through
+the orchestration module. This is a test-visible migration re-export rather than an orphan.
+
+**Recommendation:** Update those tests to import the family primitive directly, then delete the
+orchestration-module import and `__all__` entry.
+
+**Risk:** Very low.
+
+### 11. Route the sample-audit FHFA load through the canonical loader
+
+**Status: open.**
+
+`audit.run_sample_audit` directly calls `fhfa.load("county", ...)`, formats `year` and `fips`,
+and uses the result — duplicating `clean.load_fhfa_county_hpi`, which performs the same three
+steps. The only difference is that `audit.py` hard-codes `config.FHFA_DATA_DIR` while
+`clean.load_fhfa_county_hpi` accepts an optional `data_dir` argument.
+
+**Recommendation:** Replace the inline block in `audit.run_sample_audit` with a call to
+`clean.load_fhfa_county_hpi()`.
+
+**Risk:** Very low.
+
+### 12. Centralize class-aware probability and numerical primitives
+
+**Status: open.**
 
 Second-lien probability extraction still repeats the scikit-learn class lookup in selected
-logistic, density-ratio logistic, boosting, Random Forest, plausibility, and threshold paths.
-Use one small class-aware probability helper, while retaining model methods as the public
-prediction interface. Also consolidate the duplicate finite-vector and stable log-mean-exp
-implementations. These are genuine identical numerical operations and should have direct unit
-tests for class order, shape, empty inputs, and non-finite values.
+logistic, density-ratio logistic, boosting, Random Forest, plausibility, threshold, and mixture
+paths. `mixture._finite_vector` and `density_ratio.evaluation._finite_vector` also perform the
+same validation, while `mixture._log_mean_exp` and
+`density_ratio.families.logistic._log_mean_exp` duplicate the same stable calculation.
 
-Place the numerical primitives in a neutral density-ratio utility rather than expanding
-`evaluation.py` into a miscellaneous helper module.
+**Recommendation:** Add a neutral `density_ratio/numerical.py` containing public, directly
+tested finite-vector, log-mean-exp, and class-aware probability helpers. Keep fitted-model
+prediction methods as the public model interface and use the helpers inside them. Do not put
+the shared numerical functions in `density_ratio.evaluation`: that module already imports
+`mixture`, so importing it back from `mixture.py` would create a circular dependency.
 
-### 11. Reuse the canonical FHFA loader in the sample audit
+**Risk:** Very low.
 
-**Status: recommended.**
+### 13. Deduplicate pairwise estimator-comparison joins
 
-`audit.run_sample_audit` still repeats `clean.load_fhfa_county_hpi`, including year and FIPS
-normalization. It should call the canonical loader. The proposed historical-parquet
-consolidation, however, is already complete: plausibility delegates to
-`clean.load_and_clean_year` with narrow columns and an explicit pre-2004 label policy.
+**Status: open.**
 
-### 12. Centralize the two-stage reverse-horizon aggregation protocol
+Three functions across three modules perform the same structural operation: select and rename
+Brier columns, merge one-to-one on `[train_start, validation_year, horizon]`, and compute
+difference columns:
 
-**Status: recommended, with a narrow interface.**
+| Module | Function |
+|--------|----------|
+| `gradient_boosting.py` | `compare_with_logistic` |
+| `random_forest_mixture.py` | `estimator_comparison` |
+| `mixture_logistic_selection.py` | `compare_estimators` |
 
-The selection, mixture, boosting, and threshold modules independently encode equal weighting
-within horizon followed by equal weighting across horizons. A shared primitive should own the
-two grouping stages and completeness/count semantics, while callers continue to name and sort
-their family-specific outputs. This is more than cosmetic deduplication: it prevents the
-scientific weighting protocol from drifting between estimators.
+The number of comparison models and their input column names differ, but the canonical cell
+merge and subtraction logic are shared.
 
-### 13. Consolidate simple pairwise cell comparisons where schemas align
+**Recommendation:** Add a pure DataFrame helper, such as `merge_cell_metrics`, which accepts
+already-loaded frames and explicit input/output metric names. Keep CSV loading in the owning
+orchestration modules. Adopt the helper only for tables with one metric per canonical cell; do
+not force geographic or other candidate-specific comparisons through it.
 
-**Status: recommended in part.**
+**Risk:** Low. Output schemas and one-to-one validation must remain unchanged.
 
-Boosting-versus-logistic and the straightforward challenger tables repeat one-to-one merges on
-the canonical reverse-cell keys and metric subtraction. Add a small comparison primitive and
-adopt it where both sides have one metric per canonical cell. Do not force
-`geographic_incremental_brier` or multi-estimator comparison tables through it: their candidate
-selection, join keys, and output schemas are materially different.
+### 14. Consolidate the two-stage reverse-horizon aggregation protocol
 
-### 14. Keep semantic checkpoint completion checks local
+**Status: open.**
 
-**Status: not recommended.**
+Four functions independently implement equal-within-horizon then equal-across-horizons
+aggregation:
 
-`checkpoints.rows_present` already centralizes the generic lookup. The remaining wrappers are
-not six identical four-line functions: some require non-null estimator outputs, some require
-several artifact tables, and others verify complete estimator sets. Their names document the
-workflow's definition of a complete cell. Adding a second generic `cell_present` wrapper would
-save little code and obscure these distinctions.
+| Module | Function |
+|--------|----------|
+| `gradient_boosting.py` | `aggregate_brier` |
+| `mixture_logistic_selection.py` | `aggregate_candidates` |
+| `threshold_diagnostics.py` | `aggregate_threshold_metrics` |
+| `model_selection.py` | `aggregate_brier_cells` |
 
-### 15. Keep the two panel renderers separate
+`calibration.aggregate_reverse_metrics` already implements the same scientific weighting rule.
+`mixture.aggregate_share_errors` also uses two stages but first constructs a distinct long-form
+error table, so it need not be forced through the initial migration.
 
-**Status: not recommended.**
+**Recommendation:** Put a family-neutral primitive in `density_ratio/aggregation.py` (or, if a
+new module is not warranted, `density_ratio/evaluation.py`). It should accept candidate key
+columns and explicit aggregation mappings for multiple metrics, output names, and counts—not a
+single `metric_col`. Keep family-specific sorting and presentation in the callers. Migrate one
+caller at a time with numerical and schema parity tests.
 
-The reliability and precision-recall figures share subplot setup but differ in limits, log
+This duplication is more than cosmetic: it allows the scientific weighting protocol to drift
+between estimators.
+
+**Risk:** Medium. Requires careful parameter design for the variable group-key columns and
+metric names. Execute with parity tests.
+
+---
+
+## Intentionally deferred or rejected items
+
+The following items were evaluated and are recorded here so they are not rediscovered in future
+audits.
+
+### A. `lru_cache` on `build_county_value_panel`
+
+Rejected. The result is a mutable DataFrame, the year-range argument is not consistently
+hashable, and calls generally occur in separate CLI processes where memoization would not
+avoid work. See item 5 above.
+
+### B. Panel rendering function consolidation
+
+Deferred. The reliability and precision-recall diagrams share subplot setup but differ in axis
 scales, reference lines, curve multiplicity, and legends. A callback-driven generic renderer
-would replace modest plotting repetition with a more indirect interface. Reconsider only if a
-third materially similar panel figure is added.
+would replace modest repetition with a more indirect interface. Reconsider only if a third
+materially similar panel figure is added.
 
-## Recommended sequence
+### C. Reverse-fold loop orchestration into a shared runner
 
-1. **Completed:** use the canonical sample-metric pathway and metric-record schema, then apply separate
-   forward and reverse aggregation rules. Consolidate identical summary builders at this
-   boundary.
-2. **Completed:** introduce and adopt common checkpoint/table utilities, including plausibility
-   outputs.
-3. **Completed:** centralize categorical pinning and annual schema-tolerant loading.
-4. **Completed:** move estimator primitives into the three `density_ratio/families/` modules
-   and consolidate artifact boilerplate at the same boundary.
-5. **Completed:** introduce and adopt a common calibration-diagnostic cell evaluator.
-6. **Completed:** migrate to canonical folds and remove the legacy fold shim.
-7. **Completed:** move substantive logic out of older scripts.
-8. **Completed:** remove adapters and the superseded legacy full-release workflows.
-9. Centralize class-aware probability extraction and the duplicate numerical primitives.
-10. Route the audit through the canonical FHFA loader.
-11. Centralize the two-stage reverse-horizon aggregation contract and migrate each caller with
-    parity tests.
-12. Consolidate only the pairwise comparison joins that share the canonical cell schema.
+Completed in part by `density_ratio/pipeline.py` `run_grid` for the mixture-adjusted families.
+The raw-logistic calibration diagnostic (`calibration._run_reverse_diagnostics`) retains its
+own loop because it uses the raw logistic model path and checkpoint schema rather than the
+density-ratio family protocol. This is an intentional boundary.
 
-After each phase, run the full synthetic suite and the existing bounded family-parity checks.
-Do not combine estimator relocation with changes to specifications, folds, weighting,
-thresholds, mixture estimation, or model-selection objectives.
+### D. Inline checkpoint-completion wrappers
+
+Rejected. The remaining private wrappers give workflow-specific names to completion criteria
+and often appear at several call sites. Some also check several artifact tables, required
+non-null outputs, complete estimator sets, or floating-point candidate identity. Inlining the
+simple-looking cases would make call sites longer and less descriptive without removing a
+second implementation of the underlying lookup; `checkpoints.rows_present` already owns that
+operation.
+
+### E. Rename `clean.build_county_value_panel`
+
+Deferred. The `clean` function is a loading-and-construction façade over the lower-level
+`county_values.build_county_value_panel`, and fully qualified call sites distinguish them. A
+rename would create churn without reducing code or clarifying estimator behavior. If the name
+causes demonstrated confusion later, prefer `build_scaled_county_value_panel` or
+`load_and_build_county_value_panel` over the ambiguous `build_full_county_value_panel`.
+
+### F. `model_selection._cell_complete` compound condition
+
+Retained. This function checks `specification`, `regularization_c` (with `np.isclose`),
+`train_start`, and `validation_year` simultaneously. Collapsing it into `checkpoints.rows_present`
+would lose the floating-point-safe C comparison.
+
+---
+
+## Recommended sequence for remaining work
+
+1. **Item 10** (remove migration re-export) — update the direct tests, then remove the alias.
+2. **Item 11** (audit FHFA load) — three-line substitution, no risk.
+3. **Item 12** (probability and numerical primitives) — add the neutral utility and direct unit
+   tests, then migrate each caller.
+4. **Item 13** (pairwise comparison helper) — moderate refactor, low risk; requires verifying
+   output schemas are unchanged.
+5. **Item 14** (two-stage horizon aggregation) — medium risk; run parity tests after each caller
+   is migrated.
+
+After each step, run `pytest tests/` to confirm the synthetic suite continues to pass.
+Do not combine any of these with changes to specifications, folds, weighting, thresholds,
+mixture estimation, or model-selection objectives.
