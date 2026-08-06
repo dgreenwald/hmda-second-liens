@@ -6,9 +6,9 @@ house-price paper. The primary loan-level estimator is now a formal ridge logist
 than the original Random Forest. It trains on years where `lien_status` is reliably reported,
 uses reverse-time validation to study backward extrapolation, and ultimately imputes lien
 status for 1990-2003. A known-source-prior mixture estimator is the leading method for annual
-count shares and mixture-adjusted probabilities. Read `MIGRATION_PLAN.md`,
-`recommendations_revised.md`, `MODEL_SELECTION_PROTOCOL.md`, and `mixture_estimation.md` before
-changing estimator behavior or validation design.
+count shares and mixture-adjusted probabilities. Read `documentation/MIGRATION_PLAN.md`,
+`documentation/recommendations_revised.md`, `documentation/MODEL_SELECTION_PROTOCOL.md`, and
+`documentation/mixture_estimation.md` before changing estimator behavior or validation design.
 
 ## Project Structure & Module Organization
 - `src/hmda_seconds/` — the package: `config.py` (paths, features, hyperparameters), `clean.py`
@@ -22,6 +22,9 @@ changing estimator behavior or validation design.
   rather than rebuilding them.
 - `scripts/` — thin argparse CLIs, one per pipeline stage, each wrapping one `src/hmda_seconds`
   entry point. These are the `Makefile` targets' bodies; keep logic in `src/`, not here.
+- `documentation/` — methodology plans, frozen protocols, implementation findings, and the
+  refactoring agenda. Keep `README.md` and `AGENTS.md` at the repository root; place other
+  project-level Markdown documentation here unless it belongs to a specific subdirectory.
 - `data/raw/` — gitignored; user-populated HMDA LAR downloads (see `data/README.md` for exact
   source URLs). `data/public/` — small vendored public inputs (FHFA county HPI) that *are*
   committed.
@@ -35,7 +38,8 @@ changing estimator behavior or validation design.
 ## Build, Test, and Development Commands
 - `pip install -e ".[dev]"` — editable install with test tooling.
 - Depends on `dgreenwald-py-tools[ml,datasets]` for the RF wrapper and HMDA/FHFA loaders — reuse
-  those rather than reimplementing (see `MIGRATION_PLAN.md`, "What already exists").
+  those rather than reimplementing (see `documentation/MIGRATION_PLAN.md`, "What already
+  exists").
 - Core logistic workflow: `make selection-data`, `make select-logistic`,
   `make diagnose-logistic-calibration`.
 - Mixture workflow: `make estimate-mixture-shares`, then
@@ -73,8 +77,9 @@ changing estimator behavior or validation design.
 
 ## Testing Guidelines
 - `tests/test_<module>.py`, deterministic assertions on small fabricated DataFrames — exercise
-  the sample-filter edge cases (e.g. `lien_status` restricted to `{1, 2}`, see MIGRATION_PLAN.md)
-  and the validation/metric logic, not visual inspection of plots.
+  the sample-filter edge cases (e.g. `lien_status` restricted to `{1, 2}`, see
+  `documentation/MIGRATION_PLAN.md`) and the validation/metric logic, not visual inspection of
+  plots.
 - Real-data end-to-end runs (`make validate`, etc.) are a manual verification step, not part of
   the automated test suite.
 - The frozen logistic specification is `spline_lti__purchaser_type` with ridge `C=0.1`:
