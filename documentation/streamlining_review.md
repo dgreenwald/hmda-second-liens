@@ -19,7 +19,7 @@ duplication and unnecessary dependency layers.
 ## Baseline status
 
 The Step 8 add/add conflicts identified during the initial audit have been resolved. Ruff,
-Python compilation, and all 161 synthetic tests pass. Streamlining work should preserve this
+Python compilation, and all 162 synthetic tests pass. Streamlining work should preserve this
 baseline and continue to use the bounded real-data family-parity checks where estimator code is
 moved.
 
@@ -27,27 +27,20 @@ moved.
 
 ### 1. Make the density-ratio family modules the actual implementation owners
 
-The new family layer currently wraps implementations that remain in the old top-level modules:
+**Status: completed.**
 
-- `density_ratio/families/logistic.py` imports `mixture_logistic_selection` to fit candidates;
-- `density_ratio/families/gradient_boosting.py` imports `gradient_boosting`; and
-- `density_ratio/families/random_forest.py` imports `random_forest_mixture`.
+The three family modules now own their fitted-model records, feature construction, fitting
+primitives, deterministic paths, and artifact save/load functions. The former top-level
+locations retain compatibility re-exports so existing imports and legacy pickle global lookups
+continue to resolve.
 
-The legacy selection and challenger modules then call back into the family layer during grid
-execution. This reverse dependency is the largest structural source of code growth and creates
-avoidable circular-import pressure.
+Equal-source-prior weighting now lives in a shared density-ratio utility rather than in the
+logistic mixture orchestration module. A common fitted-model artifact helper owns metadata
+construction followed by atomic persistence, while each family still declares its feature
+schema, weighting convention, source prior, and model identity explicitly.
 
-Move each family's fitted-model record, feature construction, fitting primitive, artifact
-save/load functions, and deterministic path construction into its module under
-`density_ratio/families/`. Leave the top-level modules responsible for grids, staged decisions,
-compatibility tables, comparisons, and diagnostics. Preserve old import paths with small
-re-exports only where pickle or public-API compatibility requires them.
-
-As part of this move, centralize the remaining family-specific artifact boilerplate. The common
-artifact module already owns hashing, atomic writes, metadata validation, and sidecars, but each
-family still repeats configuration construction and the sequence of building metadata and
-saving the payload. A narrowly scoped helper can remove that repetition while leaving feature
-schema, weighting convention, and model identity explicit at each call site.
+The top-level modules remain responsible for grids, staged decisions, compatibility tables,
+comparisons, and diagnostics.
 
 ### 2. Finish consolidating common calibration-diagnostic cell generation
 
@@ -183,8 +176,8 @@ dead code.
 2. **Completed:** introduce and adopt common checkpoint/table utilities, including plausibility
    outputs.
 3. **Completed:** centralize categorical pinning and annual schema-tolerant loading.
-4. Move estimator primitives into the three `density_ratio/families/` modules and consolidate
-   artifact boilerplate at the same boundary.
+4. **Completed:** move estimator primitives into the three `density_ratio/families/` modules
+   and consolidate artifact boilerplate at the same boundary.
 5. Introduce and adopt a common calibration-diagnostic cell evaluator.
 6. Remove the fold compatibility shim if it is not public API.
 7. Move substantive logic out of older scripts.

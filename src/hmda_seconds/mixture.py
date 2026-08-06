@@ -14,28 +14,32 @@ from scipy.special import expit, logit
 from sklearn.linear_model import LogisticRegression
 
 from . import config, model_selection
-from .density_ratio import adapters, artifacts, checkpoints
+from .density_ratio import artifacts, checkpoints
 from .density_ratio import folds as temporal_folds
+from .density_ratio.families.logistic import (
+    KnownSourcePriorModel,
+    RatioVariant,
+    classifier_ratio_variant,
+    fit_known_source_prior_model,
+    known_source_prior_model_path,
+    load_known_source_prior_model,
+    save_known_source_prior_model,
+)
 from .density_ratio.protocols import ModelConfiguration
+from .density_ratio.weighting import equal_source_prior_weights
 from .logistic_features import FeatureSpecification, LogisticFeatureTransformer
+
+__all__ = [
+    "KnownSourcePriorModel",
+    "fit_known_source_prior_model",
+    "known_source_prior_model_path",
+    "load_known_source_prior_model",
+    "save_known_source_prior_model",
+]
 
 YEAR_EFFECT_SCALE = 100.0
 SHARE_BOUND = 1e-9
 SHARE_TOLERANCE = 1e-8
-
-
-@dataclass
-class RatioVariant:
-    """A normalized feature-density ratio for one source-model variant."""
-
-    name: str
-    feature_coefficients: np.ndarray
-    log_ratio_offset: float
-    mean_ratio_first: float
-    mean_inverse_ratio_second: float
-
-    def log_ratio(self, features: np.ndarray) -> np.ndarray:
-        return features @ self.feature_coefficients + self.log_ratio_offset
 
 
 @dataclass
@@ -64,24 +68,6 @@ class DensityRatioModels:
             config.SECOND_LIEN_CLASS
         )
         return self.raw_classifier.predict_proba(features)[:, column]
-
-
-@dataclass
-class KnownSourcePriorModel:
-    """Frozen feature transform and equal-prior density-ratio classifier."""
-
-    transformer: LogisticFeatureTransformer
-    ratio: RatioVariant
-    fit_diagnostics: dict
-    specification: FeatureSpecification
-    regularization_c: float
-    train_years: tuple[int, ...]
-    n_training: int = 0
-    n_first_lien: int = 0
-    n_second_lien: int = 0
-
-    def log_ratio(self, frame: pd.DataFrame) -> np.ndarray:
-        return self.ratio.log_ratio(self.transformer.transform(frame))
 
 
 @dataclass(frozen=True)
@@ -270,105 +256,6 @@ def density_ratio_models_path(
     c_label = format(regularization_c, ".12g").replace(".", "p")
     return Path(model_dir) / (
         f"all_ratio_variants__{specification.name}__c_{c_label}"
-        f"__train_{min(years)}_{max(years)}.pkl"
-    )
-
-
-def fit_known_source_prior_model(
-    training: pd.DataFrame,
-    specification: FeatureSpecification,
-    regularization_c: float,
-    model_file: str | Path | None = None,
-) -> KnownSourcePriorModel:
-    """Fit only the frozen equal-source-prior ratio used after selection."""
-    transformer = LogisticFeatureTransformer(specification)
-    features = transformer.fit_transform(training)
-    labels = training[config.LABEL_VAR].to_numpy()
-    y_second = labels == config.SECOND_LIEN_CLASS
-    counts = artifacts.training_counts(
-        training,
-        label_var=config.LABEL_VAR,
-        first_lien_class=config.FIRST_LIEN_CLASS,
-        second_lien_class=config.SECOND_LIEN_CLASS,
-    )
-    prior_weights = equal_source_prior_weights(training, y_second)
-    models, diagnostics = model_selection.fit_regularization_path(
-        features, labels, [regularization_c], sample_weight=prior_weights
-    )
-    classifier = models[regularization_c]
-    fitted = KnownSourcePriorModel(
-        transformer=transformer,
-        ratio=classifier_ratio_variant(
-            "known_source_prior", features, y_second, classifier
-        ),
-        fit_diagnostics=diagnostics[regularization_c],
-        specification=specification,
-        regularization_c=regularization_c,
-        train_years=tuple(sorted(pd.unique(training["year"]))),
-        n_training=counts[0],
-        n_first_lien=counts[1],
-        n_second_lien=counts[2],
-    )
-    if model_file is not None:
-        save_known_source_prior_model(fitted, model_file)
-    return fitted
-
-
-def save_known_source_prior_model(
-    model: KnownSourcePriorModel, model_file: str | Path
-) -> None:
-    """Persist every parameter needed to reproduce a fold's log ratios."""
-    model_file = Path(model_file)
-    adapted = adapters.adapt_known_source_prior_model(model)
-    metadata = artifacts.build_metadata(
-        model_id=adapted.model_id,
-        configuration=ModelConfiguration.from_mapping(
-            "logistic",
-            model.specification.name,
-            {"C": model.regularization_c},
-        ),
-        train_years=model.train_years,
-        counts=(
-            getattr(model, "n_training", 0),
-            getattr(model, "n_first_lien", 0),
-            getattr(model, "n_second_lien", 0),
-        ),
-        feature_names=tuple(model.transformer.feature_names_),
-        weighting="equal_class_mass_within_source_year",
-        source_prior="one_half",
-        artifact_path=model_file,
-    )
-    artifacts.save_pickle_artifact(model, model_file, metadata)
-
-
-def load_known_source_prior_model(
-    model_file: str | Path,
-) -> KnownSourcePriorModel:
-    """Load a trusted local known-prior fold model."""
-    model, metadata = artifacts.load_pickle_artifact(
-        model_file, KnownSourcePriorModel
-    )
-    artifacts.validate_metadata_identity(
-        metadata,
-        model_id=adapters.adapt_known_source_prior_model(model).model_id,
-        train_years=model.train_years,
-    )
-    return model
-
-
-def known_source_prior_model_path(
-    train_years: Iterable[int],
-    specification: FeatureSpecification,
-    regularization_c: float,
-    model_dir: str | Path = config.MIXTURE_FOLD_MODEL_DIR,
-) -> Path:
-    """Return the deterministic artifact path for a frozen fold model."""
-    years = tuple(train_years)
-    if not years:
-        raise ValueError("train_years cannot be empty")
-    c_label = format(regularization_c, ".12g").replace(".", "p")
-    return Path(model_dir) / (
-        f"known_source_prior__{specification.name}__c_{c_label}"
         f"__train_{min(years)}_{max(years)}.pkl"
     )
 
@@ -714,43 +601,6 @@ def _normalized_ratio_variant(
         mean_ratio_first=mean_ratio_first,
         mean_inverse_ratio_second=mean_inverse_ratio_second,
     )
-
-
-def classifier_ratio_variant(
-    name: str,
-    features: np.ndarray,
-    y_second: np.ndarray,
-    classifier: LogisticRegression,
-) -> RatioVariant:
-    """Use the full equal-prior classifier predictor as a density ratio."""
-    coefficients = classifier.coef_[0].copy()
-    offset = float(classifier.intercept_[0])
-    score = features @ coefficients + offset
-    return RatioVariant(
-        name=name,
-        feature_coefficients=coefficients,
-        log_ratio_offset=offset,
-        mean_ratio_first=float(np.exp(_log_mean_exp(score[~y_second]))),
-        mean_inverse_ratio_second=float(
-            np.exp(_log_mean_exp(-score[y_second]))
-        ),
-    )
-
-
-def equal_source_prior_weights(
-    training: pd.DataFrame, y_second: np.ndarray
-) -> np.ndarray:
-    """Give both lien classes half of each source year's total weight."""
-    weights = np.empty(len(training), dtype=float)
-    years = training["year"].to_numpy()
-    for year in np.unique(years):
-        in_year = years == year
-        share = float(y_second[in_year].mean())
-        if not 0 < share < 1:
-            raise ValueError(f"Source year {year} must contain both lien classes")
-        weights[in_year & y_second] = 0.5 / share
-        weights[in_year & ~y_second] = 0.5 / (1.0 - share)
-    return weights
 
 
 def _source_year_diagnostics(

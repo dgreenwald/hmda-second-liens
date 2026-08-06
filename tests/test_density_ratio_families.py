@@ -9,7 +9,6 @@ from hmda_seconds import (
     gradient_boosting,
     logistic_features,
     mixture,
-    mixture_logistic_selection,
     random_forest_mixture,
 )
 from hmda_seconds.density_ratio import (
@@ -23,6 +22,21 @@ from hmda_seconds.density_ratio.families import (
     LogisticFamily,
     RandomForestFamily,
 )
+from hmda_seconds.density_ratio.families import gradient_boosting as boosting_family
+from hmda_seconds.density_ratio.families import logistic as logistic_family
+from hmda_seconds.density_ratio.families import random_forest as forest_family
+
+
+def test_legacy_modules_reexport_family_owned_model_types():
+    assert mixture.KnownSourcePriorModel is logistic_family.KnownSourcePriorModel
+    assert (
+        gradient_boosting.BoostingDensityRatioModel
+        is boosting_family.BoostingDensityRatioModel
+    )
+    assert (
+        random_forest_mixture.RandomForestDensityRatioModel
+        is forest_family.RandomForestDensityRatioModel
+    )
 
 
 def synthetic_frame(n=500, seed=17):
@@ -54,14 +68,14 @@ def test_logistic_family_reuses_path_and_matches_existing_fit(tmp_path, monkeypa
         for regularization_c in (0.1, 1.0)
     ]
     calls = []
-    original = mixture_logistic_selection.fit_candidate_path
+    original = logistic_family.fit_candidate_path
 
     def recording_fit(training, specification, c_values):
         calls.append(tuple(c_values))
         return original(training, specification, c_values)
 
     monkeypatch.setattr(
-        mixture_logistic_selection, "fit_candidate_path", recording_fit
+        logistic_family, "fit_candidate_path", recording_fit
     )
     family = LogisticFamily(tmp_path)
     fitted = family.fit_many(training, configurations, train_years=(2005, 2006))
@@ -170,9 +184,7 @@ def test_family_reuses_matching_saved_fit(tmp_path, monkeypatch):
     def unexpected_fit(*args, **kwargs):
         raise AssertionError("saved fit should have been reused")
 
-    monkeypatch.setattr(
-        mixture_logistic_selection, "fit_candidate_path", unexpected_fit
-    )
+    monkeypatch.setattr(logistic_family, "fit_candidate_path", unexpected_fit)
     second = family.fit_many(
         training, [configuration], train_years=(2005, 2006)
     )

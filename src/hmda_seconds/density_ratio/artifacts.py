@@ -105,6 +105,32 @@ def save_pickle_artifact(
         metadata_temp.unlink(missing_ok=True)
 
 
+def save_fitted_model(
+    payload: object,
+    artifact_path: str | Path,
+    *,
+    model_id: str,
+    configuration: ModelConfiguration,
+    train_years: tuple[int, ...],
+    counts: tuple[int, int, int],
+    feature_names: tuple[str, ...],
+    weighting: str,
+    source_prior: str,
+) -> ModelArtifactMetadata:
+    """Build metadata and atomically persist one fitted family model."""
+    metadata = build_metadata(
+        model_id=model_id,
+        configuration=configuration,
+        train_years=train_years,
+        counts=counts,
+        feature_names=feature_names,
+        weighting=weighting,
+        source_prior=source_prior,
+        artifact_path=artifact_path,
+    )
+    return save_pickle_artifact(payload, artifact_path, metadata)
+
+
 def load_pickle_artifact(
     artifact_path: str | Path,
     expected_type: type[T],

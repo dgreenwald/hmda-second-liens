@@ -9,9 +9,9 @@ import numpy as np
 import pandas as pd
 
 if TYPE_CHECKING:
-    from ..gradient_boosting import BoostingDensityRatioModel
-    from ..mixture import KnownSourcePriorModel
-    from ..random_forest_mixture import RandomForestDensityRatioModel
+    from .families.gradient_boosting import BoostingDensityRatioModel
+    from .families.logistic import KnownSourcePriorModel
+    from .families.random_forest import RandomForestDensityRatioModel
 
 
 class _ExistingLogRatioModel(Protocol):
@@ -46,7 +46,7 @@ def adapt_known_source_prior_model(
     fitted: KnownSourcePriorModel, model_id: str | None = None
 ) -> ExistingFittedModelAdapter:
     """Adapt an existing logistic density-ratio fit."""
-    from ..mixture import KnownSourcePriorModel
+    from .families.logistic import KnownSourcePriorModel
 
     _require_type(fitted, KnownSourcePriorModel)
     if model_id is None:
@@ -62,7 +62,7 @@ def adapt_boosting_model(
     fitted: BoostingDensityRatioModel, model_id: str | None = None
 ) -> ExistingFittedModelAdapter:
     """Adapt an existing histogram-gradient-boosting fit."""
-    from ..gradient_boosting import BoostingDensityRatioModel
+    from .families.gradient_boosting import BoostingDensityRatioModel
 
     _require_type(fitted, BoostingDensityRatioModel)
     if model_id is None:
@@ -77,7 +77,7 @@ def adapt_random_forest_model(
     fitted: RandomForestDensityRatioModel, model_id: str | None = None
 ) -> ExistingFittedModelAdapter:
     """Adapt an existing Random Forest density-ratio fit."""
-    from ..random_forest_mixture import RandomForestDensityRatioModel
+    from .families.random_forest import RandomForestDensityRatioModel
 
     _require_type(fitted, RandomForestDensityRatioModel)
     if model_id is None:

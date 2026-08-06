@@ -3,89 +3,37 @@
 from __future__ import annotations
 
 import json
-import time
 from collections.abc import Iterable
-from dataclasses import asdict, dataclass
+from dataclasses import asdict
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from scipy.special import logit
-from sklearn.ensemble import HistGradientBoostingClassifier
 
-from . import calibration, config, mixture, model_selection
-from .density_ratio import adapters, artifacts, checkpoints, evaluation
+from . import calibration, config, model_selection
+from .density_ratio import adapters, checkpoints, evaluation
 from .density_ratio import folds as temporal_folds
+from .density_ratio.families.gradient_boosting import (
+    BoostingDensityRatioModel,
+    BoostingParameters,
+    boosting_features,
+    boosting_model_path,
+    fit_boosting_ratio_model,
+    load_boosting_model,
+    save_boosting_model,
+)
 from .density_ratio.pipeline import run_grid
 from .density_ratio.protocols import ModelConfiguration
 
-BOOSTING_FEATURES = [*config.CONTINUOUS_VARS, *config.CATEGORY_VARS]
-CATEGORICAL_MASK = np.array([False, False, True, True])
-PROBABILITY_EPSILON = 1e-12
-
-
-@dataclass(frozen=True, order=True)
-class BoostingParameters:
-    """A reproducible, compact histogram-boosting specification."""
-
-    max_leaf_nodes: int
-    learning_rate: float
-    max_iter: int = config.BOOSTING_BASE_MAX_ITER
-    l2_regularization: float = config.BOOSTING_BASE_L2
-    min_samples_leaf: int = config.BOOSTING_MIN_SAMPLES_LEAF
-
-    @property
-    def identifier(self) -> str:
-        """Return a stable label suitable for tables and artifact names."""
-        rate = _number_label(self.learning_rate)
-        l2 = _number_label(self.l2_regularization)
-        return (
-            f"leaves_{self.max_leaf_nodes}__lr_{rate}__iter_{self.max_iter}"
-            f"__l2_{l2}__minleaf_{self.min_samples_leaf}"
-        )
-
-
-@dataclass
-class BoostingDensityRatioModel:
-    """Persisted equal-source-prior boosting density-ratio model."""
-
-    classifier: HistGradientBoostingClassifier
-    parameters: BoostingParameters
-    train_years: tuple[int, ...]
-    feature_names: tuple[str, ...] = tuple(BOOSTING_FEATURES)
-    n_training: int = 0
-    n_first_lien: int = 0
-    n_second_lien: int = 0
-
-    def log_ratio(self, frame: pd.DataFrame) -> np.ndarray:
-        """Return clipped balanced-prior log odds as the log density ratio."""
-        features = boosting_features(frame)
-        second_column = list(self.classifier.classes_).index(
-            config.SECOND_LIEN_CLASS
-        )
-        probability = self.classifier.predict_proba(features)[:, second_column]
-        probability = np.clip(
-            probability, PROBABILITY_EPSILON, 1.0 - PROBABILITY_EPSILON
-        )
-        return logit(probability)
-
-
-def boosting_features(frame: pd.DataFrame) -> np.ndarray:
-    """Construct the four primitive boosting features without engineering."""
-    missing = set(BOOSTING_FEATURES) - set(frame.columns)
-    if missing:
-        raise ValueError(f"Missing boosting features: {sorted(missing)}")
-    features = frame[BOOSTING_FEATURES].to_numpy(dtype=float)
-    if not np.isfinite(features).all():
-        raise ValueError("Boosting features contain non-finite values")
-    for index, variable in enumerate(config.CATEGORY_VARS, start=2):
-        unknown = set(np.unique(features[:, index])) - set(
-            config.CATEGORY_LEVELS[variable]
-        )
-        if unknown:
-            raise ValueError(f"Unknown {variable} levels: {sorted(unknown)}")
-    return features
-
+__all__ = [
+    "BoostingDensityRatioModel",
+    "BoostingParameters",
+    "boosting_features",
+    "boosting_model_path",
+    "fit_boosting_ratio_model",
+    "load_boosting_model",
+    "save_boosting_model",
+]
 
 def structure_grid() -> list[BoostingParameters]:
     """Return the frozen six-candidate structure screen."""
@@ -119,49 +67,6 @@ def refinement_grid(best: BoostingParameters) -> list[BoostingParameters]:
         for l2 in config.BOOSTING_REFINEMENT_L2
     )
     return sorted(set(candidates) - {best})
-
-
-def fit_boosting_ratio_model(
-    training: pd.DataFrame,
-    parameters: BoostingParameters,
-) -> tuple[BoostingDensityRatioModel, dict]:
-    """Fit an equal-source-prior histogram-boosting classifier."""
-    features = boosting_features(training)
-    labels = training[config.LABEL_VAR].to_numpy()
-    is_second = labels == config.SECOND_LIEN_CLASS
-    weights = mixture.equal_source_prior_weights(training, is_second)
-    counts = artifacts.training_counts(
-        training,
-        label_var=config.LABEL_VAR,
-        first_lien_class=config.FIRST_LIEN_CLASS,
-        second_lien_class=config.SECOND_LIEN_CLASS,
-    )
-    classifier = HistGradientBoostingClassifier(
-        loss="log_loss",
-        learning_rate=parameters.learning_rate,
-        max_iter=parameters.max_iter,
-        max_leaf_nodes=parameters.max_leaf_nodes,
-        min_samples_leaf=parameters.min_samples_leaf,
-        l2_regularization=parameters.l2_regularization,
-        categorical_features=CATEGORICAL_MASK,
-        early_stopping=False,
-        random_state=config.BOOSTING_RANDOM_STATE,
-    )
-    start = time.perf_counter()
-    classifier.fit(features, labels, sample_weight=weights)
-    fit_seconds = time.perf_counter() - start
-    fitted = BoostingDensityRatioModel(
-        classifier=classifier,
-        parameters=parameters,
-        train_years=tuple(sorted(pd.unique(training["year"]))),
-        n_training=counts[0],
-        n_first_lien=counts[1],
-        n_second_lien=counts[2],
-    )
-    return fitted, {
-        "fit_seconds": fit_seconds,
-        "n_iter_fitted": int(classifier.n_iter_),
-    }
 
 
 def evaluate_target_year(
@@ -637,61 +542,6 @@ def compare_with_logistic(
     return comparison
 
 
-def save_boosting_model(
-    model: BoostingDensityRatioModel, model_file: str | Path
-) -> None:
-    """Persist a complete boosted density-ratio fit."""
-    model_file = Path(model_file)
-    adapted = adapters.adapt_boosting_model(model)
-    metadata = artifacts.build_metadata(
-        model_id=adapted.model_id,
-        configuration=ModelConfiguration.from_mapping(
-            "hist_gradient_boosting",
-            "primitive_continuous_and_native_categories",
-            asdict(model.parameters),
-            random_seed=config.BOOSTING_RANDOM_STATE,
-        ),
-        train_years=model.train_years,
-        counts=(
-            getattr(model, "n_training", 0),
-            getattr(model, "n_first_lien", 0),
-            getattr(model, "n_second_lien", 0),
-        ),
-        feature_names=model.feature_names,
-        weighting="equal_class_mass_within_source_year",
-        source_prior="one_half",
-        artifact_path=model_file,
-    )
-    artifacts.save_pickle_artifact(model, model_file, metadata)
-
-
-def load_boosting_model(model_file: str | Path) -> BoostingDensityRatioModel:
-    """Load a trusted local boosted density-ratio fit."""
-    model, metadata = artifacts.load_pickle_artifact(
-        model_file, BoostingDensityRatioModel
-    )
-    artifacts.validate_metadata_identity(
-        metadata,
-        model_id=adapters.adapt_boosting_model(model).model_id,
-        train_years=model.train_years,
-    )
-    return model
-
-
-def boosting_model_path(
-    train_years: Iterable[int],
-    parameters: BoostingParameters,
-    model_dir: str | Path = config.BOOSTING_FOLD_MODEL_DIR,
-) -> Path:
-    """Return the deterministic path for one fold/candidate artifact."""
-    years = tuple(train_years)
-    if not years:
-        raise ValueError("train_years cannot be empty")
-    return Path(model_dir) / (
-        f"{parameters.identifier}__train_{min(years)}_{max(years)}.pkl"
-    )
-
-
 def _parameters_from_row(row: pd.Series) -> BoostingParameters:
     return BoostingParameters(
         max_leaf_nodes=int(row["max_leaf_nodes"]),
@@ -700,10 +550,6 @@ def _parameters_from_row(row: pd.Series) -> BoostingParameters:
         l2_regularization=float(row["l2_regularization"]),
         min_samples_leaf=int(row["min_samples_leaf"]),
     )
-
-
-def _number_label(value: float) -> str:
-    return format(value, ".12g").replace(".", "p")
 
 
 def _diagnostic_cell_present(
