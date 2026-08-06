@@ -14,7 +14,7 @@ from scipy.special import logit
 from sklearn.ensemble import HistGradientBoostingClassifier
 
 from . import calibration, config, mixture, model_selection
-from .density_ratio import adapters, artifacts, evaluation
+from .density_ratio import adapters, artifacts, checkpoints, evaluation
 from .density_ratio import folds as temporal_folds
 from .density_ratio.pipeline import run_grid
 from .density_ratio.protocols import ModelConfiguration
@@ -255,11 +255,11 @@ def run_boosting_challenger(
     data_by_year = model_selection.load_selection_years(data_dir=data_dir)
     folds = list(reversed(temporal_folds.reverse_folds()))
     cells_file = output_dir / "boosting_challenger_checkpoint_cells.csv"
-    cells = _read_csv_if_exists(cells_file)
+    cells = checkpoints.read_csv(cells_file)
     if cells.empty:
         # Migrate runs made before the complete screen checkpoint and compact
         # final-cell deliverable were assigned distinct filenames.
-        cells = _read_csv_if_exists(output_dir / "boosting_challenger_cells.csv")
+        cells = checkpoints.read_csv(output_dir / "boosting_challenger_cells.csv")
 
     screen_fold = folds[0]
     screen_candidates = structure_grid()
@@ -391,8 +391,8 @@ def run_boosting_diagnostics(
     figure_dir.mkdir(parents=True, exist_ok=True)
     reverse_metrics_file = output_dir / "boosting_calibration_reverse_metrics.csv"
     reverse_bins_file = output_dir / "boosting_calibration_reverse_bins.csv"
-    reverse_metrics = _read_csv_if_exists(reverse_metrics_file)
-    reverse_bins = _read_csv_if_exists(reverse_bins_file)
+    reverse_metrics = checkpoints.read_csv(reverse_metrics_file)
+    reverse_bins = checkpoints.read_csv(reverse_bins_file)
     for fold in reversed(temporal_folds.reverse_folds()):
         model = load_boosting_model(
             boosting_model_path(fold.train_years, parameters, fold_model_dir)
@@ -418,8 +418,8 @@ def run_boosting_diagnostics(
 
     forward_metrics_file = output_dir / "boosting_calibration_forward_metrics.csv"
     forward_bins_file = output_dir / "boosting_calibration_forward_bins.csv"
-    forward_metrics = _read_csv_if_exists(forward_metrics_file)
-    forward_bins = _read_csv_if_exists(forward_bins_file)
+    forward_metrics = checkpoints.read_csv(forward_metrics_file)
+    forward_bins = checkpoints.read_csv(forward_bins_file)
     forward_fold = temporal_folds.forward_fold(
         config.TRAIN_YEARS, config.VALIDATE_YEARS
     )
@@ -513,8 +513,13 @@ def _diagnose_cell(
     bin_rows = calibration.reliability_bins(
         y_second, probability, n_bins
     ).assign(**metadata)
-    metrics = _replace_diagnostic_cell(metrics, metric_row, metrics_file)
-    bins = _replace_diagnostic_cell(bins, bin_rows, bins_file)
+    key_columns = ("train_start", "validation_year")
+    metrics = checkpoints.replace_rows(
+        metrics, metric_row, metrics_file, key_columns=key_columns
+    )
+    bins = checkpoints.replace_rows(
+        bins, bin_rows, bins_file, key_columns=key_columns
+    )
     return metrics, bins
 
 
@@ -599,7 +604,7 @@ def evaluate_grid(
         .sort_values(keys)
         .reset_index(drop=True)
     )
-    cells.to_csv(checkpoint_file, index=False)
+    checkpoints.write_csv(cells, checkpoint_file)
     return cells
 
 
@@ -701,31 +706,10 @@ def _number_label(value: float) -> str:
     return format(value, ".12g").replace(".", "p")
 
 
-def _read_csv_if_exists(path: Path) -> pd.DataFrame:
-    return pd.read_csv(path) if path.exists() else pd.DataFrame()
-
-
 def _diagnostic_cell_present(
     frame: pd.DataFrame, train_start: int, validation_year: int
 ) -> bool:
-    return not frame.empty and bool(
-        (
-            (frame["train_start"] == train_start)
-            & (frame["validation_year"] == validation_year)
-        ).any()
+    return checkpoints.rows_present(
+        frame,
+        {"train_start": train_start, "validation_year": validation_year},
     )
-
-
-def _replace_diagnostic_cell(
-    existing: pd.DataFrame, new: pd.DataFrame, path: Path
-) -> pd.DataFrame:
-    row = new.iloc[0]
-    if not existing.empty:
-        keep = ~(
-            (existing["train_start"] == row["train_start"])
-            & (existing["validation_year"] == row["validation_year"])
-        )
-        existing = existing.loc[keep]
-    combined = pd.concat([existing, new], ignore_index=True)
-    combined.to_csv(path, index=False)
-    return combined

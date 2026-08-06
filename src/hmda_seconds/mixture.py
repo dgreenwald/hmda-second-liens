@@ -14,7 +14,7 @@ from scipy.special import expit, logit
 from sklearn.linear_model import LogisticRegression
 
 from . import config, model_selection
-from .density_ratio import adapters, artifacts
+from .density_ratio import adapters, artifacts, checkpoints
 from .density_ratio import folds as temporal_folds
 from .density_ratio.protocols import ModelConfiguration
 from .logistic_features import FeatureSpecification, LogisticFeatureTransformer
@@ -472,9 +472,9 @@ def run_reverse_mixture_validation(
     cells_file = output_dir / "mixture_reverse_cell_shares.csv"
     intercepts_file = output_dir / "mixture_source_year_intercepts.csv"
     ratio_file = output_dir / "mixture_ratio_fit_diagnostics.csv"
-    cells = _read_csv_if_exists(cells_file)
-    intercepts = _read_csv_if_exists(intercepts_file)
-    ratio_diagnostics = _read_csv_if_exists(ratio_file)
+    cells = checkpoints.read_csv(cells_file)
+    intercepts = checkpoints.read_csv(intercepts_file)
+    ratio_diagnostics = checkpoints.read_csv(ratio_file)
 
     folds = list(reversed(temporal_folds.reverse_folds()))
     if train_starts is not None:
@@ -520,12 +520,18 @@ def run_reverse_mixture_validation(
             "train_end": fold.train_end,
         }
         fold_intercepts = fitted.source_year_diagnostics.assign(**source_metadata)
-        intercepts = _replace_fold_checkpoint(
-            intercepts, fold_intercepts, intercepts_file, fold.train_start
+        intercepts = checkpoints.replace_rows(
+            intercepts,
+            fold_intercepts,
+            intercepts_file,
+            key_columns=("train_start",),
         )
         fold_ratio = fitted.fit_diagnostics.assign(**source_metadata)
-        ratio_diagnostics = _replace_fold_checkpoint(
-            ratio_diagnostics, fold_ratio, ratio_file, fold.train_start
+        ratio_diagnostics = checkpoints.replace_rows(
+            ratio_diagnostics,
+            fold_ratio,
+            ratio_file,
+            key_columns=("train_start",),
         )
 
         for validation_year in missing_years:
@@ -535,7 +541,12 @@ def run_reverse_mixture_validation(
                 fold,
                 validation_year,
             )
-            cells = _upsert_cell_checkpoint(cells, row, cells_file)
+            cells = checkpoints.replace_rows(
+                cells,
+                row,
+                cells_file,
+                key_columns=("train_start", "validation_year"),
+            )
 
     horizon_summary, overall_summary = aggregate_share_errors(cells)
     horizon_summary.to_csv(
@@ -799,50 +810,15 @@ def _finite_vector(values: np.ndarray, name: str) -> np.ndarray:
     return array
 
 
-def _read_csv_if_exists(path: Path) -> pd.DataFrame:
-    return pd.read_csv(path) if path.exists() else pd.DataFrame()
-
-
 def _cell_present(
     cells: pd.DataFrame, train_start: int, validation_year: int
 ) -> bool:
-    required = "mixture_share_known_source_prior"
-    if cells.empty or required not in cells:
-        return False
-    matching = (
-        (cells["train_start"] == train_start)
-        & (cells["validation_year"] == validation_year)
+    return checkpoints.rows_present(
+        cells,
+        {"train_start": train_start, "validation_year": validation_year},
+        required_non_null=("mixture_share_known_source_prior",),
     )
-    return bool((matching & cells[required].notna()).any())
 
 
 def _fold_present(frame: pd.DataFrame, train_start: int) -> bool:
-    return not frame.empty and bool((frame["train_start"] == train_start).any())
-
-
-def _replace_fold_checkpoint(
-    existing: pd.DataFrame,
-    new: pd.DataFrame,
-    path: Path,
-    train_start: int,
-) -> pd.DataFrame:
-    if not existing.empty:
-        existing = existing.loc[existing["train_start"] != train_start]
-    combined = pd.concat([existing, new], ignore_index=True)
-    combined.to_csv(path, index=False)
-    return combined
-
-
-def _upsert_cell_checkpoint(
-    existing: pd.DataFrame, new: pd.DataFrame, path: Path
-) -> pd.DataFrame:
-    row = new.iloc[0]
-    if not existing.empty:
-        keep = ~(
-            (existing["train_start"] == row["train_start"])
-            & (existing["validation_year"] == row["validation_year"])
-        )
-        existing = existing.loc[keep]
-    combined = pd.concat([existing, new], ignore_index=True)
-    combined.to_csv(path, index=False)
-    return combined
+    return checkpoints.rows_present(frame, {"train_start": train_start})

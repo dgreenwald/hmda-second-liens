@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 
 from . import calibration, config, mixture, model_selection
-from .density_ratio import adapters, artifacts, evaluation
+from .density_ratio import adapters, artifacts, checkpoints, evaluation
 from .density_ratio import folds as temporal_folds
 from .density_ratio.pipeline import run_grid
 from .density_ratio.protocols import ModelConfiguration
@@ -160,7 +160,7 @@ def evaluate_grid(
         .sort_values(keys)
         .reset_index(drop=True)
     )
-    cells.to_csv(checkpoint_file, index=False)
+    checkpoints.write_csv(cells, checkpoint_file)
     return cells
 
 
@@ -292,7 +292,7 @@ def run_mixture_logistic_selection(
     incumbent = model_selection.load_selected_model(incumbent_file)
     folds = list(reversed(temporal_folds.reverse_folds()))
     checkpoint_file = output_dir / "mixture_logistic_selection_checkpoint.csv"
-    cells = _read(checkpoint_file)
+    cells = checkpoints.read_csv(checkpoint_file)
 
     specifications = candidate_specifications()
     screen_fold = folds[0]
@@ -493,7 +493,7 @@ def evaluate_forward(
 ) -> pd.DataFrame:
     """Apply the final mixture-native winner to every forward year."""
     checkpoint_file = Path(checkpoint_file)
-    metrics = _read(checkpoint_file)
+    metrics = checkpoints.read_csv(checkpoint_file)
     fold = temporal_folds.forward_fold(model.train_years, config.VALIDATE_YEARS)
     for year in fold.target_years:
         if not metrics.empty and bool((metrics["validation_year"] == year).any()):
@@ -531,20 +531,10 @@ def evaluate_forward(
                 )
             ]
         )
-        metrics = _replace_forward(metrics, row, checkpoint_file)
+        metrics = checkpoints.replace_rows(
+            metrics,
+            row,
+            checkpoint_file,
+            key_columns=("validation_year",),
+        )
     return metrics
-
-
-def _read(path: Path) -> pd.DataFrame:
-    return pd.read_csv(path) if path.exists() else pd.DataFrame()
-
-
-def _replace_forward(
-    existing: pd.DataFrame, new: pd.DataFrame, path: Path
-) -> pd.DataFrame:
-    year = int(new["validation_year"].iloc[0])
-    if not existing.empty:
-        existing = existing.loc[existing["validation_year"] != year]
-    combined = pd.concat([existing, new], ignore_index=True)
-    combined.to_csv(path, index=False)
-    return combined

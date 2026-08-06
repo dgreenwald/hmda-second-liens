@@ -19,7 +19,7 @@ duplication and unnecessary dependency layers.
 ## Baseline status
 
 The Step 8 add/add conflicts identified during the initial audit have been resolved. Ruff,
-Python compilation, and all 153 synthetic tests pass. Streamlining work should preserve this
+Python compilation, and all 158 synthetic tests pass. Streamlining work should preserve this
 baseline and continue to use the bounded real-data family-parity checks where estimator code is
 moved.
 
@@ -73,6 +73,8 @@ other specialized outputs without duplicating the common evaluation and reliabil
 
 ### 3. Consolidate CSV checkpoint utilities
 
+**Status: completed.**
+
 There are six identical helpers that read a CSV if it exists and otherwise return an empty
 DataFrame. At least five additional functions implement nearly identical row replacement:
 
@@ -87,15 +89,16 @@ Representative copies appear in `mixture.py`, `gradient_boosting.py`,
 `threshold_diagnostics.py`. `plausibility.py` uses the same pattern with `year` as its logical
 key and should use the shared utility as well.
 
-Add a small shared module, such as `density_ratio/checkpoints.py`, with:
+The shared `density_ratio/checkpoints.py` module now provides:
 
-- `read_table(path)`;
+- `read_csv(path)`;
 - `rows_present(frame, keys)`;
 - `replace_rows(existing, new, key_columns)`; and
-- an atomic CSV writer.
+- atomic `write_csv` and `append_rows` operations.
 
-This should remove roughly 100 lines while ensuring consistent interruption and replacement
-behavior across diagnostic workflows.
+The logistic, mixture, boosting, Random Forest, threshold, mixture-reselection, and plausibility
+workflows use these primitives. Replacement batches must represent exactly one logical key, and
+all checkpoint writes use same-directory temporary files followed by atomic replacement.
 
 ### 4. Consolidate identical forward-summary builders
 
@@ -178,7 +181,8 @@ dead code.
 1. **Completed:** use the canonical sample-metric pathway and metric-record schema, then apply separate
    forward and reverse aggregation rules. Consolidate identical summary builders at this
    boundary.
-2. Introduce and adopt common checkpoint/table utilities, including plausibility outputs.
+2. **Completed:** introduce and adopt common checkpoint/table utilities, including plausibility
+   outputs.
 3. Centralize categorical pinning and, if cleanly expressible, annual schema-tolerant loading.
 4. Move estimator primitives into the three `density_ratio/families/` modules and consolidate
    artifact boilerplate at the same boundary.

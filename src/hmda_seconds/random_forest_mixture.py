@@ -14,7 +14,7 @@ from scipy.special import logit
 from sklearn.ensemble import RandomForestClassifier
 
 from . import calibration, config, mixture, model_selection
-from .density_ratio import adapters, artifacts, evaluation
+from .density_ratio import adapters, artifacts, checkpoints, evaluation
 from .density_ratio import folds as temporal_folds
 from .density_ratio.pipeline import run_grid
 from .density_ratio.protocols import ModelConfiguration
@@ -134,8 +134,8 @@ def run_random_forest_mixture(
     reverse_metrics = _reverse_metrics_from_runner(
         data_by_year, reverse_folds, fold_model_dir
     )
-    reverse_metrics.to_csv(reverse_metrics_file, index=False)
-    reverse_bins = _read(reverse_bins_file)
+    checkpoints.write_csv(reverse_metrics, reverse_metrics_file)
+    reverse_bins = checkpoints.read_csv(reverse_bins_file)
     for fold in reverse_folds:
         path = forest_model_path(fold.train_years, fold_model_dir)
         model = load_forest_model(path)
@@ -172,8 +172,8 @@ def run_random_forest_mixture(
 
     forward_metrics_file = output_dir / "rf_mixture_forward_metrics.csv"
     forward_bins_file = output_dir / "rf_mixture_forward_bins.csv"
-    forward_metrics = _read(forward_metrics_file)
-    forward_bins = _read(forward_bins_file)
+    forward_metrics = checkpoints.read_csv(forward_metrics_file)
+    forward_bins = checkpoints.read_csv(forward_bins_file)
     forward_fold = temporal_folds.forward_fold(
         final_years, config.VALIDATE_YEARS
     )
@@ -418,36 +418,20 @@ def _evaluate_cell(
     bin_rows = calibration.reliability_bins(
         y_second, probability, n_bins
     ).assign(**metadata)
-    metrics = _replace_cell(metrics, metric_row, metrics_file)
-    bins = _replace_cell(bins, bin_rows, bins_file)
+    key_columns = ("train_start", "validation_year")
+    metrics = checkpoints.replace_rows(
+        metrics, metric_row, metrics_file, key_columns=key_columns
+    )
+    bins = checkpoints.replace_rows(
+        bins, bin_rows, bins_file, key_columns=key_columns
+    )
     return metrics, bins
-
-
-def _read(path: Path) -> pd.DataFrame:
-    return pd.read_csv(path) if path.exists() else pd.DataFrame()
 
 
 def _cell_present(
     frame: pd.DataFrame, train_start: int, validation_year: int
 ) -> bool:
-    return not frame.empty and bool(
-        (
-            (frame["train_start"] == train_start)
-            & (frame["validation_year"] == validation_year)
-        ).any()
+    return checkpoints.rows_present(
+        frame,
+        {"train_start": train_start, "validation_year": validation_year},
     )
-
-
-def _replace_cell(
-    existing: pd.DataFrame, new: pd.DataFrame, path: Path
-) -> pd.DataFrame:
-    row = new.iloc[0]
-    if not existing.empty:
-        keep = ~(
-            (existing["train_start"] == row["train_start"])
-            & (existing["validation_year"] == row["validation_year"])
-        )
-        existing = existing.loc[keep]
-    combined = pd.concat([existing, new], ignore_index=True)
-    combined.to_csv(path, index=False)
-    return combined

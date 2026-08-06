@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 
 from . import config, model_selection
-from .density_ratio import evaluation
+from .density_ratio import checkpoints, evaluation
 from .density_ratio import folds as temporal_folds
 
 DEFAULT_N_BINS = 10
@@ -278,12 +278,15 @@ def _run_reverse_diagnostics(
             )
             bin_rows = reliability_bins(y_second, probability, n_bins).assign(**metadata)
             if not _bin_complete(bins, fold.train_start, validation_year):
-                bins = _append_checkpoint(bins, bin_rows, bins_file)
+                bins = checkpoints.append_rows(bins, bin_rows, bins_file)
             if not _metric_complete(
                 metrics, fold.train_start, validation_year
             ):
-                metrics = _upsert_metric_checkpoint(
-                    metrics, metric_row, metrics_file
+                metrics = checkpoints.replace_rows(
+                    metrics,
+                    metric_row,
+                    metrics_file,
+                    key_columns=("train_start", "validation_year"),
                 )
     return metrics.reset_index(drop=True), bins.reset_index(drop=True)
 
@@ -328,9 +331,14 @@ def _run_forward_diagnostics(
         )
         bin_rows = reliability_bins(y_second, probability, n_bins).assign(**metadata)
         if not _bin_complete(bins, fold.train_start, validation_year):
-            bins = _append_checkpoint(bins, bin_rows, bins_file)
+            bins = checkpoints.append_rows(bins, bin_rows, bins_file)
         if not _metric_complete(metrics, fold.train_start, validation_year):
-            metrics = _upsert_metric_checkpoint(metrics, metric_row, metrics_file)
+            metrics = checkpoints.replace_rows(
+                metrics,
+                metric_row,
+                metrics_file,
+                key_columns=("train_start", "validation_year"),
+            )
     return metrics.reset_index(drop=True), bins.reset_index(drop=True)
 
 
@@ -389,9 +397,9 @@ def _validate_probability_inputs(y: np.ndarray, probability: np.ndarray) -> None
 def _load_checkpoint(
     path: Path, specification: str, regularization_c: float
 ) -> pd.DataFrame:
-    if not path.exists():
-        return pd.DataFrame()
-    frame = pd.read_csv(path)
+    frame = checkpoints.read_csv(path)
+    if frame.empty:
+        return frame
     matches = (frame["specification"] == specification) & np.isclose(
         frame["regularization_c"], regularization_c
     )
@@ -400,25 +408,20 @@ def _load_checkpoint(
     return frame
 
 
-def _append_checkpoint(
-    existing: pd.DataFrame, new: pd.DataFrame, path: Path
-) -> pd.DataFrame:
-    new.to_csv(path, mode="a", header=not path.exists(), index=False)
-    if existing.empty:
-        return new.copy()
-    return pd.concat([existing, new], ignore_index=True)
-
-
 def _bin_complete(
     bins: pd.DataFrame, train_start: int, validation_year: int
 ) -> bool:
-    return _row_present(bins, train_start, validation_year)
+    return checkpoints.rows_present(
+        bins, {"train_start": train_start, "validation_year": validation_year}
+    )
 
 
 def _metric_complete(
     metrics: pd.DataFrame, train_start: int, validation_year: int
 ) -> bool:
-    if not _row_present(metrics, train_start, validation_year):
+    if not checkpoints.rows_present(
+        metrics, {"train_start": train_start, "validation_year": validation_year}
+    ):
         return False
     match = metrics.loc[
         (metrics["train_start"] == train_start)
@@ -428,29 +431,3 @@ def _metric_complete(
         np.isfinite(match["calibration_intercept"]).all()
         and np.isfinite(match["calibration_slope"]).all()
     )
-
-
-def _row_present(frame: pd.DataFrame, train_start: int, validation_year: int) -> bool:
-    if frame.empty:
-        return False
-    return bool(
-        (
-            (frame["train_start"] == train_start)
-            & (frame["validation_year"] == validation_year)
-        ).any()
-    )
-
-
-def _upsert_metric_checkpoint(
-    existing: pd.DataFrame, new: pd.DataFrame, path: Path
-) -> pd.DataFrame:
-    row = new.iloc[0]
-    if not existing.empty:
-        keep = ~(
-            (existing["train_start"] == row["train_start"])
-            & (existing["validation_year"] == row["validation_year"])
-        )
-        existing = existing.loc[keep]
-    combined = pd.concat([existing, new], ignore_index=True)
-    combined.to_csv(path, index=False)
-    return combined

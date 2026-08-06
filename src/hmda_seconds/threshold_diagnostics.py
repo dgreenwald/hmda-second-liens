@@ -15,7 +15,7 @@ from scipy.special import expit
 from sklearn.metrics import average_precision_score
 
 from . import config, mixture, model_selection
-from .density_ratio import adapters, evaluation
+from .density_ratio import adapters, checkpoints, evaluation
 from .density_ratio import folds as temporal_folds
 from .logistic_features import CENSUS_REGION_BY_STATE, REGION_LEVELS
 
@@ -339,7 +339,7 @@ def _run_design(
     pr_file = output_dir / f"{prefix}_precision_recall_cells.csv"
     subgroup_file = output_dir / f"{prefix}_subgroup_cells.csv"
     cells, pr_cells, subgroup_cells = map(
-        _read, (cells_file, pr_file, subgroup_file)
+        checkpoints.read_csv, (cells_file, pr_file, subgroup_file)
     )
     for fold in folds:
         missing = [
@@ -429,10 +429,22 @@ def _run_design(
                 subgroup_rows = subgroup_metrics(
                     target, y_second, probability
                 ).assign(**estimator_metadata)
-                cells = _replace_cell(cells, metric_row, cells_file, estimator)
-                pr_cells = _replace_cell(pr_cells, pr_rows, pr_file, estimator)
-                subgroup_cells = _replace_cell(
-                    subgroup_cells, subgroup_rows, subgroup_file, estimator
+                key_columns = (
+                    "train_start",
+                    "validation_year",
+                    "estimator",
+                )
+                cells = checkpoints.replace_rows(
+                    cells, metric_row, cells_file, key_columns=key_columns
+                )
+                pr_cells = checkpoints.replace_rows(
+                    pr_cells, pr_rows, pr_file, key_columns=key_columns
+                )
+                subgroup_cells = checkpoints.replace_rows(
+                    subgroup_cells,
+                    subgroup_rows,
+                    subgroup_file,
+                    key_columns=key_columns,
                 )
     return cells, pr_cells, subgroup_cells
 
@@ -526,26 +538,3 @@ def _cell_complete(
         if set(frame.loc[matching, "estimator"]) != set(ESTIMATORS):
             return False
     return True
-
-
-def _replace_cell(
-    existing: pd.DataFrame,
-    new: pd.DataFrame,
-    path: Path,
-    estimator: str,
-) -> pd.DataFrame:
-    row = new.iloc[0]
-    if not existing.empty:
-        keep = ~(
-            (existing["train_start"] == row["train_start"])
-            & (existing["validation_year"] == row["validation_year"])
-            & (existing["estimator"] == estimator)
-        )
-        existing = existing.loc[keep]
-    combined = pd.concat([existing, new], ignore_index=True)
-    combined.to_csv(path, index=False)
-    return combined
-
-
-def _read(path: Path) -> pd.DataFrame:
-    return pd.read_csv(path) if path.exists() else pd.DataFrame()

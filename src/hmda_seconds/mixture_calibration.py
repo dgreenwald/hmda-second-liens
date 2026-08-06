@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 
 from . import calibration, config, mixture, model_selection
-from .density_ratio import adapters, evaluation
+from .density_ratio import adapters, checkpoints, evaluation
 from .density_ratio import folds as temporal_folds
 
 ESTIMATOR = "known_source_prior_mixture"
@@ -119,9 +119,9 @@ def _run_design(
     design: str,
     fold_model_dir: Path,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    metrics = _read(metrics_file)
-    bins = _read(bins_file)
-    tails = _read(tails_file)
+    metrics = checkpoints.read_csv(metrics_file)
+    bins = checkpoints.read_csv(bins_file)
+    tails = checkpoints.read_csv(tails_file)
     for fold in folds:
         missing = [
             year
@@ -190,9 +190,16 @@ def _run_design(
             tail_row = pd.DataFrame(
                 [{**metadata, **_tail_metrics(evaluated.log_ratio)}]
             )
-            metrics = _upsert(metrics, metric_row, metrics_file)
-            bins = _replace_cell(bins, bin_rows, bins_file)
-            tails = _upsert(tails, tail_row, tails_file)
+            key_columns = ("train_start", "validation_year")
+            metrics = checkpoints.replace_rows(
+                metrics, metric_row, metrics_file, key_columns=key_columns
+            )
+            bins = checkpoints.replace_rows(
+                bins, bin_rows, bins_file, key_columns=key_columns
+            )
+            tails = checkpoints.replace_rows(
+                tails, tail_row, tails_file, key_columns=key_columns
+            )
     return metrics.reset_index(drop=True), bins.reset_index(drop=True), tails.reset_index(drop=True)
 
 
@@ -216,35 +223,9 @@ def _cell_complete(
     validation_year: int,
 ) -> bool:
     return all(
-        not frame.empty
-        and bool(
-            (
-                (frame["train_start"] == train_start)
-                & (frame["validation_year"] == validation_year)
-            ).any()
+        checkpoints.rows_present(
+            frame,
+            {"train_start": train_start, "validation_year": validation_year},
         )
         for frame in (metrics, bins, tails)
     )
-
-
-def _read(path: Path) -> pd.DataFrame:
-    return pd.read_csv(path) if path.exists() else pd.DataFrame()
-
-
-def _upsert(existing: pd.DataFrame, new: pd.DataFrame, path: Path) -> pd.DataFrame:
-    return _replace_cell(existing, new, path)
-
-
-def _replace_cell(
-    existing: pd.DataFrame, new: pd.DataFrame, path: Path
-) -> pd.DataFrame:
-    row = new.iloc[0]
-    if not existing.empty:
-        keep = ~(
-            (existing["train_start"] == row["train_start"])
-            & (existing["validation_year"] == row["validation_year"])
-        )
-        existing = existing.loc[keep]
-    combined = pd.concat([existing, new], ignore_index=True)
-    combined.to_csv(path, index=False)
-    return combined

@@ -14,7 +14,7 @@ import pandas as pd
 import pyarrow.parquet as pq
 
 from . import clean, config, mixture, model_selection
-from .density_ratio import adapters, evaluation
+from .density_ratio import adapters, checkpoints, evaluation
 
 REPORTING_START_YEAR = 2004
 HISTORICAL_REQUIRED_COLUMNS = [
@@ -117,7 +117,7 @@ def run_historical_plausibility(
         raise RuntimeError("Final raw and mixture feature columns differ")
 
     annual_file = output_dir / "step8_annual_plausibility.csv"
-    annual = pd.read_csv(annual_file) if annual_file.exists() else pd.DataFrame()
+    annual = checkpoints.read_csv(annual_file)
     requested = tuple(years)
     missing = [year for year in _application_order(requested) if not _year_complete(annual, year)]
     county_values = None
@@ -150,7 +150,12 @@ def run_historical_plausibility(
                 "mixture_em_difference": estimate.share - estimate.em_share,
             }
         )
-        annual = _upsert_year(annual, pd.DataFrame([row]), annual_file)
+        annual = checkpoints.replace_rows(
+            annual,
+            pd.DataFrame([row]),
+            annual_file,
+            key_columns=("year",),
+        )
 
     annual = annual.loc[annual["year"].isin(requested)].sort_values("year")
     continuity = continuity_summary(annual)
@@ -240,15 +245,4 @@ def _application_order(years: tuple[int, ...]) -> list[int]:
 
 
 def _year_complete(annual: pd.DataFrame, year: int) -> bool:
-    return not annual.empty and bool((annual["year"] == year).any())
-
-
-def _upsert_year(
-    existing: pd.DataFrame, new: pd.DataFrame, path: Path
-) -> pd.DataFrame:
-    year = int(new["year"].iloc[0])
-    if not existing.empty:
-        existing = existing.loc[existing["year"] != year]
-    combined = pd.concat([existing, new], ignore_index=True)
-    combined.to_csv(path, index=False)
-    return combined
+    return checkpoints.rows_present(annual, {"year": year})
