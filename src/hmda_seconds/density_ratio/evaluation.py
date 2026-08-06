@@ -110,6 +110,7 @@ def evaluate_log_ratio(
         calibration_slope=_finite_or_none(metrics["calibration_slope"]),
         optimizer_converged=estimate.optimizer_converged,
         mixture_at_boundary=estimate.at_boundary,
+        mixture_em_difference=estimate.share - estimate.em_share,
     )
     return EvaluatedTarget(
         result=result,

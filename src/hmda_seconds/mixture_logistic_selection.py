@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Iterable
 from pathlib import Path
 
@@ -11,6 +12,8 @@ import pandas as pd
 from . import calibration, config, mixture, model_selection
 from .density_ratio import adapters, artifacts, evaluation
 from .density_ratio import folds as temporal_folds
+from .density_ratio.pipeline import run_grid
+from .density_ratio.protocols import ModelConfiguration
 from .logistic_features import (
     FeatureSpecification,
     LogisticFeatureTransformer,
@@ -77,87 +80,87 @@ def evaluate_grid(
     cells: pd.DataFrame,
     checkpoint_file: str | Path,
     model_dir: str | Path,
+    stage: str = "mixture_logistic_grid",
 ) -> pd.DataFrame:
-    """Evaluate missing candidate cells while saving every fitted model."""
+    """Evaluate candidates through shared family, runner, and shard contracts."""
+    from .density_ratio.families.logistic import LogisticFamily
+
     checkpoint_file = Path(checkpoint_file)
     model_dir = Path(model_dir)
     model_dir.mkdir(parents=True, exist_ok=True)
-    for fold in folds:
-        training = None
-        for specification, values in candidate_c.items():
-            c_values = sorted(set(values))
-            missing_c = [
-                value
-                for value in c_values
-                if not _candidate_complete(
-                    cells, specification.name, value, fold
-                )
-            ]
-            if not missing_c:
-                continue
-            models = {}
-            diagnostics = {}
-            need_fit = []
-            for regularization_c in missing_c:
-                path = mixture.known_source_prior_model_path(
-                    fold.train_years,
-                    specification,
-                    regularization_c,
-                    model_dir,
-                )
-                if path.exists():
-                    models[regularization_c] = (
-                        mixture.load_known_source_prior_model(path)
-                    )
-                    diagnostics[regularization_c] = models[
-                        regularization_c
-                    ].fit_diagnostics
-                else:
-                    need_fit.append(regularization_c)
-            if need_fit:
-                if training is None:
-                    training = pd.concat(
-                        [data_by_year[year] for year in fold.train_years],
-                        ignore_index=True,
-                    )
-                print(
-                    f"Fitting {specification.name} C={need_fit} "
-                    f"on {fold.train_start}-{fold.train_end}",
-                    flush=True,
-                )
-                fitted, fitted_diagnostics = fit_candidate_path(
-                    training, specification, need_fit
-                )
-                models.update(fitted)
-                diagnostics.update(fitted_diagnostics)
-                for regularization_c, fitted_model in fitted.items():
-                    mixture.save_known_source_prior_model(
-                        fitted_model,
-                        mixture.known_source_prior_model_path(
-                            fold.train_years,
-                            specification,
-                            regularization_c,
-                            model_dir,
-                        ),
-                    )
-            for regularization_c in missing_c:
-                model = models[regularization_c]
-                for validation_year in fold.validation_years:
-                    if _cell_present(
-                        cells,
-                        specification.name,
-                        regularization_c,
-                        fold.train_start,
-                        validation_year,
-                    ):
-                        continue
-                    row = evaluate_target(
-                        model,
-                        data_by_year[validation_year],
-                        fold,
-                        diagnostics[regularization_c],
-                    )
-                    cells = _upsert_cell(cells, row, checkpoint_file)
+    folds = list(folds)
+    configurations = {
+        specification.name: tuple(
+            ModelConfiguration.from_mapping(
+                "logistic", specification.name, {"C": float(value)}
+            )
+            for value in sorted(set(values))
+        )
+        for specification, values in candidate_c.items()
+    }
+    aggregated = run_grid(
+        data_by_year,
+        folds,
+        configurations,
+        LogisticFamily(model_dir),
+        stage=stage,
+        artifact_root=model_dir,
+        output_root=model_dir / "runner",
+    )
+    specifications = {item.name: item for item in candidate_c}
+    diagnostics = {}
+    rows = []
+    for row in aggregated.cells.to_dict("records"):
+        specification = specifications[row["specification"]]
+        regularization_c = float(json.loads(row["hyperparameters"])["C"])
+        key = (specification.name, regularization_c, row["train_start"])
+        if key not in diagnostics:
+            path = mixture.known_source_prior_model_path(
+                range(row["train_start"], row["train_end"] + 1),
+                specification,
+                regularization_c,
+                model_dir,
+            )
+            diagnostics[key] = mixture.load_known_source_prior_model(
+                path
+            ).fit_diagnostics
+        fit = diagnostics[key]
+        rows.append(
+            {
+                "specification": specification.name,
+                "continuous_form": specification.continuous_form,
+                "interactions": specification.interactions,
+                "regularization_c": regularization_c,
+                "train_start": row["train_start"],
+                "train_end": row["train_end"],
+                "validation_year": row["target_year"],
+                "horizon": row["horizon"],
+                "n_validation": row["n_observations"],
+                "brier_score": row["brier_score"],
+                "log_loss": row["log_loss"],
+                "actual_second_share": row["actual_second_share"],
+                "mixture_share": row["mixture_share"],
+                "mixture_share_error": (
+                    row["mixture_share"] - row["actual_second_share"]
+                ),
+                "fit_seconds": fit.get("fit_seconds", np.nan),
+                "prediction_seconds": np.nan,
+                "n_iter": fit.get("n_iter", np.nan),
+                "converged": fit.get("converged", True),
+                "optimizer_converged": row["optimizer_converged"],
+                "mixture_at_boundary": row["mixture_at_boundary"],
+                "mixture_em_difference": row["mixture_em_difference"],
+            }
+        )
+    new_cells = pd.DataFrame(rows)
+    keys = ["specification", "regularization_c", "train_start", "validation_year"]
+    cells = (
+        pd.concat([cells, new_cells], ignore_index=True)
+        .drop_duplicates(keys, keep="last")
+        .sort_values(keys)
+        .reset_index(drop=True)
+    )
+    cells.to_csv(checkpoint_file, index=False)
     return cells
 
 
@@ -304,6 +307,7 @@ def run_mixture_logistic_selection(
         cells,
         checkpoint_file,
         model_dir,
+        stage="mixture_logistic_screen",
     )
     spec_names = {specification.name for specification in specifications}
     screen_cells = cells.loc[
@@ -327,6 +331,7 @@ def run_mixture_logistic_selection(
         cells,
         checkpoint_file,
         model_dir,
+        stage="mixture_logistic_coarse",
     )
     survivor_names = {specification.name for specification in survivors}
     full_coarse_cells = cells.loc[
@@ -353,6 +358,7 @@ def run_mixture_logistic_selection(
         cells,
         checkpoint_file,
         model_dir,
+        stage="mixture_logistic_refinement",
     )
     eligible_c = {
         specification.name: {
@@ -542,62 +548,8 @@ def _simple_summary(metrics: pd.DataFrame) -> pd.DataFrame:
     )
 
 
-def _candidate_complete(
-    cells: pd.DataFrame,
-    specification: str,
-    regularization_c: float,
-    fold: temporal_folds.TemporalFold,
-) -> bool:
-    return all(
-        _cell_present(
-            cells,
-            specification,
-            regularization_c,
-            fold.train_start,
-            year,
-        )
-        for year in fold.validation_years
-    )
-
-
-def _cell_present(
-    cells: pd.DataFrame,
-    specification: str,
-    regularization_c: float,
-    train_start: int,
-    validation_year: int,
-) -> bool:
-    if cells.empty:
-        return False
-    return bool(
-        (
-            (cells["specification"] == specification)
-            & np.isclose(cells["regularization_c"], regularization_c)
-            & (cells["train_start"] == train_start)
-            & (cells["validation_year"] == validation_year)
-        ).any()
-    )
-
-
 def _read(path: Path) -> pd.DataFrame:
     return pd.read_csv(path) if path.exists() else pd.DataFrame()
-
-
-def _upsert_cell(
-    existing: pd.DataFrame, new: pd.DataFrame, path: Path
-) -> pd.DataFrame:
-    row = new.iloc[0]
-    if not existing.empty:
-        keep = ~(
-            (existing["specification"] == row["specification"])
-            & np.isclose(existing["regularization_c"], row["regularization_c"])
-            & (existing["train_start"] == row["train_start"])
-            & (existing["validation_year"] == row["validation_year"])
-        )
-        existing = existing.loc[keep]
-    combined = pd.concat([existing, new], ignore_index=True)
-    combined.to_csv(path, index=False)
-    return combined
 
 
 def _replace_forward(

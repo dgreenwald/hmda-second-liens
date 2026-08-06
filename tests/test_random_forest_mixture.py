@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from hmda_seconds import random_forest_mixture
+from hmda_seconds import model_selection, random_forest_mixture
 from hmda_seconds.density_ratio import artifacts
 
 
@@ -51,3 +51,37 @@ def test_forest_density_ratio_round_trip(tmp_path):
     assert restored.train_years == (2005, 2006)
     assert np.isfinite(restored.log_ratio(training)).all()
     assert restored.log_ratio(training) == pytest.approx(model.log_ratio(training))
+
+
+def test_reverse_runner_translation_matches_shared_evaluation(tmp_path):
+    training = pd.concat(
+        [synthetic_frame(), synthetic_frame(year=2006, seed=29)],
+        ignore_index=True,
+    )
+    target = synthetic_frame(year=2004, seed=41)
+    data = {
+        2004: target,
+        2005: training.loc[training["year"] == 2005],
+        2006: training.loc[training["year"] == 2006],
+    }
+    fold = model_selection.ReverseFold((2005, 2006), (2004,))
+
+    translated = random_forest_mixture._reverse_metrics_from_runner(
+        data, [fold], tmp_path / "models"
+    ).iloc[0]
+    fitted = random_forest_mixture.load_forest_model(
+        random_forest_mixture.forest_model_path(
+            fold.train_years, tmp_path / "models"
+        )
+    )
+    direct = random_forest_mixture.evaluation.evaluate_target(
+        random_forest_mixture.adapters.adapt_random_forest_model(fitted),
+        target,
+        fold,
+        label_var="lien_status",
+        second_lien_class=2,
+    ).result
+
+    assert translated["mixture_share"] == pytest.approx(direct.mixture_share)
+    assert translated["brier_score"] == pytest.approx(direct.brier_score)
+    assert translated["log_loss"] == pytest.approx(direct.log_loss)

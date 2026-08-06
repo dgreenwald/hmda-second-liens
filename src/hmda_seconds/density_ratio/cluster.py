@@ -4,12 +4,21 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
 from pathlib import Path
 
+from .. import model_selection
 from .families import GradientBoostingFamily, LogisticFamily, RandomForestFamily
 from .folds import reverse_folds
 from .protocols import JobSpecification, ModelConfiguration
-from .shards import PlannedJob, write_manifest
+from .runner import run_job
+from .shards import (
+    PlannedJob,
+    aggregate_shards,
+    read_manifest,
+    shard_path,
+    write_manifest,
+)
 
 COARSE_C_VALUES = (1e-4, 1e-2, 1.0, 100.0)
 PILOT_SPECIFICATIONS = (
@@ -169,7 +178,57 @@ cd {_expandable_quote(repo_dir)}
     return manifest, script
 
 
+def execute_planned_job(planned: PlannedJob):
+    """Load only required years and execute one planned worker job."""
+    inputs = dict(planned.job.input_paths)
+    data_dir = Path(inputs["selection_data_dir"])
+    years = (*planned.fold.train_years, *planned.fold.target_years)
+    data_by_year = model_selection.load_selection_years(data_dir, years)
+    artifact_root = (
+        Path(planned.job.output_root)
+        / "models"
+        / planned.job.family
+        / planned.job.specification
+    )
+    family = family_for(planned.job, artifact_root)
+    return run_job(
+        planned,
+        data_by_year,
+        family,
+        artifact_root=artifact_root,
+    )
+
+
+def aggregate_manifest(manifest: str | Path, output_dir: str | Path) -> list[Path]:
+    """Validate a complete manifest and atomically write its three tables."""
+    planned = [expand_job_paths(item) for item in read_manifest(manifest)]
+    aggregated = aggregate_shards(
+        planned, [shard_path(item.job) for item in planned]
+    )
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    destinations = []
+    for name in ("cells", "horizons", "summary"):
+        destination = output_dir / f"density_ratio_{name}.csv"
+        _atomic_csv(getattr(aggregated, name), destination)
+        destinations.append(destination)
+    return destinations
+
+
 def _expandable_quote(value: str) -> str:
     """Quote a trusted generated path while retaining shell variable expansion."""
     escaped = value.replace("\\", "\\\\").replace('"', '\\"').replace("`", "\\`")
     return f'"{escaped}"'
+
+
+def _atomic_csv(frame, destination: Path) -> None:
+    descriptor, name = tempfile.mkstemp(
+        prefix=f".{destination.name}.", suffix=".tmp", dir=destination.parent
+    )
+    os.close(descriptor)
+    temporary = Path(name)
+    try:
+        frame.to_csv(temporary, index=False)
+        os.replace(temporary, destination)
+    finally:
+        temporary.unlink(missing_ok=True)

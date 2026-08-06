@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import time
 from collections.abc import Iterable
 from dataclasses import asdict, dataclass
@@ -15,6 +16,7 @@ from sklearn.ensemble import HistGradientBoostingClassifier
 from . import calibration, config, mixture, model_selection
 from .density_ratio import adapters, artifacts, evaluation
 from .density_ratio import folds as temporal_folds
+from .density_ratio.pipeline import run_grid
 from .density_ratio.protocols import ModelConfiguration
 
 BOOSTING_FEATURES = [*config.CONTINUOUS_VARS, *config.CATEGORY_VARS]
@@ -268,6 +270,7 @@ def run_boosting_challenger(
         cells,
         cells_file,
         fold_model_dir,
+        stage="boosting_screen",
     )
     screen_ids = {candidate.identifier for candidate in screen_candidates}
     _, screen_summary = aggregate_brier(
@@ -283,7 +286,13 @@ def run_boosting_challenger(
         ).iterrows()
     ]
     cells = evaluate_grid(
-        data_by_year, folds, survivors, cells, cells_file, fold_model_dir
+        data_by_year,
+        folds,
+        survivors,
+        cells,
+        cells_file,
+        fold_model_dir,
+        stage="boosting_survivors",
     )
     survivor_ids = {candidate.identifier for candidate in survivors}
     survivor_cells = cells.loc[cells["parameter_id"].isin(survivor_ids)]
@@ -292,7 +301,13 @@ def run_boosting_challenger(
 
     refinements = refinement_grid(best_structure)
     cells = evaluate_grid(
-        data_by_year, folds, refinements, cells, cells_file, fold_model_dir
+        data_by_year,
+        folds,
+        refinements,
+        cells,
+        cells_file,
+        fold_model_dir,
+        stage="boosting_refinement",
     )
     eligible = [*survivors, *refinements]
     eligible_ids = {candidate.identifier for candidate in eligible}
@@ -519,48 +534,81 @@ def evaluate_grid(
     cells: pd.DataFrame,
     checkpoint_file: str | Path,
     model_dir: str | Path,
+    stage: str = "boosting_grid",
 ) -> pd.DataFrame:
-    """Evaluate missing fold/candidate cells and checkpoint each target year."""
+    """Evaluate boosting candidates through the shared runner and shards."""
+    from .density_ratio.families.gradient_boosting import GradientBoostingFamily
+
     checkpoint_file = Path(checkpoint_file)
-    for fold in folds:
-        training = None
-        for candidate in candidates:
-            missing_years = [
-                year
-                for year in fold.validation_years
-                if not _cell_present(
-                    cells, candidate.identifier, fold.train_start, year
-                )
-            ]
-            if not missing_years:
-                continue
-            model_file = boosting_model_path(
-                fold.train_years, candidate, model_dir
+    model_dir = Path(model_dir)
+    candidates = list(candidates)
+    configurations = tuple(
+        ModelConfiguration.from_mapping(
+            "hist_gradient_boosting",
+            "primitive_continuous_and_native_categories",
+            asdict(candidate),
+            random_seed=config.BOOSTING_RANDOM_STATE,
+        )
+        for candidate in candidates
+    )
+    aggregated = run_grid(
+        data_by_year,
+        list(folds),
+        {"primitive_continuous_and_native_categories": configurations},
+        GradientBoostingFamily(model_dir),
+        stage=stage,
+        artifact_root=model_dir,
+        output_root=model_dir / "runner",
+    )
+    candidates_by_id = {candidate.identifier: candidate for candidate in candidates}
+    diagnostics = {}
+    rows = []
+    for row in aggregated.cells.to_dict("records"):
+        parameters = BoostingParameters(**json.loads(row["hyperparameters"]))
+        candidate = candidates_by_id[parameters.identifier]
+        key = (candidate.identifier, row["train_start"])
+        if key not in diagnostics:
+            path = boosting_model_path(
+                range(row["train_start"], row["train_end"] + 1),
+                candidate,
+                model_dir,
             )
-            if model_file.exists():
-                fitted = load_boosting_model(model_file)
-                fit_diagnostics = {
-                    "fit_seconds": np.nan,
-                    "n_iter_fitted": fitted.classifier.n_iter_,
-                }
-            else:
-                if training is None:
-                    training = pd.concat(
-                        [data_by_year[year] for year in fold.train_years],
-                        ignore_index=True,
-                    )
-                fitted, fit_diagnostics = fit_boosting_ratio_model(
-                    training, candidate
-                )
-                save_boosting_model(fitted, model_file)
-            for validation_year in missing_years:
-                row = evaluate_target_year(
-                    fitted,
-                    data_by_year[validation_year],
-                    fold,
-                    fit_diagnostics,
-                )
-                cells = _upsert_cell(cells, row, checkpoint_file)
+            diagnostics[key] = load_boosting_model(path).classifier.n_iter_
+        rows.append(
+            {
+                "parameter_id": candidate.identifier,
+                **asdict(candidate),
+                "train_start": row["train_start"],
+                "train_end": row["train_end"],
+                "validation_year": row["target_year"],
+                "horizon": row["horizon"],
+                "n_validation": row["n_observations"],
+                "actual_second_share": row["actual_second_share"],
+                "mixture_share": row["mixture_share"],
+                "mixture_share_error": (
+                    row["mixture_share"] - row["actual_second_share"]
+                ),
+                "mean_adjusted_probability": row["mean_probability"],
+                "adjusted_brier": row["brier_score"],
+                "adjusted_log_loss": row["log_loss"],
+                "adjusted_hard_share_050": row["hard_share_050"],
+                "fit_seconds": np.nan,
+                "prediction_seconds": np.nan,
+                "n_iter_fitted": diagnostics[key],
+                "optimizer_converged": row["optimizer_converged"],
+                "mixture_at_boundary": row["mixture_at_boundary"],
+                "mixture_em_difference": row["mixture_em_difference"],
+            }
+        )
+    new_cells = pd.DataFrame(rows)
+    keys = ["parameter_id", "train_start", "validation_year"]
+    cells = (
+        pd.concat([cells, new_cells], ignore_index=True)
+        .drop_duplicates(keys, keep="last")
+        .sort_values(keys)
+        .reset_index(drop=True)
+    )
+    cells.to_csv(checkpoint_file, index=False)
     return cells
 
 
@@ -666,22 +714,6 @@ def _read_csv_if_exists(path: Path) -> pd.DataFrame:
     return pd.read_csv(path) if path.exists() else pd.DataFrame()
 
 
-def _cell_present(
-    cells: pd.DataFrame,
-    parameter_id: str,
-    train_start: int,
-    validation_year: int,
-) -> bool:
-    if cells.empty or "adjusted_brier" not in cells:
-        return False
-    matching = (
-        (cells["parameter_id"] == parameter_id)
-        & (cells["train_start"] == train_start)
-        & (cells["validation_year"] == validation_year)
-    )
-    return bool((matching & cells["adjusted_brier"].notna()).any())
-
-
 def _diagnostic_cell_present(
     frame: pd.DataFrame, train_start: int, validation_year: int
 ) -> bool:
@@ -700,22 +732,6 @@ def _replace_diagnostic_cell(
     if not existing.empty:
         keep = ~(
             (existing["train_start"] == row["train_start"])
-            & (existing["validation_year"] == row["validation_year"])
-        )
-        existing = existing.loc[keep]
-    combined = pd.concat([existing, new], ignore_index=True)
-    combined.to_csv(path, index=False)
-    return combined
-
-
-def _upsert_cell(
-    existing: pd.DataFrame, new: pd.DataFrame, path: Path
-) -> pd.DataFrame:
-    row = new.iloc[0]
-    if not existing.empty:
-        keep = ~(
-            (existing["parameter_id"] == row["parameter_id"])
-            & (existing["train_start"] == row["train_start"])
             & (existing["validation_year"] == row["validation_year"])
         )
         existing = existing.loc[keep]

@@ -11,7 +11,7 @@ import pandas as pd
 
 from ... import mixture, mixture_logistic_selection
 from ...logistic_features import FeatureSpecification
-from .. import adapters
+from .. import adapters, artifacts
 from ..protocols import FittedDensityRatioModel, ModelConfiguration
 from ._validation import require_parameters, validate_request
 
@@ -56,15 +56,32 @@ class LogisticFamily:
 
         result: dict[str, FittedDensityRatioModel] = {}
         for specification, entries in grouped.items():
-            fitted, _ = mixture_logistic_selection.fit_candidate_path(
-                training, specification, [value for _, value in entries]
-            )
+            fitted = {}
+            missing = []
+            for _, regularization_c in entries:
+                path = mixture.known_source_prior_model_path(
+                    train_years, specification, regularization_c, self.artifact_dir
+                )
+                if path.exists():
+                    model = mixture.load_known_source_prior_model(path)
+                    # Upgrade metadata-free legacy artifacts at the compatibility boundary.
+                    if artifacts.load_metadata(path) is None:
+                        mixture.save_known_source_prior_model(model, path)
+                    fitted[regularization_c] = model
+                else:
+                    missing.append(regularization_c)
+            if missing:
+                new_fits, _ = mixture_logistic_selection.fit_candidate_path(
+                    training, specification, missing
+                )
+                fitted.update(new_fits)
             for _, regularization_c in entries:
                 model = fitted[regularization_c]
                 path = mixture.known_source_prior_model_path(
                     train_years, specification, regularization_c, self.artifact_dir
                 )
-                mixture.save_known_source_prior_model(model, path)
+                if not path.exists() or artifacts.load_metadata(path) is None:
+                    mixture.save_known_source_prior_model(model, path)
                 adapted = adapters.adapt_known_source_prior_model(model)
                 if adapted.model_id in result:
                     raise ValueError(f"Duplicate model_id: {adapted.model_id}")

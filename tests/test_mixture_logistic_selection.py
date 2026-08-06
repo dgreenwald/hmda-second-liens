@@ -38,6 +38,38 @@ def test_candidate_path_retains_every_penalty():
     assert all(np.isfinite(model.log_ratio(training)).all() for model in models.values())
 
 
+def test_shared_grid_translation_matches_existing_cell_evaluation(tmp_path):
+    training = pd.concat(
+        [synthetic_frame(), synthetic_frame(year=2006, seed=29)],
+        ignore_index=True,
+    )
+    target = synthetic_frame(year=2004, seed=41)
+    data = {2004: target, 2005: training.loc[training["year"] == 2005], 2006: training.loc[training["year"] == 2006]}
+    specification = logistic_features.FeatureSpecification("linear", "none")
+    fold = mixture_logistic_selection.temporal_folds.temporal_fold(
+        (2005, 2006), (2004,), direction="reverse"
+    )
+    direct_models, diagnostics = mixture_logistic_selection.fit_candidate_path(
+        training, specification, [0.1]
+    )
+    direct = mixture_logistic_selection.evaluate_target(
+        direct_models[0.1], target, fold, diagnostics[0.1]
+    ).iloc[0]
+
+    translated = mixture_logistic_selection.evaluate_grid(
+        data,
+        [fold],
+        {specification: [0.1]},
+        pd.DataFrame(),
+        tmp_path / "cells.csv",
+        tmp_path / "models",
+    ).iloc[0]
+
+    assert translated["mixture_share"] == pytest.approx(direct["mixture_share"])
+    assert translated["brier_score"] == pytest.approx(direct["brier_score"])
+    assert translated["log_loss"] == pytest.approx(direct["log_loss"])
+
+
 def test_screen_survivors_force_incumbent():
     specifications = mixture_logistic_selection.candidate_specifications()
     incumbent = logistic_features.FeatureSpecification(

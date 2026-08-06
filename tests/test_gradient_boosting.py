@@ -104,3 +104,44 @@ def test_boosting_aggregation_weights_horizons_equally():
 
     assert horizons.set_index("horizon").loc[1, "mean_brier"] == pytest.approx(0.2)
     assert summary.iloc[0]["selection_brier"] == pytest.approx(0.5)
+
+
+def test_shared_grid_translation_matches_existing_target_evaluation(tmp_path):
+    training = pd.concat(
+        [synthetic_frame(year=2005), synthetic_frame(year=2006, seed=29)],
+        ignore_index=True,
+    )
+    target = synthetic_frame(year=2004, seed=41)
+    data = {
+        2004: target,
+        2005: training.loc[training["year"] == 2005],
+        2006: training.loc[training["year"] == 2006],
+    }
+    parameters = gradient_boosting.BoostingParameters(
+        max_leaf_nodes=3,
+        learning_rate=0.1,
+        max_iter=8,
+        min_samples_leaf=10,
+    )
+    fold = model_selection.ReverseFold((2005, 2006), (2004,))
+    fitted, diagnostics = gradient_boosting.fit_boosting_ratio_model(
+        training, parameters
+    )
+    direct = gradient_boosting.evaluate_target_year(
+        fitted, target, fold, diagnostics
+    ).iloc[0]
+
+    translated = gradient_boosting.evaluate_grid(
+        data,
+        [fold],
+        [parameters],
+        pd.DataFrame(),
+        tmp_path / "cells.csv",
+        tmp_path / "models",
+    ).iloc[0]
+
+    assert translated["mixture_share"] == pytest.approx(direct["mixture_share"])
+    assert translated["adjusted_brier"] == pytest.approx(direct["adjusted_brier"])
+    assert translated["adjusted_log_loss"] == pytest.approx(
+        direct["adjusted_log_loss"]
+    )

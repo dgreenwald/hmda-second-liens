@@ -16,6 +16,7 @@ from sklearn.ensemble import RandomForestClassifier
 from . import calibration, config, mixture, model_selection
 from .density_ratio import adapters, artifacts, evaluation
 from .density_ratio import folds as temporal_folds
+from .density_ratio.pipeline import run_grid
 from .density_ratio.protocols import ModelConfiguration
 
 PROBABILITY_EPSILON = 1e-12
@@ -129,19 +130,15 @@ def run_random_forest_mixture(
 
     reverse_metrics_file = output_dir / "rf_mixture_reverse_metrics.csv"
     reverse_bins_file = output_dir / "rf_mixture_reverse_bins.csv"
-    reverse_metrics = _read(reverse_metrics_file)
+    reverse_folds = list(reversed(temporal_folds.reverse_folds()))
+    reverse_metrics = _reverse_metrics_from_runner(
+        data_by_year, reverse_folds, fold_model_dir
+    )
+    reverse_metrics.to_csv(reverse_metrics_file, index=False)
     reverse_bins = _read(reverse_bins_file)
-    for fold in reversed(temporal_folds.reverse_folds()):
+    for fold in reverse_folds:
         path = forest_model_path(fold.train_years, fold_model_dir)
-        if path.exists():
-            model = load_forest_model(path)
-        else:
-            training = pd.concat(
-                [data_by_year[year] for year in fold.train_years],
-                ignore_index=True,
-            )
-            model, _ = fit_forest_ratio_model(training)
-            save_forest_model(model, path)
+        model = load_forest_model(path)
         for validation_year in fold.validation_years:
             reverse_metrics, reverse_bins = _evaluate_cell(
                 model,
@@ -222,6 +219,64 @@ def run_random_forest_mixture(
         output_file=figure_dir / "rf_mixture_forward_years.pdf",
     )
     return outputs
+
+
+def _reverse_metrics_from_runner(
+    data_by_year: dict[int, pd.DataFrame],
+    folds: list[temporal_folds.TemporalFold],
+    model_dir: Path,
+) -> pd.DataFrame:
+    """Translate shared RF shard cells into the established metric schema."""
+    from .density_ratio.families.random_forest import RandomForestFamily
+
+    configuration = ModelConfiguration.from_mapping(
+        "random_forest",
+        "raw_continuous_and_full_one_hot_categories",
+        {
+            "max_depth": config.RF_KWARGS["max_depth"],
+            "n_estimators": config.RF_KWARGS["n_estimators"],
+        },
+        random_seed=config.RF_KWARGS["random_state"],
+    )
+    aggregated = run_grid(
+        data_by_year,
+        folds,
+        {configuration.specification: (configuration,)},
+        RandomForestFamily(model_dir),
+        stage="random_forest_reverse",
+        artifact_root=model_dir,
+        output_root=model_dir / "runner",
+    )
+    rows = []
+    for row in aggregated.cells.to_dict("records"):
+        rows.append(
+            {
+                "evaluation_design": "reverse",
+                "estimator": ESTIMATOR,
+                "n_estimators": config.RF_KWARGS["n_estimators"],
+                "max_depth": config.RF_KWARGS["max_depth"],
+                "train_start": row["train_start"],
+                "train_end": row["train_end"],
+                "validation_year": row["target_year"],
+                "horizon": row["horizon"],
+                "n": row["n_observations"],
+                "brier_score": row["brier_score"],
+                "log_loss": row["log_loss"],
+                "observed_second_share": row["actual_second_share"],
+                "mean_predicted_second_share": row["mean_probability"],
+                "calibration_mean_error": row["calibration_mean_error"],
+                "calibration_intercept": row["calibration_intercept"],
+                "calibration_slope": row["calibration_slope"],
+                "mixture_share": row["mixture_share"],
+                "adjusted_hard_share_050": row["hard_share_050"],
+                "share_optimizer_converged": row["optimizer_converged"],
+                "share_at_boundary": row["mixture_at_boundary"],
+                "mixture_em_difference": row["mixture_em_difference"],
+            }
+        )
+    return pd.DataFrame(rows).sort_values(
+        ["train_start", "validation_year"]
+    ).reset_index(drop=True)
 
 
 def estimator_comparison(

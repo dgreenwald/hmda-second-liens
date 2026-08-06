@@ -9,7 +9,7 @@ from pathlib import Path
 import pandas as pd
 
 from ... import config, random_forest_mixture
-from .. import adapters
+from .. import adapters, artifacts
 from ..protocols import FittedDensityRatioModel, ModelConfiguration
 from ._validation import require_parameters, validate_request
 
@@ -54,10 +54,14 @@ class RandomForestFamily:
         }
         if values != expected:
             raise ValueError(f"Random Forest configuration is frozen at {expected}")
-        model, _ = random_forest_mixture.fit_forest_ratio_model(training)
         path = random_forest_mixture.forest_model_path(
             train_years, self.artifact_dir
         )
-        random_forest_mixture.save_forest_model(model, path)
+        if path.exists():
+            model = random_forest_mixture.load_forest_model(path)
+        else:
+            model, _ = random_forest_mixture.fit_forest_ratio_model(training)
+        if not path.exists() or artifacts.load_metadata(path) is None:
+            random_forest_mixture.save_forest_model(model, path)
         adapted = adapters.adapt_random_forest_model(model)
         return {adapted.model_id: adapted}

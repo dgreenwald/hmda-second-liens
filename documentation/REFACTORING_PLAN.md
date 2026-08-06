@@ -44,6 +44,8 @@ src/hmda_seconds/density_ratio/
     artifacts.py       # model metadata, naming, save/load helpers
     shards.py          # immutable job-result schema and aggregation
     runner.py          # fit/evaluate orchestration for one or many jobs
+    pipeline.py        # shared local grid path for compatibility commands
+    cluster.py         # manifests, cluster path expansion, Slurm generation
     families/
         __init__.py
         logistic.py
@@ -323,6 +325,18 @@ evidence must be collected later on the cluster before the complete grid is subm
 - Remove superseded loops and helpers only after all parity checks pass.
 - Update `AGENTS.md`, the relevant protocols, and the implementation agenda to describe the
   final architecture.
+
+Status: completed. Logistic mixture selection, staged histogram boosting, and reverse Random
+Forest evaluation now run through the shared family, runner, artifact, shard, and deterministic
+aggregation path. Their established CSV schemas remain compatibility translations; diagnostic
+reliability-bin passes retain probabilities only in memory and continue to use the shared
+evaluator. Superseded per-cell fit/checkpoint loops were removed, while family-specific feature
+construction, grids, staged decisions, forward checks, aggregation tables, and plotting remain
+with their owning modules. Synthetic tests verify all three compatibility translations. A
+bounded real-data check reused one saved 2013--2016 fit per family against target year 2012:
+logistic and boosting aggregate metrics agreed with the legacy checkpoints within
+`7e-17`, and Random Forest within `1.4e-13`. The check wrote only temporary shards and did not
+resume mixture-logistic model selection. See `REFACTORING_PARITY.md`.
 
 ### 10. Resume model selection
 

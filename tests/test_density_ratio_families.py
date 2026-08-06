@@ -155,3 +155,28 @@ def test_family_rejects_training_year_mismatch_before_fitting(tmp_path):
         LogisticFamily(tmp_path).fit_many(
             synthetic_frame(), [configuration], train_years=(2005,)
         )
+
+
+def test_family_reuses_matching_saved_fit(tmp_path, monkeypatch):
+    training = synthetic_frame()
+    configuration = ModelConfiguration.from_mapping(
+        "logistic", "linear__none", {"C": 0.1}
+    )
+    family = LogisticFamily(tmp_path)
+    first = family.fit_many(
+        training, [configuration], train_years=(2005, 2006)
+    )
+
+    def unexpected_fit(*args, **kwargs):
+        raise AssertionError("saved fit should have been reused")
+
+    monkeypatch.setattr(
+        mixture_logistic_selection, "fit_candidate_path", unexpected_fit
+    )
+    second = family.fit_many(
+        training, [configuration], train_years=(2005, 2006)
+    )
+
+    assert next(iter(second.values())).log_ratio(training) == pytest.approx(
+        next(iter(first.values())).log_ratio(training)
+    )

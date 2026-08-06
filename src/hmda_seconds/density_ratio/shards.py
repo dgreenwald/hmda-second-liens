@@ -263,6 +263,8 @@ def aggregate_shards(
                     ),
                     "random_seed": configuration.random_seed,
                     "configuration_id": configuration_id(configuration),
+                    "train_start": shard.fold.train_start,
+                    "train_end": shard.fold.train_end,
                 }
             )
     cells = pd.DataFrame(rows).sort_values(

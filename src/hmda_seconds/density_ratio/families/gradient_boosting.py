@@ -9,7 +9,7 @@ from pathlib import Path
 import pandas as pd
 
 from ... import gradient_boosting
-from .. import adapters
+from .. import adapters, artifacts
 from ..protocols import FittedDensityRatioModel, ModelConfiguration
 from ._validation import require_parameters, validate_request
 
@@ -61,13 +61,17 @@ class GradientBoostingFamily:
                 l2_regularization=float(values["l2_regularization"]),
                 min_samples_leaf=int(values["min_samples_leaf"]),
             )
-            model, _ = gradient_boosting.fit_boosting_ratio_model(
-                training, parameters
-            )
             path = gradient_boosting.boosting_model_path(
                 train_years, parameters, self.artifact_dir
             )
-            gradient_boosting.save_boosting_model(model, path)
+            if path.exists():
+                model = gradient_boosting.load_boosting_model(path)
+            else:
+                model, _ = gradient_boosting.fit_boosting_ratio_model(
+                    training, parameters
+                )
+            if not path.exists() or artifacts.load_metadata(path) is None:
+                gradient_boosting.save_boosting_model(model, path)
             adapted = adapters.adapt_boosting_model(model)
             if adapted.model_id in result:
                 raise ValueError(f"Duplicate model_id: {adapted.model_id}")

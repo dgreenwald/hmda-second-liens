@@ -7,14 +7,13 @@ import argparse
 import os
 from pathlib import Path
 
-from hmda_seconds import config, model_selection
+from hmda_seconds import config
 from hmda_seconds.density_ratio.cluster import (
     configurations_from_json,
+    execute_planned_job,
     expand_job_paths,
-    family_for,
     make_job,
 )
-from hmda_seconds.density_ratio.runner import run_job
 from hmda_seconds.density_ratio.shards import read_manifest, shard_path
 
 ENVIRONMENT = {
@@ -82,23 +81,7 @@ def planned_job(args: argparse.Namespace):
 
 def main() -> None:
     planned = planned_job(parse_args())
-    inputs = dict(planned.job.input_paths)
-    data_dir = Path(inputs["selection_data_dir"])
-    years = (*planned.fold.train_years, *planned.fold.target_years)
-    data_by_year = model_selection.load_selection_years(data_dir, years)
-    artifact_root = (
-        Path(planned.job.output_root)
-        / "models"
-        / planned.job.family
-        / planned.job.specification
-    )
-    family = family_for(planned.job, artifact_root)
-    completed = run_job(
-        planned,
-        data_by_year,
-        family,
-        artifact_root=artifact_root,
-    )
+    completed = execute_planned_job(planned)
     print(shard_path(completed.job))
 
 

@@ -17,9 +17,10 @@ count shares and mixture-adjusted probabilities. Read `documentation/MIGRATION_P
   frozen reverse-time selection), `calibration.py` (raw-probability diagnostics), `mixture.py`
   (known-source-prior density-ratio shares), `mixture_calibration.py` (adjusted-probability
   diagnostics), plus the RF compatibility, classification, validation, and figure modules.
-  `density_ratio/` owns the cross-family protocols, temporal folds, mixture evaluation, and
-  atomic artifact/metadata contract; model-family modules should consume those shared pieces
-  rather than rebuilding them.
+  `density_ratio/` owns the cross-family protocols, family adapters, temporal folds, mixture
+  evaluation, atomic artifact/metadata contract, immutable shards, local/cluster runners, and
+  deterministic aggregation. Model-family modules retain feature construction, fitting, and
+  compatibility-table/diagnostic translation; they must not rebuild orchestration loops.
 - `scripts/` — thin argparse CLIs, one per pipeline stage, each wrapping one `src/hmda_seconds`
   entry point. These are the `Makefile` targets' bodies; keep logic in `src/`, not here.
 - `documentation/` — methodology plans, frozen protocols, implementation findings, and the
@@ -51,6 +52,11 @@ count shares and mixture-adjusted probabilities. Read `documentation/MIGRATION_P
   schema version, SHA-256 payload digest, model/configuration identity, source years, training
   counts, feature schema, weighting/prior convention, and software versions. Loaders accept
   metadata-free legacy pickles for compatibility, but must validate a sidecar whenever present.
+- Density-ratio grids run through `density_ratio.pipeline.run_grid`, which delegates each
+  `(specification, source window)` job to the shared family/runner/shard path. Existing pipeline
+  CSVs are compatibility views derived from shard results rather than independent checkpoints.
+  Use `make generate-density-ratio-pilot` to generate—but never submit—the two-job Slurm pilot;
+  see `documentation/DENSITY_RATIO_CLUSTER.md`.
 - Historical plausibility workflow: `make plausibility-checks` applies the frozen final raw and
   known-source-prior models to 1990--2016, writes annual aggregate shares and the 2003--2004
   continuity table, and renders the predicted/actual series. It checkpoints annual aggregates

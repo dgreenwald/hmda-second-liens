@@ -286,6 +286,7 @@ class EvaluationResult:
     calibration_slope: float | None
     optimizer_converged: bool
     mixture_at_boundary: bool
+    mixture_em_difference: float = 0.0
     schema_version: int = SCHEMA_VERSION
 
     def __post_init__(self) -> None:
@@ -308,6 +309,8 @@ class EvaluationResult:
                 raise ValueError(f"{name} must be finite and lie in [0, 1]")
         if not math.isfinite(self.log_loss) or self.log_loss < 0:
             raise ValueError("log_loss must be finite and nonnegative")
+        if not math.isfinite(self.mixture_em_difference):
+            raise ValueError("mixture_em_difference must be finite")
         for name in (
             "calibration_mean_error",
             "calibration_intercept",
