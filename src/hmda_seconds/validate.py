@@ -12,6 +12,7 @@ ablation, and a small hyperparameter grid.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -30,6 +31,8 @@ from sklearn.model_selection import train_test_split
 from statsmodels.stats.contingency_tables import mcnemar
 
 from . import config
+from .density_ratio import artifacts
+from .density_ratio.protocols import ModelConfiguration
 
 CLASS_LABELS = [config.FIRST_LIEN_CLASS, config.SECOND_LIEN_CLASS]
 
@@ -246,9 +249,22 @@ class LogLtiThresholdBaseline:
         )
 
 
-def fit_log_lti_threshold_baseline(df: pd.DataFrame) -> LogLtiThresholdBaseline:
+def fit_log_lti_threshold_baseline(
+    df: pd.DataFrame, model_file: str | Path | None = None
+) -> LogLtiThresholdBaseline:
     means = df.groupby(config.LABEL_VAR)["log_lti"].mean()
-    return LogLtiThresholdBaseline(threshold=float(means.mean()))
+    fitted = LogLtiThresholdBaseline(threshold=float(means.mean()))
+    if model_file is not None:
+        _save_validation_model(
+            fitted,
+            df,
+            df[config.LABEL_VAR].to_numpy(),
+            ("log_lti",),
+            "log_lti_threshold",
+            {"threshold": fitted.threshold},
+            model_file,
+        )
+    return fitted
 
 
 # --------------------------------------------------------------------------
@@ -331,6 +347,7 @@ def oob_score(
     train_size: float = config.TRAIN_SIZE,
     test_size: float = config.TEST_SIZE,
     random_state: int = 17,
+    model_dir: str | Path | None = None,
     **rf_kwargs,
 ) -> float:
     """Fit an RF with oob_score=True on the same train split as the headline
@@ -346,7 +363,7 @@ def oob_score(
     """
     if not rf_kwargs:
         rf_kwargs = config.RF_KWARGS
-    labels, features, _ = get_labels_features(
+    labels, features, feature_names = get_labels_features(
         df, config.LABEL_VAR, config.CONTINUOUS_VARS, config.CATEGORY_VARS
     )
     train_features, _, train_labels, _ = train_test_split(
@@ -354,6 +371,16 @@ def oob_score(
     )
     rf = RandomForestClassifier(oob_score=True, **rf_kwargs)
     rf.fit(train_features, train_labels)
+    if model_dir is not None:
+        _save_validation_model(
+            rf,
+            df,
+            train_labels,
+            tuple(str(name) for name in feature_names),
+            "oob",
+            _artifact_rf_parameters(rf),
+            Path(model_dir) / "random_forest__oob.pkl",
+        )
     return rf.oob_score_
 
 
@@ -367,6 +394,7 @@ def feature_ablation(
     train_size: float = config.TRAIN_SIZE,
     test_size: float = config.TEST_SIZE,
     random_state: int = 17,
+    model_dir: str | Path | None = None,
     **rf_kwargs,
 ) -> pd.DataFrame:
     """Held-out error rate with each feature dropped in turn, vs. the full set.
@@ -382,7 +410,7 @@ def feature_ablation(
     for dropped in [None, *all_vars]:
         continuous_vars = [v for v in config.CONTINUOUS_VARS if v != dropped]
         category_vars = [v for v in config.CATEGORY_VARS if v != dropped]
-        labels, features, _ = get_labels_features(
+        labels, features, feature_names = get_labels_features(
             df, config.LABEL_VAR, continuous_vars, category_vars
         )
         train_features, test_features, train_labels, test_labels = train_test_split(
@@ -394,6 +422,17 @@ def feature_ablation(
         )
         rf = RandomForestClassifier(**rf_kwargs)
         rf.fit(train_features, train_labels)
+        if model_dir is not None:
+            label = dropped or "none"
+            _save_validation_model(
+                rf,
+                df,
+                train_labels,
+                tuple(str(name) for name in feature_names),
+                f"ablation_drop_{label}",
+                _artifact_rf_parameters(rf),
+                Path(model_dir) / f"random_forest__ablation_drop_{label}.pkl",
+            )
         err_rate = 1.0 - rf.score(test_features, test_labels)
         rows.append({"dropped_feature": dropped or "(none)", "err_rate": err_rate})
 
@@ -406,6 +445,7 @@ def hyperparameter_robustness(
     train_size: float = config.TRAIN_SIZE,
     test_size: float = config.TEST_SIZE,
     random_state: int = 17,
+    model_dir: str | Path | None = None,
     **fixed_kwargs,
 ) -> pd.DataFrame:
     """Held-out error rate for each hyperparameter combination in grid.
@@ -415,7 +455,7 @@ def hyperparameter_robustness(
     noise. fixed_kwargs (e.g. n_jobs) apply to every fit but are not swept
     and are not included in the output columns.
     """
-    labels, features, _ = get_labels_features(
+    labels, features, feature_names = get_labels_features(
         df, config.LABEL_VAR, config.CONTINUOUS_VARS, config.CATEGORY_VARS
     )
     train_features, test_features, train_labels, test_labels = train_test_split(
@@ -426,7 +466,73 @@ def hyperparameter_robustness(
     for params in grid:
         rf = RandomForestClassifier(random_state=random_state, **params, **fixed_kwargs)
         rf.fit(train_features, train_labels)
+        if model_dir is not None:
+            parameter_label = "__".join(
+                f"{name}_{str(value).replace('.', 'p')}"
+                for name, value in sorted(params.items())
+            )
+            _save_validation_model(
+                rf,
+                df,
+                train_labels,
+                tuple(str(name) for name in feature_names),
+                f"hyperparameters_{parameter_label}",
+                _artifact_rf_parameters(rf),
+                Path(model_dir)
+                / f"random_forest__hyperparameters_{parameter_label}.pkl",
+            )
         err_rate = 1.0 - rf.score(test_features, test_labels)
         rows.append({**params, "err_rate": err_rate})
 
     return pd.DataFrame(rows)
+
+
+def _save_validation_model(
+    model: object,
+    source: pd.DataFrame,
+    fitted_labels: np.ndarray,
+    feature_names: tuple[str, ...],
+    specification: str,
+    parameters: dict,
+    model_file: str | Path,
+) -> None:
+    train_years = tuple(int(year) for year in sorted(pd.unique(source["year"])))
+    fitted_labels = np.asarray(fitted_labels)
+    counts = (
+        len(fitted_labels),
+        int(np.sum(fitted_labels == config.FIRST_LIEN_CLASS)),
+        int(np.sum(fitted_labels == config.SECOND_LIEN_CLASS)),
+    )
+    path = Path(model_file)
+    model_id = (
+        f"legacy_validation__{specification}"
+        f"__train_{min(train_years)}_{max(train_years)}"
+    )
+    metadata = artifacts.build_metadata(
+        model_id=model_id,
+        configuration=ModelConfiguration.from_mapping(
+            "legacy_validation", specification, parameters
+        ),
+        train_years=train_years,
+        counts=counts,
+        feature_names=feature_names,
+        weighting="observed_source_distribution",
+        source_prior="observed",
+        artifact_path=path,
+    )
+    artifacts.save_pickle_artifact(model, path, metadata)
+
+
+def _artifact_rf_parameters(model: RandomForestClassifier) -> dict:
+    parameters = model.get_params()
+    return {
+        name: parameters[name]
+        for name in (
+            "n_estimators",
+            "max_depth",
+            "min_samples_split",
+            "min_samples_leaf",
+            "max_features",
+            "oob_score",
+        )
+    }

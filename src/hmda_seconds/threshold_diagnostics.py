@@ -366,7 +366,9 @@ def _run_design(
             raw = model_selection.load_selected_model(raw_path)
         elif tuple(fold.train_years) == tuple(config.TRAIN_YEARS):
             raw = selected
-            model_selection.save_selected_model(raw, raw_path)
+            model_selection.save_selected_model(
+                raw, raw_path, train_years=fold.train_years
+            )
         else:
             training = pd.concat(
                 [data_by_year[year] for year in fold.train_years],

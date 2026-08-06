@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import copy
-import pickle
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -15,7 +14,9 @@ from scipy.special import expit, logit
 from sklearn.linear_model import LogisticRegression
 
 from . import config, model_selection
+from .density_ratio import adapters, artifacts
 from .density_ratio import folds as temporal_folds
+from .density_ratio.protocols import ModelConfiguration
 from .logistic_features import FeatureSpecification, LogisticFeatureTransformer
 
 YEAR_EFFECT_SCALE = 100.0
@@ -50,6 +51,10 @@ class DensityRatioModels:
     fit_diagnostics: pd.DataFrame
     specification: FeatureSpecification
     regularization_c: float
+    train_years: tuple[int, ...] = ()
+    n_training: int = 0
+    n_first_lien: int = 0
+    n_second_lien: int = 0
 
     def features(self, frame: pd.DataFrame) -> np.ndarray:
         return self.transformer.transform(frame)
@@ -71,6 +76,9 @@ class KnownSourcePriorModel:
     specification: FeatureSpecification
     regularization_c: float
     train_years: tuple[int, ...]
+    n_training: int = 0
+    n_first_lien: int = 0
+    n_second_lien: int = 0
 
     def log_ratio(self, frame: pd.DataFrame) -> np.ndarray:
         return self.ratio.log_ratio(self.transformer.transform(frame))
@@ -107,6 +115,12 @@ def fit_density_ratio_models(
     features = transformer.fit_transform(training)
     labels = training[config.LABEL_VAR].to_numpy()
     y_second = labels == config.SECOND_LIEN_CLASS
+    counts = artifacts.training_counts(
+        training,
+        label_var=config.LABEL_VAR,
+        first_lien_class=config.FIRST_LIEN_CLASS,
+        second_lien_class=config.SECOND_LIEN_CLASS,
+    )
 
     pooled_models, pooled_fit = model_selection.fit_regularization_path(
         features, labels, [regularization_c]
@@ -195,6 +209,10 @@ def fit_density_ratio_models(
         fit_diagnostics=fit_diagnostics,
         specification=specification,
         regularization_c=regularization_c,
+        train_years=years,
+        n_training=counts[0],
+        n_first_lien=counts[1],
+        n_second_lien=counts[2],
     )
 
 
@@ -203,17 +221,39 @@ def save_density_ratio_models(
 ) -> None:
     """Persist the complete pooled/fixed-effect/known-prior fold fit."""
     model_file = Path(model_file)
-    model_file.parent.mkdir(parents=True, exist_ok=True)
-    with model_file.open("wb") as file:
-        pickle.dump(model, file)
+    model_id = _density_ratio_bundle_id(model)
+    metadata = artifacts.build_metadata(
+        model_id=model_id,
+        configuration=ModelConfiguration.from_mapping(
+            "logistic_ratio_variants",
+            model.specification.name,
+            {"C": model.regularization_c, "variants": "pooled_fixed_known"},
+        ),
+        train_years=model.train_years,
+        counts=(
+            getattr(model, "n_training", 0),
+            getattr(model, "n_first_lien", 0),
+            getattr(model, "n_second_lien", 0),
+        ),
+        feature_names=tuple(model.transformer.feature_names_),
+        weighting="observed_and_equal_class_mass_within_source_year",
+        source_prior="observed_and_one_half",
+        artifact_path=model_file,
+    )
+    artifacts.save_pickle_artifact(model, model_file, metadata)
 
 
 def load_density_ratio_models(model_file: str | Path) -> DensityRatioModels:
     """Load a trusted local complete ratio-model bundle."""
-    with Path(model_file).open("rb") as file:
-        model = pickle.load(file)
-    if not isinstance(model, DensityRatioModels):
-        raise TypeError("Saved object is not a DensityRatioModels bundle")
+    model, metadata = artifacts.load_pickle_artifact(
+        model_file, DensityRatioModels
+    )
+    if metadata is not None:
+        artifacts.validate_metadata_identity(
+            metadata,
+            model_id=_density_ratio_bundle_id(model),
+            train_years=model.train_years,
+        )
     return model
 
 
@@ -245,6 +285,12 @@ def fit_known_source_prior_model(
     features = transformer.fit_transform(training)
     labels = training[config.LABEL_VAR].to_numpy()
     y_second = labels == config.SECOND_LIEN_CLASS
+    counts = artifacts.training_counts(
+        training,
+        label_var=config.LABEL_VAR,
+        first_lien_class=config.FIRST_LIEN_CLASS,
+        second_lien_class=config.SECOND_LIEN_CLASS,
+    )
     prior_weights = equal_source_prior_weights(training, y_second)
     models, diagnostics = model_selection.fit_regularization_path(
         features, labels, [regularization_c], sample_weight=prior_weights
@@ -259,6 +305,9 @@ def fit_known_source_prior_model(
         specification=specification,
         regularization_c=regularization_c,
         train_years=tuple(sorted(pd.unique(training["year"]))),
+        n_training=counts[0],
+        n_first_lien=counts[1],
+        n_second_lien=counts[2],
     )
     if model_file is not None:
         save_known_source_prior_model(fitted, model_file)
@@ -270,19 +319,40 @@ def save_known_source_prior_model(
 ) -> None:
     """Persist every parameter needed to reproduce a fold's log ratios."""
     model_file = Path(model_file)
-    model_file.parent.mkdir(parents=True, exist_ok=True)
-    with model_file.open("wb") as file:
-        pickle.dump(model, file)
+    adapted = adapters.adapt_known_source_prior_model(model)
+    metadata = artifacts.build_metadata(
+        model_id=adapted.model_id,
+        configuration=ModelConfiguration.from_mapping(
+            "logistic",
+            model.specification.name,
+            {"C": model.regularization_c},
+        ),
+        train_years=model.train_years,
+        counts=(
+            getattr(model, "n_training", 0),
+            getattr(model, "n_first_lien", 0),
+            getattr(model, "n_second_lien", 0),
+        ),
+        feature_names=tuple(model.transformer.feature_names_),
+        weighting="equal_class_mass_within_source_year",
+        source_prior="one_half",
+        artifact_path=model_file,
+    )
+    artifacts.save_pickle_artifact(model, model_file, metadata)
 
 
 def load_known_source_prior_model(
     model_file: str | Path,
 ) -> KnownSourcePriorModel:
     """Load a trusted local known-prior fold model."""
-    with Path(model_file).open("rb") as file:
-        model = pickle.load(file)
-    if not isinstance(model, KnownSourcePriorModel):
-        raise TypeError("Saved object is not a KnownSourcePriorModel")
+    model, metadata = artifacts.load_pickle_artifact(
+        model_file, KnownSourcePriorModel
+    )
+    artifacts.validate_metadata_identity(
+        metadata,
+        model_id=adapters.adapt_known_source_prior_model(model).model_id,
+        train_years=model.train_years,
+    )
     return model
 
 
@@ -300,6 +370,14 @@ def known_source_prior_model_path(
     return Path(model_dir) / (
         f"known_source_prior__{specification.name}__c_{c_label}"
         f"__train_{min(years)}_{max(years)}.pkl"
+    )
+
+
+def _density_ratio_bundle_id(model: DensityRatioModels) -> str:
+    c_label = format(model.regularization_c, ".12g").replace(".", "p")
+    return (
+        f"logistic_ratio_variants__{model.specification.name}__c_{c_label}"
+        f"__train_{min(model.train_years)}_{max(model.train_years)}"
     )
 
 

@@ -91,6 +91,20 @@ class ModelConfiguration:
         """Return a mutable copy of the estimator hyperparameters."""
         return dict(self.hyperparameters)
 
+    @classmethod
+    def from_dict(cls, values: Mapping[str, object]) -> ModelConfiguration:
+        """Restore a configuration from :meth:`to_dict` output."""
+        hyperparameters = values.get("hyperparameters", {})
+        if not isinstance(hyperparameters, Mapping):
+            raise TypeError("hyperparameters must be a mapping")
+        return cls(
+            family=str(values["family"]),
+            specification=str(values["specification"]),
+            hyperparameters=tuple(sorted(hyperparameters.items())),
+            random_seed=values.get("random_seed"),
+            schema_version=int(values.get("schema_version", SCHEMA_VERSION)),
+        )
+
     def to_dict(self) -> dict[str, object]:
         """Return a JSON-compatible representation."""
         return {
@@ -185,6 +199,7 @@ class ModelArtifactMetadata:
     source_prior: str
     artifact_path: str
     software_versions: tuple[tuple[str, str], ...] = ()
+    payload_sha256: str | None = None
     schema_version: int = SCHEMA_VERSION
 
     def __post_init__(self) -> None:
@@ -207,13 +222,45 @@ class ModelArtifactMetadata:
             set(version_names)
         ):
             raise ValueError("software_versions must have unique, sorted names")
+        if self.payload_sha256 is not None and (
+            len(self.payload_sha256) != 64
+            or any(character not in "0123456789abcdef" for character in self.payload_sha256)
+        ):
+            raise ValueError("payload_sha256 must be a lowercase SHA-256 digest")
+
+    @classmethod
+    def from_dict(cls, values: Mapping[str, object]) -> ModelArtifactMetadata:
+        """Restore and validate metadata from a JSON-compatible mapping."""
+        configuration = values.get("configuration")
+        if not isinstance(configuration, Mapping):
+            raise TypeError("configuration must be a mapping")
+        software_versions = values.get("software_versions", {})
+        if not isinstance(software_versions, Mapping):
+            raise TypeError("software_versions must be a mapping")
+        return cls(
+            model_id=str(values["model_id"]),
+            configuration=ModelConfiguration.from_dict(configuration),
+            train_years=tuple(int(year) for year in values["train_years"]),
+            n_training=int(values["n_training"]),
+            n_first_lien=int(values["n_first_lien"]),
+            n_second_lien=int(values["n_second_lien"]),
+            feature_names=tuple(str(name) for name in values["feature_names"]),
+            weighting=str(values["weighting"]),
+            source_prior=str(values["source_prior"]),
+            artifact_path=str(values["artifact_path"]),
+            software_versions=tuple(
+                sorted((str(name), str(version)) for name, version in software_versions.items())
+            ),
+            payload_sha256=values.get("payload_sha256"),
+            schema_version=int(values.get("schema_version", SCHEMA_VERSION)),
+        )
 
     def to_dict(self) -> dict[str, object]:
         """Return a JSON-compatible representation."""
         return {
             **asdict(self),
             "configuration": self.configuration.to_dict(),
-            "train_years": list(self.train_years),
+            "train_years": [int(year) for year in self.train_years],
             "feature_names": list(self.feature_names),
             "software_versions": dict(self.software_versions),
         }

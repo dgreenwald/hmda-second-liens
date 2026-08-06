@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 
 from . import calibration, config, mixture, model_selection
-from .density_ratio import adapters, evaluation
+from .density_ratio import adapters, artifacts, evaluation
 from .density_ratio import folds as temporal_folds
 from .logistic_features import (
     FeatureSpecification,
@@ -38,6 +38,12 @@ def fit_candidate_path(
     labels = training[config.LABEL_VAR].to_numpy()
     y_second = labels == config.SECOND_LIEN_CLASS
     weights = mixture.equal_source_prior_weights(training, y_second)
+    counts = artifacts.training_counts(
+        training,
+        label_var=config.LABEL_VAR,
+        first_lien_class=config.FIRST_LIEN_CLASS,
+        second_lien_class=config.SECOND_LIEN_CLASS,
+    )
     classifiers, diagnostics = model_selection.fit_regularization_path(
         features, labels, c_values, sample_weight=weights
     )
@@ -55,6 +61,9 @@ def fit_candidate_path(
             specification=specification,
             regularization_c=regularization_c,
             train_years=train_years,
+            n_training=counts[0],
+            n_first_lien=counts[1],
+            n_second_lien=counts[2],
         )
         for regularization_c, classifier in classifiers.items()
     }

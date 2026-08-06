@@ -3,6 +3,7 @@ import pandas as pd
 import pytest
 
 from hmda_seconds import random_forest_mixture
+from hmda_seconds.density_ratio import artifacts
 
 
 def synthetic_frame(n=1_000, year=2005, seed=17):
@@ -42,8 +43,11 @@ def test_forest_density_ratio_round_trip(tmp_path):
     path = random_forest_mixture.forest_model_path((2005, 2006), tmp_path)
     random_forest_mixture.save_forest_model(model, path)
     restored = random_forest_mixture.load_forest_model(path)
+    metadata = artifacts.load_metadata(path, allow_legacy=False)
 
     assert diagnostics["fit_seconds"] > 0
+    assert metadata.n_training == len(training)
+    assert metadata.feature_names == model.feature_names
     assert restored.train_years == (2005, 2006)
     assert np.isfinite(restored.log_ratio(training)).all()
     assert restored.log_ratio(training) == pytest.approx(model.log_ratio(training))

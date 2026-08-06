@@ -5,6 +5,7 @@ from scipy.special import expit
 from scipy.stats import norm
 
 from hmda_seconds import logistic_features, mixture
+from hmda_seconds.density_ratio import artifacts
 
 
 def test_mixture_likelihood_recovers_known_share_and_em_agrees():
@@ -122,8 +123,12 @@ def test_known_source_prior_fold_model_round_trip(tmp_path):
         training, specification, 0.1, model_file=path
     )
     restored = mixture.load_known_source_prior_model(path)
+    metadata = artifacts.load_metadata(path, allow_legacy=False)
 
     assert path.exists()
+    assert metadata.n_training == len(training)
+    assert metadata.train_years == (2005, 2006)
+    assert metadata.source_prior == "one_half"
     assert restored.train_years == (2005, 2006)
     assert restored.regularization_c == 0.1
     assert restored.log_ratio(training) == pytest.approx(

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import copy
-import pickle
 import time
 import warnings
 from collections.abc import Iterable
@@ -18,8 +17,9 @@ from sklearn.linear_model import LogisticRegression
 from threadpoolctl import threadpool_limits
 
 from . import clean, config
+from .density_ratio import artifacts
 from .density_ratio import folds as temporal_folds
-from .density_ratio.protocols import TemporalFold
+from .density_ratio.protocols import ModelConfiguration, TemporalFold
 from .logistic_features import (
     CENSUS_REGION_BY_STATE,
     FeatureSpecification,
@@ -62,6 +62,10 @@ class SelectedLogisticModel:
     classifier: LogisticRegression
     specification: FeatureSpecification
     regularization_c: float
+    train_years: tuple[int, ...] = ()
+    n_training: int = 0
+    n_first_lien: int = 0
+    n_second_lien: int = 0
 
     def predict_proba_second_lien(self, df: pd.DataFrame) -> np.ndarray:
         features = self.transformer.transform(df)
@@ -143,6 +147,7 @@ def evaluate_candidate_grid(
     candidate_c: dict[FeatureSpecification, Iterable[float]],
     folds: Iterable[ReverseFold] | None = None,
     checkpoint_file: str | Path | None = None,
+    model_dir: str | Path | None = None,
     n_jobs: int = config.LOGISTIC_SELECTION_JOBS,
 ) -> pd.DataFrame:
     """Fit each candidate/C pair and return all reverse-fold Brier cells.
@@ -154,6 +159,7 @@ def evaluate_candidate_grid(
         folds = reverse_folds()
     folds = list(folds)
     checkpoint_file = Path(checkpoint_file) if checkpoint_file else None
+    model_dir = Path(model_dir) if model_dir is not None else None
     if checkpoint_file is not None and checkpoint_file.exists():
         completed = pd.read_csv(checkpoint_file)
     else:
@@ -196,6 +202,7 @@ def evaluate_candidate_grid(
                     specification,
                     missing_c,
                     completed,
+                    model_dir,
                 )
                 for specification, missing_c in tasks
             ]
@@ -234,10 +241,36 @@ def _evaluate_fold_specification(
     specification: FeatureSpecification,
     c_values: Iterable[float],
     completed: pd.DataFrame,
+    model_dir: Path | None,
 ) -> list[dict]:
     transformer = LogisticFeatureTransformer(specification)
     features = transformer.fit_transform(training)
     models, fit_diagnostics = fit_regularization_path(features, labels, c_values)
+    if model_dir is not None:
+        counts = artifacts.training_counts(
+            training,
+            label_var=config.LABEL_VAR,
+            first_lien_class=config.FIRST_LIEN_CLASS,
+            second_lien_class=config.SECOND_LIEN_CLASS,
+        )
+        train_years = tuple(int(year) for year in fold.train_years)
+        for regularization_c, classifier in models.items():
+            fitted = SelectedLogisticModel(
+                transformer=transformer,
+                classifier=classifier,
+                specification=specification,
+                regularization_c=regularization_c,
+                train_years=train_years,
+                n_training=counts[0],
+                n_first_lien=counts[1],
+                n_second_lien=counts[2],
+            )
+            save_selected_model(
+                fitted,
+                selected_model_path(
+                    train_years, specification, regularization_c, model_dir
+                ),
+            )
     rows = []
     for validation_year in fold.validation_years:
         validation = data_by_year[validation_year]
@@ -406,34 +439,98 @@ def fit_selected_model(
     )
     if not diagnostics[regularization_c]["converged"]:
         raise RuntimeError("Selected logistic model did not converge")
+    counts = artifacts.training_counts(
+        training,
+        label_var=config.LABEL_VAR,
+        first_lien_class=config.FIRST_LIEN_CLASS,
+        second_lien_class=config.SECOND_LIEN_CLASS,
+    )
     return SelectedLogisticModel(
         transformer=transformer,
         classifier=models[regularization_c],
         specification=specification,
         regularization_c=regularization_c,
+        train_years=tuple(sorted(pd.unique(training["year"]))),
+        n_training=counts[0],
+        n_first_lien=counts[1],
+        n_second_lien=counts[2],
     )
 
 
 def save_selected_model(
     model: SelectedLogisticModel,
     output_file: str | Path = config.SELECTED_LOGISTIC_MODEL_FILE,
+    *,
+    train_years: tuple[int, ...] | None = None,
 ) -> None:
     """Serialize a selected transformer/classifier bundle."""
     output_file = Path(output_file)
-    output_file.parent.mkdir(parents=True, exist_ok=True)
-    with output_file.open("wb") as file:
-        pickle.dump(model, file)
+    years = train_years or getattr(model, "train_years", ())
+    if not years:
+        raise ValueError("Selected logistic artifact requires training years")
+    model_id = _selected_model_id(model, years)
+    metadata = artifacts.build_metadata(
+        model_id=model_id,
+        configuration=ModelConfiguration.from_mapping(
+            "raw_logistic",
+            model.specification.name,
+            {"C": model.regularization_c},
+        ),
+        train_years=years,
+        counts=(
+            getattr(model, "n_training", 0),
+            getattr(model, "n_first_lien", 0),
+            getattr(model, "n_second_lien", 0),
+        ),
+        feature_names=tuple(model.transformer.feature_names_),
+        weighting="observed_source_distribution",
+        source_prior="observed",
+        artifact_path=output_file,
+    )
+    artifacts.save_pickle_artifact(model, output_file, metadata)
 
 
 def load_selected_model(
     input_file: str | Path = config.SELECTED_LOGISTIC_MODEL_FILE,
 ) -> SelectedLogisticModel:
     """Load a trusted bundle written by :func:`save_selected_model`."""
-    with Path(input_file).open("rb") as file:
-        model = pickle.load(file)
-    if not isinstance(model, SelectedLogisticModel):
-        raise TypeError(f"Expected SelectedLogisticModel, got {type(model).__name__}")
+    model, metadata = artifacts.load_pickle_artifact(
+        input_file, SelectedLogisticModel
+    )
+    if metadata is not None:
+        artifacts.validate_metadata_identity(
+            metadata,
+            model_id=_selected_model_id(model, model.train_years),
+            train_years=model.train_years,
+        )
     return model
+
+
+def _selected_model_id(
+    model: SelectedLogisticModel, train_years: tuple[int, ...]
+) -> str:
+    c_label = format(model.regularization_c, ".12g").replace(".", "p")
+    return (
+        f"raw_logistic__{model.specification.name}__c_{c_label}"
+        f"__train_{min(train_years)}_{max(train_years)}"
+    )
+
+
+def selected_model_path(
+    train_years: Iterable[int],
+    specification: FeatureSpecification,
+    regularization_c: float,
+    model_dir: str | Path = config.RAW_LOGISTIC_SELECTION_MODEL_DIR,
+) -> Path:
+    """Return the deterministic raw-logistic candidate artifact path."""
+    years = tuple(train_years)
+    if not years:
+        raise ValueError("train_years cannot be empty")
+    c_label = format(regularization_c, ".12g").replace(".", "p")
+    return Path(model_dir) / (
+        f"raw_logistic__{specification.name}__c_{c_label}"
+        f"__train_{min(years)}_{max(years)}.pkl"
+    )
 
 
 def run_model_selection(
@@ -456,6 +553,7 @@ def run_model_selection(
             for specification in specifications
         },
         checkpoint_file=coarse_file,
+        model_dir=config.RAW_LOGISTIC_SELECTION_MODEL_DIR,
     )
     coarse_horizons, coarse_summary = aggregate_brier_cells(coarse_cells)
     coarse_horizons.to_csv(
@@ -471,6 +569,7 @@ def run_model_selection(
         data_by_year,
         refine_candidates,
         checkpoint_file=refinement_file,
+        model_dir=config.RAW_LOGISTIC_SELECTION_MODEL_DIR,
     )
     core_cells = pd.concat([coarse_cells, refinement_cells], ignore_index=True)
     core_cells = core_cells.drop_duplicates(
@@ -562,6 +661,7 @@ def run_geographic_challengers(
         },
         checkpoint_file=output_dir
         / "logistic_selection_geography_coarse_cells.csv",
+        model_dir=config.RAW_LOGISTIC_SELECTION_MODEL_DIR,
     )
     _, coarse_summary = aggregate_brier_cells(coarse_cells)
     refinement_cells = evaluate_candidate_grid(
@@ -569,6 +669,7 @@ def run_geographic_challengers(
         refinement_grid(coarse_summary, specifications),
         checkpoint_file=output_dir
         / "logistic_selection_geography_refinement_cells.csv",
+        model_dir=config.RAW_LOGISTIC_SELECTION_MODEL_DIR,
     )
     cells = pd.concat([coarse_cells, refinement_cells], ignore_index=True)
     cells = cells.drop_duplicates(
@@ -595,7 +696,11 @@ def run_geographic_challengers(
         .first()
         .itertuples()
     }
-    coefficients = coefficient_stability(data_by_year, best_candidates)
+    coefficients = coefficient_stability(
+        data_by_year,
+        best_candidates,
+        model_dir=config.RAW_LOGISTIC_DIAGNOSTIC_MODEL_DIR,
+    )
 
     outputs = {
         "geography_cells": cells,
@@ -634,6 +739,7 @@ def run_spline_purchaser_challenger(
         data_by_year,
         {challenger: config.LOGISTIC_SELECTION_COARSE_C},
         checkpoint_file=output_dir / f"{prefix}_coarse_cells.csv",
+        model_dir=config.RAW_LOGISTIC_SELECTION_MODEL_DIR,
     )
     coarse_horizons, coarse_summary = aggregate_brier_cells(coarse_cells)
     coarse_horizons.to_csv(
@@ -647,6 +753,7 @@ def run_spline_purchaser_challenger(
         data_by_year,
         refinement_grid(coarse_summary, [challenger]),
         checkpoint_file=output_dir / f"{prefix}_refinement_cells.csv",
+        model_dir=config.RAW_LOGISTIC_SELECTION_MODEL_DIR,
     )
     cells = pd.concat([coarse_cells, refinement_cells], ignore_index=True)
     cells = cells.drop_duplicates(
@@ -779,6 +886,7 @@ def geographic_support(
 def coefficient_stability(
     data_by_year: dict[int, pd.DataFrame],
     candidates: dict[FeatureSpecification, float],
+    model_dir: str | Path,
 ) -> pd.DataFrame:
     """Refit best geographic challengers and record coefficients by window."""
     rows = []
@@ -790,6 +898,15 @@ def coefficient_stability(
         for specification, regularization_c in candidates.items():
             selected = fit_selected_model(
                 training, specification, regularization_c
+            )
+            save_selected_model(
+                selected,
+                selected_model_path(
+                    fold.train_years,
+                    specification,
+                    regularization_c,
+                    model_dir,
+                ),
             )
             rows.append(
                 {

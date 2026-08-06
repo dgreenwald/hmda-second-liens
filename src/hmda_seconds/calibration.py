@@ -150,6 +150,7 @@ def run_calibration_diagnostics(
         reverse_metrics_file,
         reverse_bins_file,
         n_bins,
+        config.RAW_LOGISTIC_DIAGNOSTIC_MODEL_DIR,
     )
     reverse_horizons, reverse_summary = aggregate_reverse_metrics(reverse_metrics)
     reverse_horizon_bins = aggregate_reliability_bins(reverse_bins, ["horizon"])
@@ -208,6 +209,7 @@ def _run_reverse_diagnostics(
     metrics_file: Path,
     bins_file: Path,
     n_bins: int,
+    model_dir: str | Path,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     metrics = _load_checkpoint(metrics_file, specification.name, regularization_c)
     bins = _load_checkpoint(bins_file, specification.name, regularization_c)
@@ -222,12 +224,23 @@ def _run_reverse_diagnostics(
         ]
         if not missing:
             continue
-        training = pd.concat(
-            [data_by_year[year] for year in fold.train_years], ignore_index=True
+        model_path = model_selection.selected_model_path(
+            fold.train_years,
+            specification,
+            regularization_c,
+            model_dir,
         )
-        fitted = model_selection.fit_selected_model(
-            training, specification, regularization_c
-        )
+        if model_path.exists():
+            fitted = model_selection.load_selected_model(model_path)
+        else:
+            training = pd.concat(
+                [data_by_year[year] for year in fold.train_years],
+                ignore_index=True,
+            )
+            fitted = model_selection.fit_selected_model(
+                training, specification, regularization_c
+            )
+            model_selection.save_selected_model(fitted, model_path)
         for validation_year in missing:
             validation = data_by_year[validation_year]
             probability = fitted.predict_proba_second_lien(validation)

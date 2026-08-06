@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pickle
 import time
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -15,8 +14,9 @@ from scipy.special import logit
 from sklearn.ensemble import RandomForestClassifier
 
 from . import calibration, config, mixture, model_selection
-from .density_ratio import adapters, evaluation
+from .density_ratio import adapters, artifacts, evaluation
 from .density_ratio import folds as temporal_folds
+from .density_ratio.protocols import ModelConfiguration
 
 PROBABILITY_EPSILON = 1e-12
 ESTIMATOR = "random_forest_mixture"
@@ -29,6 +29,9 @@ class RandomForestDensityRatioModel:
     classifier: RandomForestClassifier
     train_years: tuple[int, ...]
     feature_names: tuple[str, ...]
+    n_training: int = 0
+    n_first_lien: int = 0
+    n_second_lien: int = 0
 
     def log_ratio(self, frame: pd.DataFrame) -> np.ndarray:
         """Return clipped balanced-prior forest log odds."""
@@ -81,6 +84,12 @@ def fit_forest_ratio_model(
     labels = training[config.LABEL_VAR].to_numpy()
     is_second = labels == config.SECOND_LIEN_CLASS
     weights = mixture.equal_source_prior_weights(training, is_second)
+    counts = artifacts.training_counts(
+        training,
+        label_var=config.LABEL_VAR,
+        first_lien_class=config.FIRST_LIEN_CLASS,
+        second_lien_class=config.SECOND_LIEN_CLASS,
+    )
     classifier = RandomForestClassifier(**config.RF_KWARGS)
     start = time.perf_counter()
     # Force thread-based tree parallelism. Process-based joblib can memmap the
@@ -93,6 +102,9 @@ def fit_forest_ratio_model(
         classifier=classifier,
         train_years=tuple(sorted(pd.unique(training["year"]))),
         feature_names=names,
+        n_training=counts[0],
+        n_first_lien=counts[1],
+        n_second_lien=counts[2],
     )
     return model, {"fit_seconds": fit_seconds}
 
@@ -244,17 +256,42 @@ def save_forest_model(
 ) -> None:
     """Persist the complete forest density-ratio model."""
     model_file = Path(model_file)
-    model_file.parent.mkdir(parents=True, exist_ok=True)
-    with model_file.open("wb") as file:
-        pickle.dump(model, file)
+    adapted = adapters.adapt_random_forest_model(model)
+    metadata = artifacts.build_metadata(
+        model_id=adapted.model_id,
+        configuration=ModelConfiguration.from_mapping(
+            "random_forest",
+            "raw_continuous_and_full_one_hot_categories",
+            {
+                "max_depth": config.RF_KWARGS["max_depth"],
+                "n_estimators": config.RF_KWARGS["n_estimators"],
+            },
+            random_seed=config.RF_KWARGS["random_state"],
+        ),
+        train_years=model.train_years,
+        counts=(
+            getattr(model, "n_training", 0),
+            getattr(model, "n_first_lien", 0),
+            getattr(model, "n_second_lien", 0),
+        ),
+        feature_names=model.feature_names,
+        weighting="equal_class_mass_within_source_year",
+        source_prior="one_half",
+        artifact_path=model_file,
+    )
+    artifacts.save_pickle_artifact(model, model_file, metadata)
 
 
 def load_forest_model(model_file: str | Path) -> RandomForestDensityRatioModel:
     """Load a trusted local forest density-ratio model."""
-    with Path(model_file).open("rb") as file:
-        model = pickle.load(file)
-    if not isinstance(model, RandomForestDensityRatioModel):
-        raise TypeError("Saved object is not a RandomForestDensityRatioModel")
+    model, metadata = artifacts.load_pickle_artifact(
+        model_file, RandomForestDensityRatioModel
+    )
+    artifacts.validate_metadata_identity(
+        metadata,
+        model_id=adapters.adapt_random_forest_model(model).model_id,
+        train_years=model.train_years,
+    )
     return model
 
 

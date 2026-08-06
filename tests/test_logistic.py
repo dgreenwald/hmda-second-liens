@@ -3,6 +3,7 @@ import pytest
 from sklearn.linear_model import LogisticRegression
 
 from hmda_seconds import config, logistic
+from hmda_seconds.density_ratio import artifacts
 
 
 def test_fit_and_predict_learn_the_separating_signal(training_frame):
@@ -52,8 +53,10 @@ def test_save_load_round_trip(training_frame, tmp_path):
     outfile = tmp_path / "logistic.pkl"
     logistic.save(fitted, outfile)
     loaded = logistic.load(outfile)
+    metadata = artifacts.load_metadata(outfile, allow_legacy=False)
 
     assert isinstance(loaded, LogisticRegression)
+    assert metadata.n_training == len(training_frame)
     assert np.array_equal(
         logistic.predict(fitted, training_frame),
         logistic.predict(loaded, training_frame),

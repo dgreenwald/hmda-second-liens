@@ -3,6 +3,7 @@ import pandas as pd
 import pytest
 
 from hmda_seconds import logistic_features, model_selection
+from hmda_seconds.density_ratio import artifacts
 
 
 def test_reverse_folds_form_triangular_backward_design():
@@ -45,7 +46,7 @@ def test_refinement_values_add_adjacent_decades(coarse, expected):
     assert model_selection.refinement_values(coarse) == pytest.approx(expected)
 
 
-def test_candidate_grid_returns_every_validation_cell(training_frame):
+def test_candidate_grid_returns_every_validation_cell(training_frame, tmp_path):
     frame_2004 = training_frame.copy()
     frame_2004["year"] = 2004
     frame_2005 = training_frame.copy()
@@ -57,6 +58,7 @@ def test_candidate_grid_returns_every_validation_cell(training_frame):
         {2004: frame_2004, 2005: frame_2005},
         {specification: [0.1, 1.0]},
         folds=[fold],
+        model_dir=tmp_path,
     )
 
     assert len(cells) == 2
@@ -64,6 +66,9 @@ def test_candidate_grid_returns_every_validation_cell(training_frame):
     assert (cells["horizon"] == 1).all()
     assert cells["brier_score"].between(0.0, 1.0).all()
     assert cells["converged"].all()
+    artifacts_written = sorted(tmp_path.glob("*.pkl"))
+    assert len(artifacts_written) == 2
+    assert all(artifacts.metadata_path(path).exists() for path in artifacts_written)
 
 
 def test_selected_model_round_trip_predictions(training_frame, tmp_path):
@@ -79,7 +84,10 @@ def test_selected_model_round_trip_predictions(training_frame, tmp_path):
     output = tmp_path / "selected.pkl"
     model_selection.save_selected_model(selected, output)
     loaded = model_selection.load_selected_model(output)
+    metadata = artifacts.load_metadata(output, allow_legacy=False)
     assert loaded.predict(training_frame).tolist() == prediction.tolist()
+    assert metadata.n_training == len(training_frame)
+    assert metadata.configuration.family == "raw_logistic"
 
 
 def test_candidate_grid_resumes_from_checkpoint(training_frame, tmp_path):

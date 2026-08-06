@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pickle
 import time
 from collections.abc import Iterable
 from dataclasses import asdict, dataclass
@@ -14,8 +13,9 @@ from scipy.special import logit
 from sklearn.ensemble import HistGradientBoostingClassifier
 
 from . import calibration, config, mixture, model_selection
-from .density_ratio import adapters, evaluation
+from .density_ratio import adapters, artifacts, evaluation
 from .density_ratio import folds as temporal_folds
+from .density_ratio.protocols import ModelConfiguration
 
 BOOSTING_FEATURES = [*config.CONTINUOUS_VARS, *config.CATEGORY_VARS]
 CATEGORICAL_MASK = np.array([False, False, True, True])
@@ -51,6 +51,9 @@ class BoostingDensityRatioModel:
     parameters: BoostingParameters
     train_years: tuple[int, ...]
     feature_names: tuple[str, ...] = tuple(BOOSTING_FEATURES)
+    n_training: int = 0
+    n_first_lien: int = 0
+    n_second_lien: int = 0
 
     def log_ratio(self, frame: pd.DataFrame) -> np.ndarray:
         """Return clipped balanced-prior log odds as the log density ratio."""
@@ -125,6 +128,12 @@ def fit_boosting_ratio_model(
     labels = training[config.LABEL_VAR].to_numpy()
     is_second = labels == config.SECOND_LIEN_CLASS
     weights = mixture.equal_source_prior_weights(training, is_second)
+    counts = artifacts.training_counts(
+        training,
+        label_var=config.LABEL_VAR,
+        first_lien_class=config.FIRST_LIEN_CLASS,
+        second_lien_class=config.SECOND_LIEN_CLASS,
+    )
     classifier = HistGradientBoostingClassifier(
         loss="log_loss",
         learning_rate=parameters.learning_rate,
@@ -143,6 +152,9 @@ def fit_boosting_ratio_model(
         classifier=classifier,
         parameters=parameters,
         train_years=tuple(sorted(pd.unique(training["year"]))),
+        n_training=counts[0],
+        n_first_lien=counts[1],
+        n_second_lien=counts[2],
     )
     return fitted, {
         "fit_seconds": fit_seconds,
@@ -586,17 +598,39 @@ def save_boosting_model(
 ) -> None:
     """Persist a complete boosted density-ratio fit."""
     model_file = Path(model_file)
-    model_file.parent.mkdir(parents=True, exist_ok=True)
-    with model_file.open("wb") as file:
-        pickle.dump(model, file)
+    adapted = adapters.adapt_boosting_model(model)
+    metadata = artifacts.build_metadata(
+        model_id=adapted.model_id,
+        configuration=ModelConfiguration.from_mapping(
+            "hist_gradient_boosting",
+            "primitive_continuous_and_native_categories",
+            asdict(model.parameters),
+            random_seed=config.BOOSTING_RANDOM_STATE,
+        ),
+        train_years=model.train_years,
+        counts=(
+            getattr(model, "n_training", 0),
+            getattr(model, "n_first_lien", 0),
+            getattr(model, "n_second_lien", 0),
+        ),
+        feature_names=model.feature_names,
+        weighting="equal_class_mass_within_source_year",
+        source_prior="one_half",
+        artifact_path=model_file,
+    )
+    artifacts.save_pickle_artifact(model, model_file, metadata)
 
 
 def load_boosting_model(model_file: str | Path) -> BoostingDensityRatioModel:
     """Load a trusted local boosted density-ratio fit."""
-    with Path(model_file).open("rb") as file:
-        model = pickle.load(file)
-    if not isinstance(model, BoostingDensityRatioModel):
-        raise TypeError("Saved object is not a BoostingDensityRatioModel")
+    model, metadata = artifacts.load_pickle_artifact(
+        model_file, BoostingDensityRatioModel
+    )
+    artifacts.validate_metadata_identity(
+        metadata,
+        model_id=adapters.adapt_boosting_model(model).model_id,
+        train_years=model.train_years,
+    )
     return model
 
 

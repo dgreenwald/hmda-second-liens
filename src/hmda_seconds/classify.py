@@ -15,6 +15,7 @@ import pandas as pd
 from py_tools.econometrics.machine_learning import RandomForestWrapper
 
 from . import clean, config
+from .density_ratio import artifacts
 
 
 def classify_frame(df: pd.DataFrame, rfw: RandomForestWrapper) -> pd.DataFrame:
@@ -46,6 +47,7 @@ def classify_all_years(
     if years is None:
         years = config.APPLY_YEARS
 
+    artifacts.validate_existing_artifact(model_file)
     rfw = RandomForestWrapper(infile=str(model_file))
 
     df_county_values = clean.build_county_value_panel(config.APPLY_YEARS)

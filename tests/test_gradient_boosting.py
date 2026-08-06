@@ -3,6 +3,7 @@ import pandas as pd
 import pytest
 
 from hmda_seconds import gradient_boosting, model_selection
+from hmda_seconds.density_ratio import artifacts
 
 
 def synthetic_frame(n=2_000, year=2005, seed=17):
@@ -41,8 +42,11 @@ def test_boosting_model_round_trip_and_finite_log_ratio(tmp_path):
     )
     gradient_boosting.save_boosting_model(fitted, path)
     restored = gradient_boosting.load_boosting_model(path)
+    metadata = artifacts.load_metadata(path, allow_legacy=False)
 
     assert diagnostics["n_iter_fitted"] == 20
+    assert metadata.n_training == len(training)
+    assert metadata.configuration.family == "hist_gradient_boosting"
     assert restored.train_years == (2005, 2006)
     assert np.isfinite(restored.log_ratio(training)).all()
     assert restored.log_ratio(training) == pytest.approx(

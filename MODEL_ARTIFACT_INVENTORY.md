@@ -40,16 +40,19 @@ The refactor should not silently reinterpret these as density-ratio models. They
 outside the new fitted-density-ratio protocol unless wrapped by an explicit adapter with a
 well-defined source-prior correction.
 
-## Current gaps to address after behavioral parity
+## Step 5 artifact contract
 
-- Artifact files do not have a common metadata sidecar or schema version.
-- Save helpers write directly to their final paths rather than using atomic replacement.
-- Fit diagnostics are not represented consistently across families.
-- Model IDs are implicit in filenames and family-specific parameter objects.
-- Software versions, training counts, weighting conventions, and feature-schema versions are
-  not recorded uniformly.
-- Checkpoint CSVs can be shared mutable outputs; they are unsuitable for parallel cluster
-  writers.
+New artifacts retain the payloads and deterministic names above and add a sibling
+`<artifact>.metadata.json` file. `density_ratio.artifacts` writes both through temporary files,
+records an explicit schema version and model ID, and binds the sidecar to the pickle with a
+SHA-256 digest. The sidecar also records the configuration, source years, training/class
+counts, feature schema, weighting and source-prior conventions, and software versions.
 
-These are inputs to refactoring steps 5 and 7. Step 1 records them but does not change artifact
-formats or model behavior.
+Loaders continue to accept the metadata-free artifacts that existed when this inventory was
+first written. If a sidecar is present, however, its schema, digest, model identity, and source
+years are validated. This preserves existing real-data fits without weakening validation for
+new artifacts.
+
+Fit diagnostics remain family-specific because their meaningful contents differ. Parallel
+checkpoint CSVs also remain unresolved here; immutable result shards replace them in
+refactoring step 7.

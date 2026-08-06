@@ -267,6 +267,11 @@ schemas, and the pre-refactor numerical characterization remains the parity test
 - Ensure every tuning, validation, diagnostic, and final refit is persisted.
 - Retain backward-compatible loaders or adapters for current artifacts.
 
+Status: completed. `src/hmda_seconds/density_ratio/artifacts.py` provides atomic pickle writes,
+versioned JSON sidecars, SHA-256 validation, deterministic identity checks, and legacy loading.
+New family, tuning, validation, diagnostic, and final fits record source counts, feature schema,
+weighting/prior conventions, configuration, and software versions.
+
 ### 6. Introduce family adapters
 
 - Implement logistic, gradient-boosting, and Random Forest family objects.

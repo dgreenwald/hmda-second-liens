@@ -7,7 +7,6 @@ shows that it is a competitive estimator, not merely a disposable baseline.
 
 from __future__ import annotations
 
-import pickle
 from pathlib import Path
 
 import numpy as np
@@ -16,6 +15,8 @@ from py_tools.econometrics.machine_learning import get_labels_features
 from sklearn.linear_model import LogisticRegression
 
 from . import config
+from .density_ratio import artifacts
+from .density_ratio.protocols import ModelConfiguration
 
 
 def fit(
@@ -37,12 +38,28 @@ def fit(
         category_vars = config.CATEGORY_VARS
 
     encoded = _pin_category_levels(df, category_vars)
-    labels, features, _ = get_labels_features(
+    labels, features, feature_names = get_labels_features(
         encoded, label_var, continuous_vars, category_vars
     )
     kwargs = {**config.LOGISTIC_KWARGS, **logistic_kwargs}
     model = LogisticRegression(**kwargs)
     model.fit(features, labels)
+    counts = artifacts.training_counts(
+        df,
+        label_var=label_var,
+        first_lien_class=config.FIRST_LIEN_CLASS,
+        second_lien_class=config.SECOND_LIEN_CLASS,
+    )
+    model.hmda_train_years_ = tuple(
+        int(year) for year in sorted(pd.unique(df["year"]))
+    )
+    model.hmda_training_counts_ = counts
+    model.hmda_feature_names_ = tuple(str(name) for name in feature_names)
+    model.hmda_configuration_ = {
+        "continuous_vars": tuple(continuous_vars),
+        "category_vars": tuple(category_vars),
+        "kwargs": kwargs,
+    }
     return model
 
 
@@ -72,9 +89,30 @@ def predict_proba_second_lien(
 def save(model: LogisticRegression, outfile: str | Path) -> None:
     """Serialize a fitted logistic classifier."""
     outfile = Path(outfile)
-    outfile.parent.mkdir(parents=True, exist_ok=True)
-    with outfile.open("wb") as file:
-        pickle.dump(model, file)
+    train_years = tuple(model.hmda_train_years_)
+    model_id = (
+        "legacy_logistic__primitive_features"
+        f"__train_{min(train_years)}_{max(train_years)}"
+    )
+    metadata = artifacts.build_metadata(
+        model_id=model_id,
+        configuration=ModelConfiguration.from_mapping(
+            "legacy_logistic",
+            "primitive_features",
+            {
+                "C": float(model.C),
+                "solver": str(model.solver),
+            },
+            random_seed=model.random_state,
+        ),
+        train_years=train_years,
+        counts=tuple(model.hmda_training_counts_),
+        feature_names=tuple(model.hmda_feature_names_),
+        weighting="observed_source_distribution",
+        source_prior="observed",
+        artifact_path=outfile,
+    )
+    artifacts.save_pickle_artifact(model, outfile, metadata)
 
 
 def load(infile: str | Path) -> LogisticRegression:
@@ -82,10 +120,16 @@ def load(infile: str | Path) -> LogisticRegression:
 
     Pickle files must only be loaded from trusted sources.
     """
-    with Path(infile).open("rb") as file:
-        model = pickle.load(file)
-    if not isinstance(model, LogisticRegression):
-        raise TypeError(f"Expected LogisticRegression, got {type(model).__name__}")
+    model, metadata = artifacts.load_pickle_artifact(infile, LogisticRegression)
+    if metadata is not None:
+        train_years = tuple(model.hmda_train_years_)
+        expected_id = (
+            "legacy_logistic__primitive_features"
+            f"__train_{min(train_years)}_{max(train_years)}"
+        )
+        artifacts.validate_metadata_identity(
+            metadata, model_id=expected_id, train_years=train_years
+        )
     return model
 
 

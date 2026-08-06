@@ -1,4 +1,7 @@
+from py_tools.econometrics.machine_learning import RandomForestWrapper
+
 from hmda_seconds import train
+from hmda_seconds.density_ratio import artifacts
 
 
 def test_fit_returns_evaluated_wrapper(training_frame):
@@ -40,3 +43,21 @@ def test_fit_full_uses_every_training_row(training_frame):
 
     assert len(rfw.train_labels) == len(training_frame)
     assert rfw.test_labels is None
+
+
+def test_fit_full_writes_compatible_atomic_artifact(training_frame, tmp_path):
+    path = tmp_path / "forest.pkl"
+
+    train.fit_full(
+        training_frame,
+        outfile=str(path),
+        n_estimators=5,
+        max_depth=2,
+        random_state=0,
+    )
+    restored = RandomForestWrapper(infile=str(path))
+    metadata = artifacts.load_metadata(path, allow_legacy=False)
+
+    assert restored.rf.n_estimators == 5
+    assert metadata.n_training == len(training_frame)
+    assert metadata.configuration.family == "legacy_random_forest"

@@ -53,21 +53,38 @@ def main() -> None:
 
     print("Fitting logistic comparator and threshold baseline...")
     logit = logistic.fit(df_train)
-    threshold_baseline = validate.fit_log_lti_threshold_baseline(df_train)
+    logistic.save(
+        logit, config.LEGACY_VALIDATION_MODEL_DIR / "logistic_comparator.pkl"
+    )
+    threshold_baseline = validate.fit_log_lti_threshold_baseline(
+        df_train,
+        config.LEGACY_VALIDATION_MODEL_DIR / "log_lti_threshold.pkl",
+    )
     print(f"  log_lti threshold baseline: {threshold_baseline.threshold:.4f}")
 
     print("Computing out-of-bag score...")
-    oob = validate.oob_score(df_train)
+    oob = validate.oob_score(
+        df_train, model_dir=config.LEGACY_VALIDATION_MODEL_DIR
+    )
     pd.Series({"oob_score": oob}).to_csv(args.output_dir / "oob_score.csv")
     print(f"  OOB score: {oob:.4f}")
 
     print(f"Running feature ablation on a {len(df_robust):,}-row subsample...")
-    ablation = validate.feature_ablation(df_robust, **ABLATION_KWARGS)
+    ablation = validate.feature_ablation(
+        df_robust,
+        model_dir=config.LEGACY_VALIDATION_MODEL_DIR,
+        **ABLATION_KWARGS,
+    )
     ablation.to_csv(args.output_dir / "feature_ablation.csv", index=False)
     print(ablation.to_string(index=False))
 
     print(f"\nRunning hyperparameter grid on a {len(df_robust):,}-row subsample...")
-    hyperparams = validate.hyperparameter_robustness(df_robust, HYPERPARAMETER_GRID, n_jobs=-1)
+    hyperparams = validate.hyperparameter_robustness(
+        df_robust,
+        HYPERPARAMETER_GRID,
+        model_dir=config.LEGACY_VALIDATION_MODEL_DIR,
+        n_jobs=-1,
+    )
     hyperparams.to_csv(args.output_dir / "hyperparameter_robustness.csv", index=False)
     print(hyperparams.to_string(index=False))
 
