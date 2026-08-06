@@ -109,3 +109,81 @@ def test_shared_evaluator_rejects_misaligned_model_and_target_years():
             label_var="lien_status",
             second_lien_class=2,
         )
+
+
+def test_merge_cell_metrics_preserves_schema_and_computes_differences():
+    keys = {
+        "train_start": [2005, 2006],
+        "validation_year": [2004, 2005],
+        "horizon": [1, 1],
+    }
+    primary = pd.DataFrame({**keys, "score": [0.12, 0.20], "ignored": [1, 2]})
+    baseline = pd.DataFrame({**keys, "loss": [0.10, 0.25]})
+    alternative = pd.DataFrame({**keys, "metric": [0.11, 0.18]})
+
+    result = evaluation.merge_cell_metrics(
+        primary,
+        primary_metric="score",
+        primary_output="challenger_brier",
+        comparisons={
+            "baseline_brier": (baseline, "loss"),
+            "alternative_brier": (alternative, "metric"),
+        },
+        difference_columns={
+            "baseline_brier": "challenger_minus_baseline",
+            "alternative_brier": "challenger_minus_alternative",
+        },
+    )
+
+    assert list(result) == [
+        "train_start",
+        "validation_year",
+        "horizon",
+        "challenger_brier",
+        "baseline_brier",
+        "alternative_brier",
+        "challenger_minus_baseline",
+        "challenger_minus_alternative",
+    ]
+    assert result["challenger_minus_baseline"].tolist() == pytest.approx(
+        [0.02, -0.05]
+    )
+    assert result["challenger_minus_alternative"].tolist() == pytest.approx(
+        [0.01, 0.02]
+    )
+
+
+def test_merge_cell_metrics_requires_matching_names_and_unique_cells():
+    primary = pd.DataFrame(
+        {
+            "train_start": [2005],
+            "validation_year": [2004],
+            "horizon": [1],
+            "score": [0.12],
+        }
+    )
+    duplicate = pd.DataFrame(
+        {
+            "train_start": [2005, 2005],
+            "validation_year": [2004, 2004],
+            "horizon": [1, 1],
+            "score": [0.10, 0.11],
+        }
+    )
+
+    with pytest.raises(ValueError, match="must have the same names"):
+        evaluation.merge_cell_metrics(
+            primary,
+            primary_metric="score",
+            primary_output="primary",
+            comparisons={"other": (duplicate, "score")},
+            difference_columns={},
+        )
+    with pytest.raises(pd.errors.MergeError):
+        evaluation.merge_cell_metrics(
+            primary,
+            primary_metric="score",
+            primary_output="primary",
+            comparisons={"other": (duplicate, "score")},
+            difference_columns={"other": "difference"},
+        )

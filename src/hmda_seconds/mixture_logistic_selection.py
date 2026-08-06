@@ -419,10 +419,6 @@ def compare_estimators(
     winner_cells: pd.DataFrame, output_dir: Path
 ) -> pd.DataFrame:
     """Join the reselected winner to the three existing mixture estimators."""
-    keys = ["train_start", "validation_year", "horizon"]
-    result = winner_cells[[*keys, "brier_score"]].rename(
-        columns={"brier_score": "reselected_logistic_brier"}
-    )
     sources = (
         (
             "existing_logistic_brier",
@@ -431,15 +427,17 @@ def compare_estimators(
         ("boosting_brier", output_dir / "boosting_reverse_metrics.csv"),
         ("forest_brier", output_dir / "rf_mixture_reverse_metrics.csv"),
     )
-    for name, path in sources:
-        other = pd.read_csv(path)[[*keys, "brier_score"]].rename(
-            columns={"brier_score": name}
-        )
-        result = result.merge(other, on=keys, validate="one_to_one")
-        result[f"reselected_minus_{name}"] = (
-            result["reselected_logistic_brier"] - result[name]
-        )
-    return result
+    return evaluation.merge_cell_metrics(
+        winner_cells,
+        primary_metric="brier_score",
+        primary_output="reselected_logistic_brier",
+        comparisons={
+            name: (pd.read_csv(path), "brier_score") for name, path in sources
+        },
+        difference_columns={
+            name: f"reselected_minus_{name}" for name, _ in sources
+        },
+    )
 
 
 def evaluate_forward(

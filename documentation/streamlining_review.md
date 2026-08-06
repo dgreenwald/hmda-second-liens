@@ -12,9 +12,9 @@ stands.
 
 The repository currently contains approximately:
 
-- 8,515 lines under `src/hmda_seconds/`;
+- 8,522 lines under `src/hmda_seconds/`;
 - 762 lines under `scripts/`; and
-- 2,789 lines under `tests/`.
+- 2,867 lines under `tests/`.
 
 Large modules are not automatically redundant. In particular, splitting a large module can
 improve navigation without reducing total code. The recommendations below prioritize actual
@@ -22,7 +22,7 @@ duplication and unnecessary dependency layers.
 
 ## Baseline status
 
-All nine original streamlining findings are complete. Ruff, Python compilation, and all 133
+All nine original streamlining findings are complete. Ruff, Python compilation, and all 135
 synthetic tests pass. Streamlining work should preserve this baseline and continue to use the
 bounded real-data family-parity checks where estimator code is moved.
 
@@ -209,7 +209,7 @@ module independent also avoids a circular dependency between `mixture` and `eval
 
 ### 13. Deduplicate pairwise estimator-comparison joins
 
-**Status: open.**
+**Status: completed.**
 
 Three functions across three modules perform the same structural operation: select and rename
 Brier columns, merge one-to-one on `[train_start, validation_year, horizon]`, and compute
@@ -224,10 +224,11 @@ difference columns:
 The number of comparison models and their input column names differ, but the canonical cell
 merge and subtraction logic are shared.
 
-**Recommendation:** Add a pure DataFrame helper, such as `merge_cell_metrics`, which accepts
-already-loaded frames and explicit input/output metric names. Keep CSV loading in the owning
-orchestration modules. Adopt the helper only for tables with one metric per canonical cell; do
-not force geographic or other candidate-specific comparisons through it.
+`density_ratio.evaluation.merge_cell_metrics` now owns canonical cell selection, explicit
+metric renaming, one-to-one joins, and named differences. The three comparison workflows retain
+their CSV loading and output-name declarations. Geographic and candidate-specific comparisons
+remain separate. Direct tests preserve column order, difference values, schema alignment, and
+duplicate-cell rejection.
 
 **Risk:** Low. Output schemas and one-to-one validation must remain unchanged.
 
@@ -320,8 +321,8 @@ would lose the floating-point-safe C comparison.
 2. **Completed: Item 11** (audit FHFA load) — the audit now uses the canonical loader.
 3. **Completed: Item 12** (probability and numerical primitives) — shared helpers and direct
    tests are in place, and all callers have been migrated.
-4. **Item 13** (pairwise comparison helper) — moderate refactor, low risk; requires verifying
-   output schemas are unchanged.
+4. **Completed: Item 13** (pairwise comparison helper) — the three canonical comparisons use
+   the shared pure-DataFrame primitive with schema tests.
 5. **Item 14** (two-stage horizon aggregation) — medium risk; run parity tests after each caller
    is migrated.
 

@@ -207,25 +207,19 @@ def estimator_comparison(
     boosting_file: str | Path,
 ) -> pd.DataFrame:
     """Join all three mixture estimators' reverse-cell Brier scores."""
-    keys = ["train_start", "validation_year", "horizon"]
-    result = forest[[*keys, "brier_score"]].rename(
-        columns={"brier_score": "forest_brier"}
+    return evaluation.merge_cell_metrics(
+        forest,
+        primary_metric="brier_score",
+        primary_output="forest_brier",
+        comparisons={
+            "logistic_brier": (pd.read_csv(logistic_file), "brier_score"),
+            "boosting_brier": (pd.read_csv(boosting_file), "brier_score"),
+        },
+        difference_columns={
+            "logistic_brier": "forest_minus_logistic_brier",
+            "boosting_brier": "forest_minus_boosting_brier",
+        },
     )
-    logistic = pd.read_csv(logistic_file)[[*keys, "brier_score"]].rename(
-        columns={"brier_score": "logistic_brier"}
-    )
-    boosting = pd.read_csv(boosting_file)[[*keys, "brier_score"]].rename(
-        columns={"brier_score": "boosting_brier"}
-    )
-    result = result.merge(logistic, on=keys, validate="one_to_one")
-    result = result.merge(boosting, on=keys, validate="one_to_one")
-    result["forest_minus_logistic_brier"] = (
-        result["forest_brier"] - result["logistic_brier"]
-    )
-    result["forest_minus_boosting_brier"] = (
-        result["forest_brier"] - result["boosting_brier"]
-    )
-    return result
 
 
 def _evaluate_cell(

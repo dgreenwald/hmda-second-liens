@@ -516,28 +516,17 @@ def compare_with_logistic(
 ) -> pd.DataFrame:
     """Join the selected boosted cells to frozen adjusted-logistic results."""
     logistic = pd.read_csv(logistic_cells_file)
-    logistic = logistic[
-        [
-            "train_start",
-            "validation_year",
-            "horizon",
-            "adjusted_brier_known_source_prior",
-        ]
-    ].rename(
-        columns={"adjusted_brier_known_source_prior": "logistic_brier"}
+    return evaluation.merge_cell_metrics(
+        boosting_cells,
+        primary_metric="adjusted_brier",
+        primary_output="boosting_brier",
+        comparisons={
+            "logistic_brier": (logistic, "adjusted_brier_known_source_prior")
+        },
+        difference_columns={
+            "logistic_brier": "boosting_minus_logistic_brier"
+        },
     )
-    comparison = boosting_cells[
-        ["train_start", "validation_year", "horizon", "adjusted_brier"]
-    ].rename(columns={"adjusted_brier": "boosting_brier"})
-    comparison = comparison.merge(
-        logistic,
-        on=["train_start", "validation_year", "horizon"],
-        validate="one_to_one",
-    )
-    comparison["boosting_minus_logistic_brier"] = (
-        comparison["boosting_brier"] - comparison["logistic_brier"]
-    )
-    return comparison
 
 
 def _parameters_from_row(row: pd.Series) -> BoostingParameters:

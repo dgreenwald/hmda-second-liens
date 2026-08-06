@@ -16,6 +16,7 @@ from .protocols import EvaluationResult, FittedDensityRatioModel, TemporalFold
 
 PROBABILITY_FLOOR = 1e-12
 CANONICAL_THRESHOLD = 0.5
+CANONICAL_CELL_KEYS = ("train_start", "validation_year", "horizon")
 
 
 @dataclass(frozen=True)
@@ -37,6 +38,31 @@ class AdjustedProbabilities:
 
     mixture_estimate: mixture.MixtureShareEstimate
     probability: np.ndarray
+
+
+def merge_cell_metrics(
+    primary: pd.DataFrame,
+    *,
+    primary_metric: str,
+    primary_output: str,
+    comparisons: Mapping[str, tuple[pd.DataFrame, str]],
+    difference_columns: Mapping[str, str],
+    keys: tuple[str, ...] = CANONICAL_CELL_KEYS,
+) -> pd.DataFrame:
+    """Join one metric per evaluation cell and subtract each comparison."""
+    if set(comparisons) != set(difference_columns):
+        raise ValueError("comparisons and difference columns must have the same names")
+    if primary_output in comparisons:
+        raise ValueError("primary output must differ from comparison outputs")
+    result = primary[[*keys, primary_metric]].rename(
+        columns={primary_metric: primary_output}
+    )
+    for output, (frame, metric) in comparisons.items():
+        other = frame[[*keys, metric]].rename(columns={metric: output})
+        result = result.merge(other, on=list(keys), validate="one_to_one")
+    for output in comparisons:
+        result[difference_columns[output]] = result[primary_output] - result[output]
+    return result
 
 
 def evaluate_target(
