@@ -1,0 +1,74 @@
+# Density-ratio cluster jobs
+
+The cluster workflow uses one immutable JSON manifest and one Slurm array rather than one
+hand-maintained script per model/window pair. Array tasks share no writable result file: each
+task saves its model artifacts and atomically publishes one result shard.
+
+## Generate the resource pilot
+
+Run this on the cluster from the repository root:
+
+```bash
+python scripts/generate_density_ratio_slurm.py
+```
+
+This writes `output/slurm/density_ratio_jobs.json` and
+`output/slurm/density_ratio_jobs.slurm`. It does **not** submit anything. The default pilot
+contains two tasks on the 2013--2016 source window:
+
+- `linear__none`;
+- `spline_lti__purchaser_type_spline_lti`.
+
+Both tasks fit the complete coarse ridge grid, `C = 0.0001, 0.01, 1, 100`, and evaluate all
+nine earlier labeled target years. The generated array requests eight hours and 32 GB per task,
+matching the existing transition-script template. `/usr/bin/time -v` records wall time and
+maximum resident memory in the task's Slurm log. Generator options can override repository,
+data, output, activation, time, memory, and source-window defaults.
+
+Inspect the generated files before manually submitting:
+
+```bash
+sbatch output/slurm/density_ratio_jobs.slurm
+```
+
+That command is intentionally not run by any repository script.
+
+## Retry and aggregate
+
+The array indices are stable manifest positions. A failed task can be resubmitted by index;
+an already completed matching shard is recognized without refitting. Conflicting shard content
+is rejected rather than overwritten.
+
+After every planned shard exists, aggregate with:
+
+```bash
+python scripts/aggregate_density_ratio_shards.py \
+    --manifest output/slurm/density_ratio_jobs.json \
+    --output-dir output/tables/density_ratio_pilot
+```
+
+The command refuses incomplete, duplicate, malformed, or incompatible results and writes the
+cell, horizon, and equal-horizon summary tables atomically.
+
+## Direct worker invocation
+
+`scripts/run_density_ratio_job.py` also accepts explicit job arguments. Explicit command-line
+values take precedence over these optional cluster environment variables:
+
+```text
+HMDA_DENSITY_RATIO_STAGE
+HMDA_DENSITY_RATIO_FAMILY
+HMDA_DENSITY_RATIO_SPEC
+HMDA_DENSITY_RATIO_TRAIN_START
+HMDA_DENSITY_RATIO_OUTPUT_ROOT
+```
+
+Pass each candidate as a repeated JSON object, for example
+`--configuration '{"C": 0.1}'`. Manifest mode is preferred for planned grids because it fixes
+the complete job matrix before results are inspected.
+
+## Pilot decision
+
+Do not generate or submit the full grid until the two pilot logs have been compared for peak
+memory, wall time, and evidence of shared-input contention. Set final array concurrency and
+resource requests from those measurements rather than extrapolating from the local machine.

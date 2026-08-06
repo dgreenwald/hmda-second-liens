@@ -11,7 +11,7 @@ ROOT := $(abspath .)
 SCRIPTS_DIR := $(ROOT)/scripts
 OUTPUT_DIR := $(ROOT)/output
 
-.PHONY: install test data audit county-values county-value-coverage benchmark-data benchmark-estimators selection-data select-logistic select-mixture-logistic evaluate-spline-purchaser-interactions diagnose-logistic-calibration diagnose-mixture-calibration diagnose-threshold-subgroups plausibility-checks evaluate-gradient-boosting evaluate-rf-mixture estimate-mixture-shares train train-logistic validate classify figures all clean
+.PHONY: install test data audit county-values county-value-coverage benchmark-data benchmark-estimators selection-data select-logistic select-mixture-logistic generate-density-ratio-pilot evaluate-spline-purchaser-interactions diagnose-logistic-calibration diagnose-mixture-calibration diagnose-threshold-subgroups plausibility-checks evaluate-gradient-boosting evaluate-rf-mixture estimate-mixture-shares train train-logistic validate classify figures all clean
 
 install:
 	$(PYTHON) -m pip install -e ".[dev]"
@@ -20,7 +20,7 @@ test:
 	$(PYTHON) -m pytest tests/
 
 # --- Pipeline stages -----------------------------------------------------
-# Each target wraps one scripts/*.py CLI (see MIGRATION_PLAN.md, "Execution
+# Each target wraps one scripts/*.py CLI (see documentation/MIGRATION_PLAN.md, "Execution
 # order"). This is the pipeline contract; targets are filled in as each
 # stage is ported, so not all scripts exist yet.
 
@@ -50,6 +50,9 @@ select-logistic: selection-data
 
 select-mixture-logistic: selection-data
 	$(PYTHON) $(SCRIPTS_DIR)/select_mixture_logistic.py
+
+generate-density-ratio-pilot:
+	$(PYTHON) $(SCRIPTS_DIR)/generate_density_ratio_slurm.py
 
 evaluate-spline-purchaser-interactions: selection-data
 	$(PYTHON) $(SCRIPTS_DIR)/evaluate_spline_purchaser_interactions.py
