@@ -6,8 +6,6 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-import pandas as pd
-
 from hmda_seconds import config, logistic
 
 
@@ -20,9 +18,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    df = pd.read_parquet(args.input)
-    model = logistic.fit(df)
-    logistic.save(model, args.output)
+    logistic.run_training(args.input, args.output)
     print(f"Saved fitted logistic model to {args.output}")
 
 

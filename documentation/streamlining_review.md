@@ -19,7 +19,7 @@ duplication and unnecessary dependency layers.
 ## Baseline status
 
 The Step 8 add/add conflicts identified during the initial audit have been resolved. Ruff,
-Python compilation, and all 163 synthetic tests pass. Streamlining work should preserve this
+Python compilation, and all 164 synthetic tests pass. Streamlining work should preserve this
 baseline and continue to use the bounded real-data family-parity checks where estimator code is
 moved.
 
@@ -136,13 +136,16 @@ period, so `model_selection.ReverseFold` and `model_selection.reverse_folds()` h
 
 ### 8. Keep command-line scripts thin
 
-Several older scripts still contain workflow and persistence logic rather than only argument
-parsing and one package call. `scripts/validate_classifier.py` is the clearest example: it owns
-sampling, fitting decisions, output persistence, and conditional stage execution.
+**Status: completed.**
 
-Move this orchestration into a package-level entry point and leave the script responsible for
-argument parsing and presentation. This improves adherence to repository conventions, though it
-mostly relocates code and should not be counted as a large reduction in total lines.
+The complete legacy validation workflow now lives in `validate.run_validation_workflow`,
+including sampling, fitting decisions, conditional out-of-time execution, and persistence.
+`scripts/validate_classifier.py` is limited to argument parsing and presentation.
+
+Package-level load/process/save entry points also own the legacy training-data, Random Forest
+training, logistic training, classification, histogram-cell, and estimator-benchmark stages.
+Their scripts now parse arguments, make one stage call, and report the result. Audit/report CLIs
+already call one domain operation and only serialize its returned tables.
 
 ### 9. Treat adapters and legacy workflows as explicit policy decisions
 
@@ -169,7 +172,7 @@ dead code.
    and consolidate artifact boilerplate at the same boundary.
 5. **Completed:** introduce and adopt a common calibration-diagnostic cell evaluator.
 6. **Completed:** migrate to canonical folds and remove the legacy fold shim.
-7. Move substantive logic out of older scripts.
+7. **Completed:** move substantive logic out of older scripts.
 8. Decide separately whether documented legacy workflows should be deprecated or removed.
 
 After each phase, run the full synthetic suite and the existing bounded family-parity checks.

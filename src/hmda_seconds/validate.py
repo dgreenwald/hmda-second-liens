@@ -30,11 +30,100 @@ from sklearn.metrics import (
 from sklearn.model_selection import train_test_split
 from statsmodels.stats.contingency_tables import mcnemar
 
-from . import config
+from . import config, logistic
 from .density_ratio import artifacts
 from .density_ratio.protocols import ModelConfiguration
 
 CLASS_LABELS = [config.FIRST_LIEN_CLASS, config.SECOND_LIEN_CLASS]
+ABLATION_KWARGS = {
+    "n_estimators": 30,
+    "max_depth": 10,
+    "random_state": 17,
+    "n_jobs": -1,
+}
+HYPERPARAMETER_GRID = [
+    {"n_estimators": 50, "max_depth": 10},
+    {"n_estimators": 50, "max_depth": 8},
+    {"n_estimators": 50, "max_depth": 15},
+    {"n_estimators": 200, "max_depth": 10},
+]
+ROBUSTNESS_SUBSAMPLE = 500_000
+
+
+def run_validation_workflow(
+    train_input: str | Path = config.TRAIN_PARQUET,
+    classify_input: str | Path = config.CLASSIFY_PARQUET,
+    output_dir: str | Path = config.TABLE_DIR,
+    model_dir: str | Path = config.LEGACY_VALIDATION_MODEL_DIR,
+    robustness_subsample: int = ROBUSTNESS_SUBSAMPLE,
+) -> dict[str, pd.DataFrame | float | LogLtiThresholdBaseline | bool]:
+    """Run and persist the complete legacy RF validation workflow."""
+    output_dir = Path(output_dir)
+    model_dir = Path(model_dir)
+    classify_input = Path(classify_input)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    model_dir.mkdir(parents=True, exist_ok=True)
+
+    training = pd.read_parquet(train_input)
+    robust = training.sample(
+        n=min(robustness_subsample, len(training)), random_state=17
+    )
+    logit = logistic.fit(training)
+    logistic.save(logit, model_dir / "logistic_comparator.pkl")
+    threshold = fit_log_lti_threshold_baseline(
+        training, model_dir / "log_lti_threshold.pkl"
+    )
+    oob = oob_score(training, model_dir=model_dir)
+    pd.Series({"oob_score": oob}).to_csv(output_dir / "oob_score.csv")
+    ablation = feature_ablation(robust, model_dir=model_dir, **ABLATION_KWARGS)
+    ablation.to_csv(output_dir / "feature_ablation.csv", index=False)
+    hyperparameters = hyperparameter_robustness(
+        robust, HYPERPARAMETER_GRID, model_dir=model_dir, n_jobs=-1
+    )
+    hyperparameters.to_csv(
+        output_dir / "hyperparameter_robustness.csv", index=False
+    )
+    outputs: dict[str, pd.DataFrame | float | LogLtiThresholdBaseline | bool] = {
+        "oob_score": oob,
+        "threshold_baseline": threshold,
+        "feature_ablation": ablation,
+        "hyperparameter_robustness": hyperparameters,
+        "out_of_time_skipped": not classify_input.exists(),
+    }
+    if not classify_input.exists():
+        return outputs
+
+    classified = pd.read_parquet(classify_input)
+    oot = out_of_time_metrics(classified)
+    oot.to_csv(output_dir / "out_of_time_metrics.csv")
+    continuity = continuity_check(classified)
+    continuity.to_csv(output_dir / "continuity_check.csv")
+    logit_prediction = logistic.predict(logit, classified)
+    logit_probability = logistic.predict_proba_second_lien(logit, classified)
+    logit_oot = evaluate_by_year(
+        classified, logit_prediction, y_prob=logit_probability
+    )
+    logit_oot.to_csv(output_dir / "out_of_time_metrics_logistic.csv")
+    threshold_oot = evaluate_by_year(classified, threshold.predict(classified))
+    threshold_oot.to_csv(
+        output_dir / "out_of_time_metrics_threshold_baseline.csv"
+    )
+    comparison = compare_classifiers_by_year(
+        classified,
+        classified[config.PREDICTED_LABEL_VAR].to_numpy(),
+        logit_prediction,
+    )
+    comparison.to_csv(output_dir / "rf_vs_logistic_mcnemar.csv")
+    outputs.update(
+        {
+            "out_of_time_metrics": oot,
+            "continuity_check": continuity,
+            "logistic_out_of_time_metrics": logit_oot,
+            "threshold_out_of_time_metrics": threshold_oot,
+            "rf_vs_logistic_mcnemar": comparison,
+        }
+    )
+    return outputs
 
 
 # --------------------------------------------------------------------------

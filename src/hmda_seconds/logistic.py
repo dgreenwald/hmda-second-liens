@@ -19,6 +19,16 @@ from .density_ratio import artifacts
 from .density_ratio.protocols import ModelConfiguration
 
 
+def run_training(
+    input_file: str | Path = config.TRAIN_PARQUET,
+    output_file: str | Path = config.LOGISTIC_MODEL_FILE,
+) -> LogisticRegression:
+    """Load the training extract, fit the legacy logistic model, and save it."""
+    model = fit(pd.read_parquet(input_file))
+    save(model, output_file)
+    return model
+
+
 def fit(
     df: pd.DataFrame,
     label_var: str = config.LABEL_VAR,

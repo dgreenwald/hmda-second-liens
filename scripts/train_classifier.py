@@ -6,8 +6,6 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-import pandas as pd
-
 from hmda_seconds import config, train
 
 
@@ -23,12 +21,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    df = pd.read_parquet(args.input)
-
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.plot.parent.mkdir(parents=True, exist_ok=True)
-
-    train.fit(df, outfile=str(args.output), plotpath=str(args.plot))
+    train.run_training(args.input, args.output, args.plot)
 
     print(f"Saved fitted model to {args.output}")
     print(f"Saved feature-importance plot to {args.plot}")

@@ -60,3 +60,20 @@ def classify_all_years(
         df_list.append(classify_frame(df_year, rfw))
 
     return pd.concat(df_list, axis=0, ignore_index=True)
+
+
+def run_classification(
+    model_file: str | Path = config.MODEL_FILE,
+    output_file: str | Path = config.CLASSIFY_PARQUET,
+    *,
+    years=None,
+    yearly_dir: str | Path | None = None,
+) -> pd.DataFrame:
+    """Classify all requested years and persist the combined extract."""
+    frame = classify_all_years(
+        model_file=model_file, years=years, yearly_dir=yearly_dir
+    )
+    output_file = Path(output_file)
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    frame.to_parquet(output_file, index=False)
+    return frame

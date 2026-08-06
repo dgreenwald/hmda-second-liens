@@ -17,6 +17,35 @@ MODEL_RF = "random_forest_full"
 MODEL_LOGIT = "logistic_full"
 
 
+def run_benchmark(
+    train_input: str | Path = config.BENCHMARK_TRAIN_PARQUET,
+    yearly_dir: str | Path = config.HMDA_YEARLY_DIR,
+    output_dir: str | Path = config.TABLE_DIR,
+    rf_output: str | Path = config.BENCHMARK_RF_MODEL_FILE,
+    logistic_output: str | Path = config.BENCHMARK_LOGISTIC_MODEL_FILE,
+) -> dict[str, pd.DataFrame]:
+    """Run and persist the fair full-sample estimator benchmark."""
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    training = pd.read_parquet(train_input)
+    forest, logit, model_summary = fit_estimators(
+        training, rf_output=rf_output, logistic_output=logistic_output
+    )
+    del training
+    gc.collect()
+    county_values = clean.build_county_value_panel(config.APPLY_YEARS)
+    results = evaluate_estimators(
+        forest, logit, county_values, yearly_dir=yearly_dir
+    )
+    model_summary = model_summary.merge(
+        results.pop("prediction_timing"), on="model", validate="one_to_one"
+    )
+    model_summary.to_csv(output_dir / "benchmark_model_summary.csv", index=False)
+    for name, frame in results.items():
+        frame.to_csv(output_dir / f"benchmark_{name}.csv", index=False)
+    return {"model_summary": model_summary, **results}
+
+
 def fit_estimators(
     df_train: pd.DataFrame,
     rf_output: str | Path = config.BENCHMARK_RF_MODEL_FILE,

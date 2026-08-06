@@ -210,3 +210,20 @@ def build_training_data(
         for year in years
     ]
     return pd.concat(frames, axis=0, ignore_index=True)
+
+
+def prepare_training_data(
+    output: str | Path = config.TRAIN_PARQUET,
+    *,
+    years=None,
+    panel_years=None,
+    yearly_dir=None,
+) -> pd.DataFrame:
+    """Build and persist the legacy combined training extract."""
+    frame = build_training_data(
+        years=years, panel_years=panel_years, yearly_dir=yearly_dir
+    )
+    output = Path(output)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    frame.to_parquet(output, index=False)
+    return frame

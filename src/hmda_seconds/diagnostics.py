@@ -88,6 +88,22 @@ def build_cells(df: pd.DataFrame, years=None) -> pd.DataFrame:
     return cells.sort_values(["year", "series", "lti_bin"]).reset_index(drop=True)
 
 
+def run_build_cells(
+    input_file: str | Path = config.CLASSIFY_PARQUET,
+    output_file: str | Path = config.HISTOGRAM_CELLS_PARQUET,
+) -> pd.DataFrame:
+    """Load classified loans, build approved histogram cells, and persist them."""
+    frame = pd.read_parquet(
+        input_file,
+        columns=["year", "log_lti", config.LABEL_VAR, config.PREDICTED_LABEL_VAR],
+    )
+    cells = build_cells(frame)
+    output_file = Path(output_file)
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    cells.to_parquet(output_file, index=False)
+    return cells
+
+
 def render_histogram(cells: pd.DataFrame, year: int, series: str, output_path: Path) -> None:
     """Render one (year, series) LTI density histogram to output_path."""
     sample = cells.loc[(cells["year"] == year) & (cells["series"] == series)]

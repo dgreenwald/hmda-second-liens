@@ -201,3 +201,52 @@ def test_hyperparameter_robustness_returns_one_row_per_grid_point(training_frame
     assert len(out) == 2
     assert set(out["n_estimators"]) == {5, 10}
     assert out["err_rate"].between(0.0, 1.0).all()
+
+
+def test_validation_workflow_persists_available_stages_without_classified_data(
+    training_frame, tmp_path, monkeypatch
+):
+    train_file = tmp_path / "training.parquet"
+    training_frame.to_parquet(train_file)
+    output_dir = tmp_path / "tables"
+    model_dir = tmp_path / "models"
+    saved = []
+
+    monkeypatch.setattr(validate.logistic, "fit", lambda frame: object())
+    monkeypatch.setattr(
+        validate.logistic, "save", lambda model, path: saved.append(path)
+    )
+    monkeypatch.setattr(
+        validate,
+        "fit_log_lti_threshold_baseline",
+        lambda frame, path: validate.LogLtiThresholdBaseline(0.0),
+    )
+    monkeypatch.setattr(validate, "oob_score", lambda frame, model_dir: 0.75)
+    monkeypatch.setattr(
+        validate,
+        "feature_ablation",
+        lambda frame, model_dir, **kwargs: pd.DataFrame(
+            {"dropped_feature": ["(none)"], "err_rate": [0.1]}
+        ),
+    )
+    monkeypatch.setattr(
+        validate,
+        "hyperparameter_robustness",
+        lambda frame, grid, model_dir, n_jobs: pd.DataFrame(
+            {"n_estimators": [50], "err_rate": [0.1]}
+        ),
+    )
+
+    result = validate.run_validation_workflow(
+        train_input=train_file,
+        classify_input=tmp_path / "missing.parquet",
+        output_dir=output_dir,
+        model_dir=model_dir,
+    )
+
+    assert result["out_of_time_skipped"] is True
+    assert result["oob_score"] == 0.75
+    assert saved == [model_dir / "logistic_comparator.pkl"]
+    assert (output_dir / "oob_score.csv").exists()
+    assert (output_dir / "feature_ablation.csv").exists()
+    assert (output_dir / "hyperparameter_robustness.csv").exists()

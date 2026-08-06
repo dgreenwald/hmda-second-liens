@@ -20,6 +20,23 @@ from .density_ratio import artifacts
 from .density_ratio.protocols import ModelConfiguration
 
 
+def run_training(
+    input_file: str | Path = config.TRAIN_PARQUET,
+    output_file: str | Path = config.MODEL_FILE,
+    plot_file: str | Path = config.FIGURE_DIR / "rf_importances.pdf",
+) -> RandomForestWrapper:
+    """Load the training extract, fit the legacy forest, and persist outputs."""
+    output_file = Path(output_file)
+    plot_file = Path(plot_file)
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    plot_file.parent.mkdir(parents=True, exist_ok=True)
+    return fit(
+        pd.read_parquet(input_file),
+        outfile=str(output_file),
+        plotpath=str(plot_file),
+    )
+
+
 def fit(
     df: pd.DataFrame,
     label_var: str = config.LABEL_VAR,

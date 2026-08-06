@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import time
 from pathlib import Path
 
 from hmda_seconds import classify, config
@@ -19,18 +18,11 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    start = time.time()
-
-    df = classify.classify_all_years(model_file=args.model)
-    elapsed = time.time() - start
+    df = classify.run_classification(args.model, args.output)
     print(
         f"Classified {len(df):,} rows across {len(config.APPLY_YEARS)} years "
-        f"({elapsed:.0f}s)"
+        f"and wrote {args.output}"
     )
-
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    df.to_parquet(args.output, index=False)
-    print(f"Wrote {args.output}")
 
 
 if __name__ == "__main__":

@@ -6,8 +6,6 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-import pandas as pd
-
 from hmda_seconds import config, diagnostics
 
 
@@ -20,14 +18,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    df = pd.read_parquet(
-        args.input,
-        columns=["year", "log_lti", config.LABEL_VAR, config.PREDICTED_LABEL_VAR],
-    )
-    cells = diagnostics.build_cells(df)
-
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    cells.to_parquet(args.output, index=False)
+    cells = diagnostics.run_build_cells(args.input, args.output)
     print(f"Wrote {len(cells):,} histogram cells to {args.output}")
 
 
