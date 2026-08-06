@@ -224,6 +224,10 @@ locally, sequentially, or through Slurm.
 - Inventory current artifact names and document which existing files must remain readable.
 - Do not resume the large logistic selection run during this step.
 
+Status: completed before structural changes. The numerical characterization is in
+`tests/test_density_ratio_characterization.py`, and the compatibility boundary is recorded in
+`MODEL_ARTIFACT_INVENTORY.md`.
+
 ### 2. Extract protocols and common value types
 
 - Add `protocols.py` and the frozen records described above.
