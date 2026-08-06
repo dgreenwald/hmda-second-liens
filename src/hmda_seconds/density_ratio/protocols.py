@@ -234,6 +234,9 @@ class EvaluationResult:
     hard_share_050: float
     brier_score: float
     log_loss: float
+    calibration_mean_error: float | None
+    calibration_intercept: float | None
+    calibration_slope: float | None
     optimizer_converged: bool
     mixture_at_boundary: bool
     schema_version: int = SCHEMA_VERSION
@@ -258,6 +261,14 @@ class EvaluationResult:
                 raise ValueError(f"{name} must be finite and lie in [0, 1]")
         if not math.isfinite(self.log_loss) or self.log_loss < 0:
             raise ValueError("log_loss must be finite and nonnegative")
+        for name in (
+            "calibration_mean_error",
+            "calibration_intercept",
+            "calibration_slope",
+        ):
+            value = getattr(self, name)
+            if value is not None and not math.isfinite(value):
+                raise ValueError(f"{name} must be finite or None")
 
     def to_dict(self) -> dict[str, object]:
         """Return a JSON-compatible representation."""

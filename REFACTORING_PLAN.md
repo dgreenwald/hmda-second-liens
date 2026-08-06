@@ -256,6 +256,11 @@ construction. Estimator and diagnostic modules consume these shared objects, whi
 - Compare new and old aggregate outputs within tight numerical tolerances before deleting any
   old implementation.
 
+Status: completed. `src/hmda_seconds/density_ratio/evaluation.py` now owns labeled target-cell
+evaluation, unlabeled mixture adjustment, probability validation, common scores, and release
+shares. Existing family modules translate its result into their established checkpoint table
+schemas, and the pre-refactor numerical characterization remains the parity test.
+
 ### 5. Standardize model artifacts
 
 - Add deterministic model IDs, metadata, atomic writes, and load-time validation.

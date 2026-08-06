@@ -14,6 +14,7 @@ import pandas as pd
 import pyarrow.parquet as pq
 
 from . import clean, config, mixture, model_selection
+from .density_ratio import adapters, evaluation
 
 REPORTING_START_YEAR = 2004
 HISTORICAL_REQUIRED_COLUMNS = [
@@ -131,9 +132,10 @@ def run_historical_plausibility(
                 year, yearly_dir, county_values
             )
         features = known.transformer.transform(frame)
-        log_ratio = known.ratio.log_ratio(features)
-        estimate = mixture.estimate_mixture_share(log_ratio)
-        adjusted = mixture.adjusted_probability(log_ratio, estimate.share)
+        log_ratio = adapters.adapt_known_source_prior_model(known).log_ratio(frame)
+        evaluated = evaluation.adjust_log_ratio(log_ratio)
+        estimate = evaluated.mixture_estimate
+        adjusted = evaluated.probability
         second_column = list(raw.classifier.classes_).index(
             config.SECOND_LIEN_CLASS
         )

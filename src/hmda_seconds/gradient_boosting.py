@@ -14,6 +14,7 @@ from scipy.special import logit
 from sklearn.ensemble import HistGradientBoostingClassifier
 
 from . import calibration, config, mixture, model_selection
+from .density_ratio import adapters, evaluation
 from .density_ratio import folds as temporal_folds
 
 BOOSTING_FEATURES = [*config.CONTINUOUS_VARS, *config.CATEGORY_VARS]
@@ -156,32 +157,32 @@ def evaluate_target_year(
     fit_diagnostics: dict,
 ) -> pd.DataFrame:
     """Estimate the target mixture share and score adjusted probabilities."""
-    start = time.perf_counter()
-    log_ratio = fitted.log_ratio(target)
-    prediction_seconds = time.perf_counter() - start
-    estimate = mixture.estimate_mixture_share(log_ratio)
-    probability = mixture.adjusted_probability(log_ratio, estimate.share)
-    actual_second = (
-        target[config.LABEL_VAR].to_numpy() == config.SECOND_LIEN_CLASS
+    evaluated = evaluation.evaluate_target(
+        adapters.adapt_boosting_model(fitted),
+        target,
+        fold,
+        label_var=config.LABEL_VAR,
+        second_lien_class=config.SECOND_LIEN_CLASS,
     )
-    actual_share = float(actual_second.mean())
+    result = evaluated.result
+    estimate = evaluated.mixture_estimate
     row = {
         "parameter_id": fitted.parameters.identifier,
         **asdict(fitted.parameters),
         "train_start": fold.train_start,
         "train_end": fold.train_end,
-        "validation_year": int(target["year"].iloc[0]),
-        "horizon": fold.horizon_for(int(target["year"].iloc[0])),
-        "n_validation": len(target),
-        "actual_second_share": actual_share,
-        "mixture_share": estimate.share,
-        "mixture_share_error": estimate.share - actual_share,
-        "mean_adjusted_probability": float(probability.mean()),
-        "adjusted_brier": float(np.mean((probability - actual_second) ** 2)),
-        "adjusted_log_loss": _binary_log_loss(actual_second, probability),
-        "adjusted_hard_share_050": float((probability >= 0.5).mean()),
+        "validation_year": result.target_year,
+        "horizon": result.horizon,
+        "n_validation": result.n_observations,
+        "actual_second_share": result.actual_second_share,
+        "mixture_share": result.mixture_share,
+        "mixture_share_error": result.mixture_share - result.actual_second_share,
+        "mean_adjusted_probability": result.mean_probability,
+        "adjusted_brier": result.brier_score,
+        "adjusted_log_loss": result.log_loss,
+        "adjusted_hard_share_050": result.hard_share_050,
         "fit_seconds": fit_diagnostics["fit_seconds"],
-        "prediction_seconds": prediction_seconds,
+        "prediction_seconds": evaluated.log_ratio_seconds,
         "n_iter_fitted": fit_diagnostics["n_iter_fitted"],
         "optimizer_converged": estimate.optimizer_converged,
         "mixture_at_boundary": estimate.at_boundary,
@@ -460,9 +461,15 @@ def _diagnose_cell(
         _diagnostic_cell_present(bins, fold.train_start, validation_year)
     ):
         return metrics, bins
-    log_ratio = model.log_ratio(target)
-    estimate = mixture.estimate_mixture_share(log_ratio)
-    probability = mixture.adjusted_probability(log_ratio, estimate.share)
+    evaluated = evaluation.evaluate_target(
+        adapters.adapt_boosting_model(model),
+        target,
+        fold,
+        label_var=config.LABEL_VAR,
+        second_lien_class=config.SECOND_LIEN_CLASS,
+    )
+    estimate = evaluated.mixture_estimate
+    probability = evaluated.probability
     y_second = target[config.LABEL_VAR].to_numpy() == config.SECOND_LIEN_CLASS
     horizon = fold.horizon_for(validation_year)
     metadata = {
@@ -478,8 +485,8 @@ def _diagnose_cell(
         [
             {
                 **metadata,
-                **calibration.probability_metrics(y_second, probability),
-                "mixture_share": estimate.share,
+                **evaluation.probability_metrics(y_second, probability),
+                "mixture_share": evaluated.result.mixture_share,
                 "share_optimizer_converged": estimate.optimizer_converged,
                 "share_at_boundary": estimate.at_boundary,
             }
@@ -615,13 +622,6 @@ def _parameters_from_row(row: pd.Series) -> BoostingParameters:
         l2_regularization=float(row["l2_regularization"]),
         min_samples_leaf=int(row["min_samples_leaf"]),
     )
-
-
-def _binary_log_loss(y: np.ndarray, probability: np.ndarray) -> float:
-    probability = np.clip(
-        probability, PROBABILITY_EPSILON, 1.0 - PROBABILITY_EPSILON
-    )
-    return float(-np.mean(y * np.log(probability) + (~y) * np.log1p(-probability)))
 
 
 def _number_label(value: float) -> str:

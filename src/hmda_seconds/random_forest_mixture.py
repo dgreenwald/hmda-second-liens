@@ -15,6 +15,7 @@ from scipy.special import logit
 from sklearn.ensemble import RandomForestClassifier
 
 from . import calibration, config, mixture, model_selection
+from .density_ratio import adapters, evaluation
 from .density_ratio import folds as temporal_folds
 
 PROBABILITY_EPSILON = 1e-12
@@ -286,9 +287,15 @@ def _evaluate_cell(
         bins, fold.train_start, year
     ):
         return metrics, bins
-    log_ratio = model.log_ratio(target)
-    estimate = mixture.estimate_mixture_share(log_ratio)
-    probability = mixture.adjusted_probability(log_ratio, estimate.share)
+    evaluated = evaluation.evaluate_target(
+        adapters.adapt_random_forest_model(model),
+        target,
+        fold,
+        label_var=config.LABEL_VAR,
+        second_lien_class=config.SECOND_LIEN_CLASS,
+    )
+    estimate = evaluated.mixture_estimate
+    probability = evaluated.probability
     y_second = target[config.LABEL_VAR].to_numpy() == config.SECOND_LIEN_CLASS
     horizon = fold.horizon_for(year)
     metadata = {
@@ -305,9 +312,9 @@ def _evaluate_cell(
         [
             {
                 **metadata,
-                **calibration.probability_metrics(y_second, probability),
-                "mixture_share": estimate.share,
-                "adjusted_hard_share_050": float((probability >= 0.5).mean()),
+                **evaluation.probability_metrics(y_second, probability),
+                "mixture_share": evaluated.result.mixture_share,
+                "adjusted_hard_share_050": evaluated.result.hard_share_050,
                 "share_optimizer_converged": estimate.optimizer_converged,
                 "share_at_boundary": estimate.at_boundary,
                 "mixture_em_difference": estimate.share - estimate.em_share,

@@ -19,7 +19,6 @@ from .density_ratio import folds as temporal_folds
 from .logistic_features import FeatureSpecification, LogisticFeatureTransformer
 
 YEAR_EFFECT_SCALE = 100.0
-PROBABILITY_EPSILON = 1e-12
 SHARE_BOUND = 1e-9
 SHARE_TOLERANCE = 1e-8
 
@@ -534,12 +533,17 @@ def _evaluate_target_year(
     fold: temporal_folds.TemporalFold,
     validation_year: int,
 ) -> pd.DataFrame:
+    # Local import avoids a module cycle: the shared evaluator retains these
+    # public mixture-estimation primitives as backward-compatible dependencies.
+    from .density_ratio import evaluation
+
     features = fitted.features(target)
     raw_probability = fitted.raw_probability(features)
     actual_second = (
         target[config.LABEL_VAR].to_numpy() == config.SECOND_LIEN_CLASS
     )
     actual_share = float(actual_second.mean())
+    raw_metrics = evaluation.probability_metrics(actual_second, raw_probability)
     row = {
         "specification": fitted.specification.name,
         "regularization_c": fitted.regularization_c,
@@ -551,8 +555,8 @@ def _evaluate_target_year(
         "actual_second_share": actual_share,
         "raw_mean_probability": float(raw_probability.mean()),
         "raw_hard_share": float((raw_probability >= 0.5).mean()),
-        "raw_brier": float(np.mean((raw_probability - actual_second) ** 2)),
-        "raw_log_loss": _binary_log_loss(actual_second, raw_probability),
+        "raw_brier": raw_metrics["brier_score"],
+        "raw_log_loss": raw_metrics["log_loss"],
     }
     for variant in (
         fitted.pooled,
@@ -560,8 +564,18 @@ def _evaluate_target_year(
         fitted.known_source_prior,
     ):
         log_ratio = variant.log_ratio(features)
-        estimate = estimate_mixture_share(log_ratio)
-        adjusted = adjusted_probability(log_ratio, estimate.share)
+        evaluated = evaluation.evaluate_log_ratio(
+            log_ratio,
+            actual_second,
+            model_id=(
+                f"logistic__{variant.name}__{fitted.specification.name}"
+                f"__train_{fold.train_start}_{fold.train_end}"
+            ),
+            fold=fold,
+            target_year=validation_year,
+        )
+        estimate = evaluated.mixture_estimate
+        result = evaluated.result
         suffix = variant.name
         row.update(
             {
@@ -570,15 +584,9 @@ def _evaluate_target_year(
                 f"mixture_absolute_error_{suffix}": abs(
                     estimate.share - actual_share
                 ),
-                f"adjusted_hard_share_{suffix}": float(
-                    (adjusted >= 0.5).mean()
-                ),
-                f"adjusted_brier_{suffix}": float(
-                    np.mean((adjusted - actual_second) ** 2)
-                ),
-                f"adjusted_log_loss_{suffix}": _binary_log_loss(
-                    actual_second, adjusted
-                ),
+                f"adjusted_hard_share_{suffix}": result.hard_share_050,
+                f"adjusted_brier_{suffix}": result.brier_score,
+                f"adjusted_log_loss_{suffix}": result.log_loss,
                 f"mean_log_likelihood_{suffix}": (
                     estimate.mean_log_likelihood
                 ),
@@ -695,16 +703,6 @@ def _year_indicator_matrix(
         raise ValueError(f"Unknown source years: {sorted(unknown)}")
     return np.column_stack(
         [(observed_years == year).astype(float) * scale for year in levels[1:]]
-    )
-
-
-def _binary_log_loss(y_second: np.ndarray, probability: np.ndarray) -> float:
-    probability = np.clip(probability, PROBABILITY_EPSILON, 1 - PROBABILITY_EPSILON)
-    return float(
-        -np.mean(
-            y_second * np.log(probability)
-            + (~y_second) * np.log1p(-probability)
-        )
     )
 
 

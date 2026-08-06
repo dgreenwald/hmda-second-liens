@@ -15,6 +15,7 @@ from scipy.special import expit
 from sklearn.metrics import average_precision_score
 
 from . import config, mixture, model_selection
+from .density_ratio import adapters, evaluation
 from .density_ratio import folds as temporal_folds
 from .logistic_features import CENSUS_REGION_BY_STATE, REGION_LEVELS
 
@@ -382,9 +383,14 @@ def _run_design(
         for validation_year in missing:
             target = data_by_year[validation_year]
             features = known.transformer.transform(target)
-            log_ratio = known.ratio.log_ratio(features)
-            share = mixture.estimate_mixture_share(log_ratio).share
-            adjusted_probability = mixture.adjusted_probability(log_ratio, share)
+            evaluated = evaluation.evaluate_target(
+                adapters.adapt_known_source_prior_model(known),
+                target,
+                fold,
+                label_var=config.LABEL_VAR,
+                second_lien_class=config.SECOND_LIEN_CLASS,
+            )
+            adjusted_probability = evaluated.probability
             second_column = list(raw.classifier.classes_).index(
                 config.SECOND_LIEN_CLASS
             )

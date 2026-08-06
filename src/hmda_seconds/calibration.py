@@ -12,11 +12,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from . import config, model_selection, validate
+from . import config, model_selection
+from .density_ratio import evaluation
 from .density_ratio import folds as temporal_folds
 
 DEFAULT_N_BINS = 10
-PROBABILITY_FLOOR = 1e-12
 METRIC_COLUMNS = [
     "brier_score",
     "log_loss",
@@ -30,25 +30,7 @@ METRIC_COLUMNS = [
 
 def probability_metrics(y_second: np.ndarray, probability: np.ndarray) -> dict:
     """Return the Step 6 proper-score and calibration diagnostics."""
-    y = np.asarray(y_second, dtype=bool)
-    probability = np.asarray(probability, dtype=float)
-    _validate_probability_inputs(y, probability)
-    clipped = np.clip(probability, PROBABILITY_FLOOR, 1 - PROBABILITY_FLOOR)
-    intercept, slope = validate.calibration_coefficients(y, probability)
-    observed = float(y.mean())
-    predicted = float(probability.mean())
-    return {
-        "n": len(y),
-        "brier_score": float(np.mean((probability - y) ** 2)),
-        "log_loss": float(
-            -np.mean(y * np.log(clipped) + (~y) * np.log1p(-clipped))
-        ),
-        "observed_second_share": observed,
-        "mean_predicted_second_share": predicted,
-        "calibration_mean_error": predicted - observed,
-        "calibration_intercept": intercept,
-        "calibration_slope": slope,
-    }
+    return evaluation.probability_metrics(y_second, probability)
 
 
 def reliability_bins(
@@ -364,14 +346,7 @@ def render_reliability_panels(
 
 
 def _validate_probability_inputs(y: np.ndarray, probability: np.ndarray) -> None:
-    if y.ndim != 1 or probability.ndim != 1 or len(y) != len(probability):
-        raise ValueError("Labels and probabilities must be aligned one-dimensional arrays")
-    if len(y) == 0:
-        raise ValueError("Calibration sample is empty")
-    if not np.isfinite(probability).all() or np.any((probability < 0) | (probability > 1)):
-        raise ValueError("Probabilities must be finite and between zero and one")
-    if np.unique(y).size < 2:
-        raise ValueError("Calibration sample must contain both outcome classes")
+    evaluation.validate_probability_inputs(y, probability)
 
 
 def _load_checkpoint(

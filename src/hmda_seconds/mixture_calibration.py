@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 
 from . import calibration, config, mixture, model_selection
+from .density_ratio import adapters, evaluation
 from .density_ratio import folds as temporal_folds
 
 ESTIMATOR = "known_source_prior_mixture"
@@ -147,9 +148,15 @@ def _run_design(
             continue
         for validation_year in missing:
             target = data_by_year[validation_year]
-            log_ratio = fitted.log_ratio(target)
-            share = mixture.estimate_mixture_share(log_ratio)
-            probability = mixture.adjusted_probability(log_ratio, share.share)
+            evaluated = evaluation.evaluate_target(
+                adapters.adapt_known_source_prior_model(fitted),
+                target,
+                fold,
+                label_var=config.LABEL_VAR,
+                second_lien_class=config.SECOND_LIEN_CLASS,
+            )
+            share = evaluated.mixture_estimate
+            probability = evaluated.probability
             y_second = (
                 target[config.LABEL_VAR].to_numpy() == config.SECOND_LIEN_CLASS
             )
@@ -168,8 +175,8 @@ def _run_design(
                 [
                     {
                         **metadata,
-                        **calibration.probability_metrics(y_second, probability),
-                        "mixture_share": share.share,
+                        **evaluation.probability_metrics(y_second, probability),
+                        "mixture_share": evaluated.result.mixture_share,
                         "share_optimizer_converged": share.optimizer_converged,
                         "share_at_boundary": share.at_boundary,
                     }
@@ -179,7 +186,7 @@ def _run_design(
                 y_second, probability, n_bins
             ).assign(**metadata)
             tail_row = pd.DataFrame(
-                [{**metadata, **_tail_metrics(log_ratio)}]
+                [{**metadata, **_tail_metrics(evaluated.log_ratio)}]
             )
             metrics = _upsert(metrics, metric_row, metrics_file)
             bins = _replace_cell(bins, bin_rows, bins_file)

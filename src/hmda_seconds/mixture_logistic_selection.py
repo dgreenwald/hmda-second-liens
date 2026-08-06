@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import time
 from collections.abc import Iterable
 from pathlib import Path
 
@@ -10,6 +9,7 @@ import numpy as np
 import pandas as pd
 
 from . import calibration, config, mixture, model_selection
+from .density_ratio import adapters, evaluation
 from .density_ratio import folds as temporal_folds
 from .logistic_features import (
     FeatureSpecification,
@@ -20,7 +20,6 @@ from .logistic_features import (
 CHALLENGER = FeatureSpecification(
     "spline_lti", "purchaser_type_spline_lti"
 )
-PROBABILITY_EPSILON = 1e-12
 
 
 def candidate_specifications() -> list[FeatureSpecification]:
@@ -160,16 +159,15 @@ def evaluate_target(
     fit_diagnostics: dict,
 ) -> pd.DataFrame:
     """Estimate a target share and score one adjusted candidate cell."""
-    start = time.perf_counter()
-    log_ratio = fitted.log_ratio(target)
-    estimate = mixture.estimate_mixture_share(log_ratio)
-    probability = mixture.adjusted_probability(log_ratio, estimate.share)
-    prediction_seconds = time.perf_counter() - start
-    y_second = target[config.LABEL_VAR].to_numpy() == config.SECOND_LIEN_CLASS
-    year = int(target["year"].iloc[0])
-    clipped = np.clip(
-        probability, PROBABILITY_EPSILON, 1.0 - PROBABILITY_EPSILON
+    evaluated = evaluation.evaluate_target(
+        adapters.adapt_known_source_prior_model(fitted),
+        target,
+        fold,
+        label_var=config.LABEL_VAR,
+        second_lien_class=config.SECOND_LIEN_CLASS,
     )
+    result = evaluated.result
+    estimate = evaluated.mixture_estimate
     return pd.DataFrame(
         [
             {
@@ -179,21 +177,18 @@ def evaluate_target(
                 "regularization_c": fitted.regularization_c,
                 "train_start": fold.train_start,
                 "train_end": fold.train_end,
-                "validation_year": year,
-                "horizon": fold.horizon_for(year),
-                "n_validation": len(target),
-                "brier_score": float(np.mean((probability - y_second) ** 2)),
-                "log_loss": float(
-                    -np.mean(
-                        y_second * np.log(clipped)
-                        + (~y_second) * np.log1p(-clipped)
-                    )
+                "validation_year": result.target_year,
+                "horizon": result.horizon,
+                "n_validation": result.n_observations,
+                "brier_score": result.brier_score,
+                "log_loss": result.log_loss,
+                "actual_second_share": result.actual_second_share,
+                "mixture_share": result.mixture_share,
+                "mixture_share_error": (
+                    result.mixture_share - result.actual_second_share
                 ),
-                "actual_second_share": float(y_second.mean()),
-                "mixture_share": estimate.share,
-                "mixture_share_error": estimate.share - y_second.mean(),
                 "fit_seconds": fit_diagnostics.get("fit_seconds", np.nan),
-                "prediction_seconds": prediction_seconds,
+                "prediction_seconds": evaluated.evaluation_seconds,
                 "n_iter": fit_diagnostics.get("n_iter", np.nan),
                 "converged": fit_diagnostics.get("converged", True),
                 "optimizer_converged": estimate.optimizer_converged,
@@ -489,10 +484,13 @@ def evaluate_forward(
         if not metrics.empty and bool((metrics["validation_year"] == year).any()):
             continue
         target = data_by_year[year]
-        log_ratio = model.log_ratio(target)
-        estimate = mixture.estimate_mixture_share(log_ratio)
-        probability = mixture.adjusted_probability(log_ratio, estimate.share)
-        y_second = target[config.LABEL_VAR].to_numpy() == config.SECOND_LIEN_CLASS
+        evaluated = evaluation.evaluate_target(
+            adapters.adapt_known_source_prior_model(model),
+            target,
+            fold,
+            label_var=config.LABEL_VAR,
+            second_lien_class=config.SECOND_LIEN_CLASS,
+        )
         row = pd.DataFrame(
             [
                 {
@@ -503,10 +501,16 @@ def evaluate_forward(
                     "train_end": max(model.train_years),
                     "validation_year": year,
                     "horizon": fold.horizon_for(year),
-                    **calibration.probability_metrics(y_second, probability),
-                    "mixture_share": estimate.share,
-                    "share_optimizer_converged": estimate.optimizer_converged,
-                    "share_at_boundary": estimate.at_boundary,
+                    **evaluation.probability_metrics(
+                        target[config.LABEL_VAR].to_numpy()
+                        == config.SECOND_LIEN_CLASS,
+                        evaluated.probability,
+                    ),
+                    "mixture_share": evaluated.result.mixture_share,
+                    "share_optimizer_converged": (
+                        evaluated.result.optimizer_converged
+                    ),
+                    "share_at_boundary": evaluated.result.mixture_at_boundary,
                 }
             ]
         )

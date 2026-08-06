@@ -43,32 +43,48 @@ class ExistingFittedModelAdapter:
 
 
 def adapt_known_source_prior_model(
-    fitted: KnownSourcePriorModel, model_id: str
+    fitted: KnownSourcePriorModel, model_id: str | None = None
 ) -> ExistingFittedModelAdapter:
     """Adapt an existing logistic density-ratio fit."""
     from ..mixture import KnownSourcePriorModel
 
     _require_type(fitted, KnownSourcePriorModel)
+    if model_id is None:
+        c_label = _number_label(fitted.regularization_c)
+        model_id = (
+            f"logistic__{fitted.specification.name}__c_{c_label}"
+            f"__train_{min(fitted.train_years)}_{max(fitted.train_years)}"
+        )
     return ExistingFittedModelAdapter(model_id, fitted)
 
 
 def adapt_boosting_model(
-    fitted: BoostingDensityRatioModel, model_id: str
+    fitted: BoostingDensityRatioModel, model_id: str | None = None
 ) -> ExistingFittedModelAdapter:
     """Adapt an existing histogram-gradient-boosting fit."""
     from ..gradient_boosting import BoostingDensityRatioModel
 
     _require_type(fitted, BoostingDensityRatioModel)
+    if model_id is None:
+        model_id = (
+            f"boosting__{fitted.parameters.identifier}"
+            f"__train_{min(fitted.train_years)}_{max(fitted.train_years)}"
+        )
     return ExistingFittedModelAdapter(model_id, fitted)
 
 
 def adapt_random_forest_model(
-    fitted: RandomForestDensityRatioModel, model_id: str
+    fitted: RandomForestDensityRatioModel, model_id: str | None = None
 ) -> ExistingFittedModelAdapter:
     """Adapt an existing Random Forest density-ratio fit."""
     from ..random_forest_mixture import RandomForestDensityRatioModel
 
     _require_type(fitted, RandomForestDensityRatioModel)
+    if model_id is None:
+        model_id = (
+            "random_forest__rf_50_depth_10"
+            f"__train_{min(fitted.train_years)}_{max(fitted.train_years)}"
+        )
     return ExistingFittedModelAdapter(model_id, fitted)
 
 
@@ -77,3 +93,7 @@ def _require_type(fitted: object, expected: type) -> None:
         raise TypeError(
             f"Expected {expected.__name__}, got {type(fitted).__name__}"
         )
+
+
+def _number_label(value: float) -> str:
+    return format(value, ".12g").replace(".", "p")
