@@ -235,6 +235,10 @@ Status: completed before structural changes. The numerical characterization is i
 - Add adapters for existing fitted logistic, boosting, and Random Forest objects without
   changing their numerical behavior.
 
+Status: completed. The structural interfaces and frozen, schema-versioned records are in
+`src/hmda_seconds/density_ratio/protocols.py`. Compatibility adapters delegate to the existing
+fitted classes without moving or modifying their pickle-visible definitions.
+
 ### 3. Centralize fold construction
 
 - Add `folds.py` with the reverse and forward designs.
