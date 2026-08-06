@@ -43,6 +43,9 @@ changing estimator behavior or validation design.
   known-source-prior models to 1990--2016, writes annual aggregate shares and the 2003--2004
   continuity table, and renders the predicted/actual series. It checkpoints annual aggregates
   and never retains loan-level historical probabilities.
+- Gradient-boosting challenger: `make evaluate-gradient-boosting` runs the frozen staged
+  histogram-boosting density-ratio grid, reuses per-fold artifacts in
+  `output/model/boosting_folds/`, and produces reverse and forward calibration diagnostics.
 - Legacy/full release workflow: `make data && make train && make validate && make classify &&
   make figures`; each target maps to one `scripts/*.py` CLI.
 - `pytest tests/` — must pass without real data.
@@ -77,6 +80,10 @@ changing estimator behavior or validation design.
 - Step 8 treats the 2003--2004 continuity check and broader public HELOC/second-mortgage series
   as plausibility evidence, not identification. None of the reviewed public external series
   directly measures subordinate-lien originations in the owner-occupied home-purchase sample.
+- Step 9 boosting uses only the four primitive core predictors with native categorical handling
+  and the same annual mixture-share adjustment as logistic. The selected 7-leaf model improves
+  Brier in all 45 reverse cells but loses to logistic in all nine forward years; retain it as a
+  finalist rather than silently replacing the logistic primary estimator.
 
 ## Commit & Pull Request Guidelines
 - Short, imperative commit subjects, first line <= 72 chars.

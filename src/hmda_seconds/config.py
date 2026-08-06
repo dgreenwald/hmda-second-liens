@@ -26,6 +26,7 @@ PUBLIC_DIR = DATA_DIR / "public"
 OUTPUT_DIR = Path(os.environ.get("HMDA_SECONDS_OUTPUT_DIR", REPO_ROOT / "output"))
 MODEL_DIR = OUTPUT_DIR / "model"
 MIXTURE_FOLD_MODEL_DIR = MODEL_DIR / "mixture_folds"
+BOOSTING_FOLD_MODEL_DIR = MODEL_DIR / "boosting_folds"
 FIGURE_DIR = OUTPUT_DIR / "figures"
 TABLE_DIR = OUTPUT_DIR / "tables"
 
@@ -85,6 +86,7 @@ BENCHMARK_TRAIN_PARQUET = INTERMEDIATE_DIR / (
 )
 SELECTION_DATA_DIR = INTERMEDIATE_DIR / "logistic_selection"
 SELECTED_LOGISTIC_MODEL_FILE = MODEL_DIR / "logistic_selected.pkl"
+SELECTED_BOOSTING_MODEL_FILE = MODEL_DIR / "boosting_challenger.pkl"
 CLASSIFY_PARQUET = (
     INTERMEDIATE_DIR / f"hmda_classified_{min(APPLY_YEARS)}_{max(APPLY_YEARS)}.parquet"
 )
@@ -156,6 +158,19 @@ LOGISTIC_SELECTION_JOBS = int(os.environ.get("HMDA_SECONDS_SELECTION_JOBS", "1")
 LOGISTIC_SELECTION_THREADS_PER_JOB = max(
     1, (os.cpu_count() or 1) // LOGISTIC_SELECTION_JOBS
 )
+
+# Step 9 gradient-boosting challenger. The structure screen varies only the
+# two principal tree-complexity controls; the winning structure is subsequently
+# refined over iteration count and leaf L2 regularization.
+BOOSTING_STRUCTURE_LEAF_NODES = (7, 15, 31)
+BOOSTING_STRUCTURE_LEARNING_RATES = (0.05, 0.1)
+BOOSTING_BASE_MAX_ITER = 200
+BOOSTING_BASE_L2 = 1.0
+BOOSTING_MIN_SAMPLES_LEAF = 1_000
+BOOSTING_REFINEMENT_MAX_ITER = (100, 400)
+BOOSTING_REFINEMENT_L2 = (0.0, 10.0)
+BOOSTING_SCREEN_SURVIVORS = 2
+BOOSTING_RANDOM_STATE = 17
 
 TRAIN_SIZE = 0.25
 TEST_SIZE = 0.75

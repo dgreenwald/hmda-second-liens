@@ -134,7 +134,7 @@ def fit_density_ratio_models(
     # Reweight each source year to a 50/50 class prior. Bayes' rule then makes
     # the fitted log odds an estimate of log(f_1 / f_0), including its
     # intercept, rather than a posterior tied to the observed source prior.
-    prior_weights = _equal_prior_weights(training, y_second)
+    prior_weights = equal_source_prior_weights(training, y_second)
     prior_models, prior_fit = model_selection.fit_regularization_path(
         features, labels, [regularization_c], sample_weight=prior_weights
     )
@@ -245,7 +245,7 @@ def fit_known_source_prior_model(
     features = transformer.fit_transform(training)
     labels = training[config.LABEL_VAR].to_numpy()
     y_second = labels == config.SECOND_LIEN_CLASS
-    prior_weights = _equal_prior_weights(training, y_second)
+    prior_weights = equal_source_prior_weights(training, y_second)
     models, diagnostics = model_selection.fit_regularization_path(
         features, labels, [regularization_c], sample_weight=prior_weights
     )
@@ -639,7 +639,7 @@ def _classifier_ratio_variant(
     )
 
 
-def _equal_prior_weights(
+def equal_source_prior_weights(
     training: pd.DataFrame, y_second: np.ndarray
 ) -> np.ndarray:
     """Give both lien classes half of each source year's total weight."""

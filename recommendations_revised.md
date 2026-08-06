@@ -396,6 +396,24 @@ cost through a material, stable temporal improvement.
 objective consistently across temporal folds without materially worsening
 calibration or transportability.
 
+**Implemented challenger:** use `HistGradientBoostingClassifier` on the four primitive core
+features, with purchaser and loan type treated as native categories. Train with equal source-
+year class priors, interpret balanced-prior log odds as the density ratio, and fit the same
+target-year mixture adjustment used by logistic. A frozen staged grid screens tree structure
+on the latest source window, carries two candidates into all 45 reverse cells, and refines
+iterations and L2 regularization around the winner. Every fitted model is saved. See
+`GRADIENT_BOOSTING_PROTOCOL.md`.
+
+**Result:** the selected 7-leaf, learning-rate 0.05, 200-iteration challenger lowers
+equal-horizon reverse Brier from 0.031779 to 0.026773 and log loss from 0.105932 to 0.092328.
+It improves Brier in all 45 cells and at all nine backward horizons; its gain increases at long
+horizons. However, the final 2004--2007 boosted model is worse than mixture logistic in every
+2008--2016 forward year: average Brier is 0.011994 rather than 0.007307, driven chiefly by a
+1.19-point prevalence shortfall. Retain boosting as a serious finalist, but do not replace
+logistic automatically. Step 10 should compare the historical series and extrapolation/support
+behavior before resolving the strong backward evidence against the forward-regime warning.
+See `GRADIENT_BOOSTING_FINDINGS.md`.
+
 ### Step 10: Select, document, and release the final estimator
 
 Select the final estimator using the predeclared criteria and report the full
