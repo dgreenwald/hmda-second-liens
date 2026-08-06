@@ -6,11 +6,14 @@ This review examines the current Python codebase for dead code, duplicated helpe
 responsibilities, and compatibility layers that may now be removable. The initial findings are
 retained below, with implementation status updated as the streamlining steps are completed.
 
+The review was comprehensively refreshed in August 2026 after all nine original refactoring
+steps were completed. Items 10–16 reflect a fresh audit of the codebase as it currently stands.
+
 The repository currently contains approximately:
 
-- 9,774 lines under `src/hmda_seconds/`;
-- 1,273 lines under `scripts/`; and
-- 3,010 lines under `tests/`.
+- 8,512 lines under `src/hmda_seconds/`;
+- 762 lines under `scripts/`; and
+- 2,738 lines under `tests/`.
 
 Large modules are not automatically redundant. In particular, splitting a large module can
 improve navigation without reducing total code. The recommendations below prioritize actual
@@ -30,9 +33,8 @@ moved.
 **Status: completed.**
 
 The three family modules now own their fitted-model records, feature construction, fitting
-primitives, deterministic paths, and artifact save/load functions. The former top-level
-locations retain compatibility re-exports so existing imports and legacy pickle global lookups
-continue to resolve.
+primitives, deterministic paths, and artifact save/load functions. Top-level orchestration
+modules import those family-owned objects directly.
 
 Equal-source-prior weighting now lives in a shared density-ratio utility rather than in the
 logistic mixture orchestration module. A common fitted-model artifact helper owns metadata
@@ -138,14 +140,9 @@ period, so `model_selection.ReverseFold` and `model_selection.reverse_folds()` h
 
 **Status: completed.**
 
-The complete legacy validation workflow now lives in `validate.run_validation_workflow`,
-including sampling, fitting decisions, conditional out-of-time execution, and persistence.
-`scripts/validate_classifier.py` is limited to argument parsing and presentation.
-
-Package-level load/process/save entry points also own the legacy training-data, Random Forest
-training, logistic training, classification, histogram-cell, and estimator-benchmark stages.
-Their scripts now parse arguments, make one stage call, and report the result. Audit/report CLIs
-already call one domain operation and only serialize its returned tables.
+Every remaining script is limited to argument parsing, one package-level pipeline call, and
+brief presentation. The legacy training, classification, validation, histogram-figure, and
+benchmark scripts were removed with their superseded workflows in Step 8.
 
 ### 9. Treat adapters and legacy workflows as explicit policy decisions
 
@@ -159,6 +156,74 @@ The legacy full-release Random Forest training, classification, validation, figu
 full-sample benchmark workflows have also been removed. The formal frozen logistic selection
 and diagnostics remain because they define the primary estimator rather than a compatibility
 workflow.
+
+## Round 2 assessment
+
+The suggestions in `streamlining_suggestions_gemini_v2.md` were checked against the post-Step-8
+tree. Some file references describe code that had already changed, so the following decisions
+are based on the live implementations rather than the suggested line numbers.
+
+### 10. Centralize prediction and numerical primitives
+
+**Status: recommended.**
+
+Second-lien probability extraction still repeats the scikit-learn class lookup in selected
+logistic, density-ratio logistic, boosting, Random Forest, plausibility, and threshold paths.
+Use one small class-aware probability helper, while retaining model methods as the public
+prediction interface. Also consolidate the duplicate finite-vector and stable log-mean-exp
+implementations. These are genuine identical numerical operations and should have direct unit
+tests for class order, shape, empty inputs, and non-finite values.
+
+Place the numerical primitives in a neutral density-ratio utility rather than expanding
+`evaluation.py` into a miscellaneous helper module.
+
+### 11. Reuse the canonical FHFA loader in the sample audit
+
+**Status: recommended.**
+
+`audit.run_sample_audit` still repeats `clean.load_fhfa_county_hpi`, including year and FIPS
+normalization. It should call the canonical loader. The proposed historical-parquet
+consolidation, however, is already complete: plausibility delegates to
+`clean.load_and_clean_year` with narrow columns and an explicit pre-2004 label policy.
+
+### 12. Centralize the two-stage reverse-horizon aggregation protocol
+
+**Status: recommended, with a narrow interface.**
+
+The selection, mixture, boosting, and threshold modules independently encode equal weighting
+within horizon followed by equal weighting across horizons. A shared primitive should own the
+two grouping stages and completeness/count semantics, while callers continue to name and sort
+their family-specific outputs. This is more than cosmetic deduplication: it prevents the
+scientific weighting protocol from drifting between estimators.
+
+### 13. Consolidate simple pairwise cell comparisons where schemas align
+
+**Status: recommended in part.**
+
+Boosting-versus-logistic and the straightforward challenger tables repeat one-to-one merges on
+the canonical reverse-cell keys and metric subtraction. Add a small comparison primitive and
+adopt it where both sides have one metric per canonical cell. Do not force
+`geographic_incremental_brier` or multi-estimator comparison tables through it: their candidate
+selection, join keys, and output schemas are materially different.
+
+### 14. Keep semantic checkpoint completion checks local
+
+**Status: not recommended.**
+
+`checkpoints.rows_present` already centralizes the generic lookup. The remaining wrappers are
+not six identical four-line functions: some require non-null estimator outputs, some require
+several artifact tables, and others verify complete estimator sets. Their names document the
+workflow's definition of a complete cell. Adding a second generic `cell_present` wrapper would
+save little code and obscure these distinctions.
+
+### 15. Keep the two panel renderers separate
+
+**Status: not recommended.**
+
+The reliability and precision-recall figures share subplot setup but differ in limits, log
+scales, reference lines, curve multiplicity, and legends. A callback-driven generic renderer
+would replace modest plotting repetition with a more indirect interface. Reconsider only if a
+third materially similar panel figure is added.
 
 ## Recommended sequence
 
@@ -174,6 +239,11 @@ workflow.
 6. **Completed:** migrate to canonical folds and remove the legacy fold shim.
 7. **Completed:** move substantive logic out of older scripts.
 8. **Completed:** remove adapters and the superseded legacy full-release workflows.
+9. Centralize class-aware probability extraction and the duplicate numerical primitives.
+10. Route the audit through the canonical FHFA loader.
+11. Centralize the two-stage reverse-horizon aggregation contract and migrate each caller with
+    parity tests.
+12. Consolidate only the pairwise comparison joins that share the canonical cell schema.
 
 After each phase, run the full synthetic suite and the existing bounded family-parity checks.
 Do not combine estimator relocation with changes to specifications, folds, weighting,
