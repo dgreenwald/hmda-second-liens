@@ -38,6 +38,10 @@ def test_write_conversion_slurm_writes_manifest_and_capped_array(tmp_path, monke
     contents = script.read_text()
     assert "#SBATCH --array=0-1%2" in contents
     assert "#SBATCH --account=test-account" in contents
+    expected_log_root = tmp_path / "output/slurm/hmda"
+    assert f"#SBATCH --output={expected_log_root}/%x_%A_%a.out" in contents
+    assert f"#SBATCH --error={expected_log_root}/%x_%A_%a.err" in contents
+    assert f'--manifest "{manifest}"' in contents
     assert 'JobName="${task_name}"' in contents
     assert '--job-index "${SLURM_ARRAY_TASK_ID}"' in contents
     assert '--data-dir "$PY_TOOLS_DATA_DIR/hmda"' in contents

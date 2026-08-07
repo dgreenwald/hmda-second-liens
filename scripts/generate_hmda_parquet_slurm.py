@@ -8,6 +8,8 @@ from pathlib import Path
 
 from hmda_seconds.hmda_conversion import conversion_jobs, write_conversion_slurm
 
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -38,10 +40,13 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    destination = args.destination
+    if not destination.is_absolute():
+        destination = REPOSITORY_ROOT / destination
     jobs = conversion_jobs(args.years, args.sources)
     manifest, script = write_conversion_slurm(
         jobs,
-        destination=args.destination,
+        destination=destination,
         repo_dir=args.repo_dir,
         data_dir=args.data_dir,
         activate=args.activate,
