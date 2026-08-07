@@ -1,4 +1,5 @@
 import json
+from subprocess import CompletedProcess
 
 import pytest
 
@@ -44,6 +45,7 @@ def test_write_conversion_slurm_writes_manifest_and_capped_array(tmp_path, monke
     assert "sources=(nara nara)" in contents
     assert 'year="${years[SLURM_ARRAY_TASK_ID]}"' in contents
     assert "python -m py_tools.datasets.hmda convert" in contents
+    assert "/usr/bin/time" not in contents
     assert "scontrol" not in contents
     assert '--data-dir "$PY_TOOLS_DATA_DIR/hmda"' in contents
     assert "sbatch " not in contents
@@ -85,3 +87,23 @@ def test_conversion_job_name_includes_year_and_source(tmp_path):
     manifest.write_text(json.dumps([{"year": 2004, "source": "nara"}]))
 
     assert hmda_conversion.conversion_job_name(manifest, 0) == "hmda-2004-nara"
+
+
+def test_submit_slurm_calls_sbatch_with_generated_script(tmp_path, monkeypatch):
+    script = tmp_path / "jobs.slurm"
+    script.write_text("#!/bin/bash\n")
+    calls = []
+
+    def fake_run(command, **kwargs):
+        calls.append((command, kwargs))
+        return CompletedProcess(command, 0, "Submitted batch job 12345\n", "")
+
+    monkeypatch.setattr(hmda_conversion.subprocess, "run", fake_run)
+
+    assert hmda_conversion.submit_slurm(script) == "Submitted batch job 12345"
+    assert calls == [
+        (
+            ["sbatch", str(script.resolve())],
+            {"check": True, "capture_output": True, "text": True},
+        )
+    ]

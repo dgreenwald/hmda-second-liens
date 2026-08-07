@@ -4,7 +4,8 @@
 #SBATCH --account=torch_pr_609_general
 #SBATCH --mem=16G
 
-#source "/scratch/projects/greenwaldlab/venvs/hmda-second-liens/bin/activate"
-#cd "/home/dlg340/research/hmda-second-liens"
+module load anaconda3/2025.06
+source "/scratch/projects/greenwaldlab/venvs/hmda-second-liens/bin/activate"
+cd "/home/dlg340/research/hmda-second-liens"
 
 python -m py_tools.datasets.hmda convert 2003 --overwrite

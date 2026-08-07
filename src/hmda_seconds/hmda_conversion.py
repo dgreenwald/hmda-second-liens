@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 
 from py_tools.datasets import hmda
@@ -98,13 +99,27 @@ sources=({sources})
 year="${{years[SLURM_ARRAY_TASK_ID]}}"
 source_name="${{sources[SLURM_ARRAY_TASK_ID]}}"
 
-/usr/bin/time -v python -m py_tools.datasets.hmda convert "${{year}}" \\
+python -m py_tools.datasets.hmda convert "${{year}}" \\
     --source "${{source_name}}" \\
     --chunksize {chunksize} \\
     --compression {compression}{data_argument}{overwrite_argument}
 """
     )
     return manifest, script
+
+
+def submit_slurm(script: str | Path) -> str:
+    """Submit a generated Slurm script and return ``sbatch`` output."""
+    script = Path(script).resolve()
+    if not script.is_file():
+        raise FileNotFoundError(f"Slurm script not found: {script}")
+    result = subprocess.run(
+        ["sbatch", str(script)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return result.stdout.strip()
 
 
 def run_conversion_job(

@@ -18,7 +18,7 @@ python scripts/generate_hmda_parquet_slurm.py \
 ```
 
 This writes a JSON manifest and Slurm script under the repository's `output/slurm/hmda/`
-directory, regardless of the shell's current directory; it never submits.
+directory, regardless of the shell's current directory. By default it does not submit.
 After inspection, submit with `sbatch output/slurm/hmda/hmda_parquet_jobs.slurm`. Repeated
 `--year` and `--source` options select a subset (for example, `--year 2004 --source nara`).
 Existing valid parquet files are skipped unless `--overwrite` is passed.
@@ -28,6 +28,10 @@ written beside the manifest and Slurm script regardless of the directory used fo
 By default, tasks use the same Python environment and `py_tools` data configuration as a simple
 batch script. Pass `--activate PATH` or `--data-dir PATH` only when the batch environment needs
 an explicit override.
+
+Add `--submit` to submit the generated script immediately with `sbatch`. Without this flag,
+generation remains inspection-only. For example, a single conversion can be generated and
+submitted with `--year 2003 --source nara --submit`.
 
 The pipeline expects one cleaned parquet per year at
 `${HMDA_SECONDS_YEARLY_DIR:-data/raw/hmda/save}/hmda<year>.parquet`, in the schema produced by

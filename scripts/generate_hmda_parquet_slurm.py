@@ -6,7 +6,11 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from hmda_seconds.hmda_conversion import conversion_jobs, write_conversion_slurm
+from hmda_seconds.hmda_conversion import (
+    conversion_jobs,
+    submit_slurm,
+    write_conversion_slurm,
+)
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 
@@ -34,6 +38,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--chunksize", type=int, default=100_000)
     parser.add_argument("--compression", default="zstd")
     parser.add_argument("--overwrite", action="store_true")
+    parser.add_argument(
+        "--submit",
+        action="store_true",
+        help="Submit the generated Slurm script with sbatch.",
+    )
     return parser.parse_args()
 
 
@@ -58,7 +67,10 @@ def main() -> None:
     )
     print(f"Wrote {manifest} ({len(jobs)} jobs)")
     print(f"Wrote {script}")
-    print("No jobs were submitted.")
+    if args.submit:
+        print(submit_slurm(script))
+    else:
+        print("No jobs were submitted. Pass --submit to submit automatically.")
 
 
 if __name__ == "__main__":
