@@ -13,9 +13,6 @@ Generate a Slurm array with one task for every supported year/source pair:
 
 ```bash
 python scripts/generate_hmda_parquet_slurm.py \
-    --repo-dir "$LABDIR/hmda-second-liens" \
-    --data-dir "$PY_TOOLS_DATA_DIR/hmda" \
-    --activate "/scratch/projects/greenwaldlab/venvs/hmda-second-liens/bin/activate" \
     --account torch_pr_609_general \
     --max-concurrent 8
 ```
@@ -25,10 +22,12 @@ directory, regardless of the shell's current directory; it never submits.
 After inspection, submit with `sbatch output/slurm/hmda/hmda_parquet_jobs.slurm`. Repeated
 `--year` and `--source` options select a subset (for example, `--year 2004 --source nara`).
 Existing valid parquet files are skipped unless `--overwrite` is passed.
-Each array task renames itself to `hmda-<year>-<source>` after starting; log paths remain
-uniquely keyed by the Slurm array and task IDs.
+Log paths are uniquely keyed by the Slurm array and task IDs.
 The generated script uses absolute manifest and log paths, so its `.out` and `.err` files are
 written beside the manifest and Slurm script regardless of the directory used for `sbatch`.
+By default, tasks use the same Python environment and `py_tools` data configuration as a simple
+batch script. Pass `--activate PATH` or `--data-dir PATH` only when the batch environment needs
+an explicit override.
 
 The pipeline expects one cleaned parquet per year at
 `${HMDA_SECONDS_YEARLY_DIR:-data/raw/hmda/save}/hmda<year>.parquet`, in the schema produced by

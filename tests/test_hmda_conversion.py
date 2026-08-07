@@ -28,7 +28,6 @@ def test_write_conversion_slurm_writes_manifest_and_capped_array(tmp_path, monke
     manifest, script = hmda_conversion.write_conversion_slurm(
         jobs,
         destination="output/slurm/hmda",
-        repo_dir="$LABDIR/repo",
         data_dir="$PY_TOOLS_DATA_DIR/hmda",
         activate="/cluster/venv/bin/activate",
         account="test-account",
@@ -41,11 +40,25 @@ def test_write_conversion_slurm_writes_manifest_and_capped_array(tmp_path, monke
     expected_log_root = tmp_path / "output/slurm/hmda"
     assert f"#SBATCH --output={expected_log_root}/%x_%A_%a.out" in contents
     assert f"#SBATCH --error={expected_log_root}/%x_%A_%a.err" in contents
-    assert f'--manifest "{manifest}"' in contents
-    assert 'JobName="${task_name}"' in contents
-    assert '--job-index "${SLURM_ARRAY_TASK_ID}"' in contents
+    assert "years=(2004 2005)" in contents
+    assert "sources=(nara nara)" in contents
+    assert 'year="${years[SLURM_ARRAY_TASK_ID]}"' in contents
+    assert "python -m py_tools.datasets.hmda convert" in contents
+    assert "scontrol" not in contents
     assert '--data-dir "$PY_TOOLS_DATA_DIR/hmda"' in contents
     assert "sbatch " not in contents
+
+
+def test_default_slurm_has_no_environment_specific_setup(tmp_path):
+    _, script = hmda_conversion.write_conversion_slurm(
+        [{"year": 2003, "source": "nara"}], destination=tmp_path
+    )
+
+    contents = script.read_text()
+    assert "\nsource \"" not in contents
+    assert "LABDIR" not in contents
+    assert "PY_TOOLS_DATA_DIR" not in contents
+    assert "--data-dir" not in contents
 
 
 def test_run_conversion_job_executes_only_selected_pair(tmp_path, monkeypatch):

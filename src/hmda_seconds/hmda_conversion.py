@@ -47,9 +47,8 @@ def write_conversion_slurm(
     jobs: list[dict[str, int | str]],
     *,
     destination: str | Path,
-    repo_dir: str,
-    data_dir: str,
-    activate: str,
+    data_dir: str | None = None,
+    activate: str | None = None,
     account: str = "torch_pr_609_general",
     time_limit: str = "4:00:00",
     memory: str = "16G",
@@ -74,11 +73,14 @@ def write_conversion_slurm(
     array = f"0-{len(jobs) - 1}"
     if max_concurrent is not None:
         array += f"%{max_concurrent}"
-    cluster_manifest = manifest.as_posix()
     # Slurm does not expand shell variables in #SBATCH directive values, so
     # use the concrete generated directory for logs.
     cluster_logs = destination.as_posix()
-    overwrite_flag = " --overwrite" if overwrite else ""
+    years = " ".join(str(job["year"]) for job in jobs)
+    sources = " ".join(str(job["source"]) for job in jobs)
+    activation = f"source {_expandable_quote(activate)}\n" if activate else ""
+    data_argument = f" --data-dir {_expandable_quote(data_dir)}" if data_dir else ""
+    overwrite_argument = " --overwrite" if overwrite else ""
     script = destination / "hmda_parquet_jobs.slurm"
     script.write_text(
         f"""#!/bin/bash
@@ -91,21 +93,15 @@ def write_conversion_slurm(
 #SBATCH --array={array}
 
 set -euo pipefail
-source {_expandable_quote(activate)}
-cd {_expandable_quote(repo_dir)}
-task_name=$(python scripts/run_hmda_parquet_job.py \\
-    --manifest {_expandable_quote(cluster_manifest)} \\
-    --job-index "${{SLURM_ARRAY_TASK_ID}}" \\
-    --print-job-name)
-scontrol update \\
-    JobId="${{SLURM_ARRAY_JOB_ID}}_${{SLURM_ARRAY_TASK_ID}}" \\
-    JobName="${{task_name}}"
-/usr/bin/time -v python scripts/run_hmda_parquet_job.py \\
-    --manifest {_expandable_quote(cluster_manifest)} \\
-    --job-index "${{SLURM_ARRAY_TASK_ID}}" \\
-    --data-dir {_expandable_quote(data_dir)} \\
+{activation}years=({years})
+sources=({sources})
+year="${{years[SLURM_ARRAY_TASK_ID]}}"
+source_name="${{sources[SLURM_ARRAY_TASK_ID]}}"
+
+/usr/bin/time -v python -m py_tools.datasets.hmda convert "${{year}}" \\
+    --source "${{source_name}}" \\
     --chunksize {chunksize} \\
-    --compression {compression}{overwrite_flag}
+    --compression {compression}{data_argument}{overwrite_argument}
 """
     )
     return manifest, script

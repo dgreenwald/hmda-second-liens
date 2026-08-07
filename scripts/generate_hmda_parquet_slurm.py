@@ -22,11 +22,10 @@ def parse_args() -> argparse.Namespace:
         help="Repeat to include multiple sources; defaults to all sources.",
     )
     parser.add_argument("--destination", type=Path, default=Path("output/slurm/hmda"))
-    parser.add_argument("--repo-dir", default="${LABDIR}/hmda-second-liens")
-    parser.add_argument("--data-dir", default="${PY_TOOLS_DATA_DIR}/hmda")
+    parser.add_argument("--data-dir")
     parser.add_argument(
         "--activate",
-        default="/scratch/projects/greenwaldlab/venvs/hmda-second-liens/bin/activate",
+        help="Optional virtual-environment activation script.",
     )
     parser.add_argument("--account", default="torch_pr_609_general")
     parser.add_argument("--time", default="4:00:00")
@@ -47,7 +46,6 @@ def main() -> None:
     manifest, script = write_conversion_slurm(
         jobs,
         destination=destination,
-        repo_dir=args.repo_dir,
         data_dir=args.data_dir,
         activate=args.activate,
         account=args.account,
