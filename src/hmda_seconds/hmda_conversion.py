@@ -66,9 +66,7 @@ def write_conversion_slurm(
     if chunksize <= 0:
         raise ValueError("chunksize must be positive")
 
-    destination = Path(destination)
-    if destination.is_absolute():
-        raise ValueError("destination must be relative to the repository root")
+    destination = Path(destination).resolve()
     destination.mkdir(parents=True, exist_ok=True)
     manifest = destination / "hmda_parquet_jobs.json"
     manifest.write_text(json.dumps(jobs, indent=2) + "\n")
@@ -76,8 +74,10 @@ def write_conversion_slurm(
     array = f"0-{len(jobs) - 1}"
     if max_concurrent is not None:
         array += f"%{max_concurrent}"
-    cluster_manifest = f"{repo_dir}/{manifest.as_posix()}"
-    cluster_logs = f"{repo_dir}/{destination.as_posix()}"
+    cluster_manifest = manifest.as_posix()
+    # Slurm does not expand shell variables in #SBATCH directive values, so
+    # use the concrete generated directory for logs.
+    cluster_logs = destination.as_posix()
     overwrite_flag = " --overwrite" if overwrite else ""
     script = destination / "hmda_parquet_jobs.slurm"
     script.write_text(

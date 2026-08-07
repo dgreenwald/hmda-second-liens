@@ -20,12 +20,15 @@ python scripts/generate_hmda_parquet_slurm.py \
     --max-concurrent 8
 ```
 
-This writes a JSON manifest and Slurm script under `output/slurm/hmda/`; it never submits.
+This writes a JSON manifest and Slurm script under the repository's `output/slurm/hmda/`
+directory, regardless of the shell's current directory; it never submits.
 After inspection, submit with `sbatch output/slurm/hmda/hmda_parquet_jobs.slurm`. Repeated
 `--year` and `--source` options select a subset (for example, `--year 2004 --source nara`).
 Existing valid parquet files are skipped unless `--overwrite` is passed.
 Each array task renames itself to `hmda-<year>-<source>` after starting; log paths remain
 uniquely keyed by the Slurm array and task IDs.
+The generated script uses absolute manifest and log paths, so its `.out` and `.err` files are
+written beside the manifest and Slurm script regardless of the directory used for `sbatch`.
 
 The pipeline expects one cleaned parquet per year at
 `${HMDA_SECONDS_YEARLY_DIR:-data/raw/hmda/save}/hmda<year>.parquet`, in the schema produced by
