@@ -5,14 +5,15 @@ from __future__ import annotations
 
 import argparse
 
-from hmda_seconds.hmda_conversion import run_conversion_job
+from hmda_seconds.hmda_conversion import conversion_job_name, run_conversion_job
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", required=True)
     parser.add_argument("--job-index", required=True, type=int)
-    parser.add_argument("--data-dir", required=True)
+    parser.add_argument("--data-dir")
+    parser.add_argument("--print-job-name", action="store_true")
     parser.add_argument("--chunksize", type=int, default=100_000)
     parser.add_argument("--compression", default="zstd")
     parser.add_argument("--overwrite", action="store_true")
@@ -21,6 +22,11 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    if args.print_job_name:
+        print(conversion_job_name(args.manifest, args.job_index))
+        return
+    if args.data_dir is None:
+        raise SystemExit("--data-dir is required unless --print-job-name is used")
     output = run_conversion_job(
         args.manifest,
         args.job_index,

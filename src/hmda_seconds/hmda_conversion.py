@@ -50,6 +50,7 @@ def write_conversion_slurm(
     repo_dir: str,
     data_dir: str,
     activate: str,
+    account: str = "torch_pr_609_general",
     time_limit: str = "4:00:00",
     memory: str = "16G",
     max_concurrent: int | None = None,
@@ -83,6 +84,7 @@ def write_conversion_slurm(
         f"""#!/bin/bash
 #SBATCH --time={time_limit}
 #SBATCH --job-name=hmda-parquet
+#SBATCH --account={account}
 #SBATCH --output={cluster_logs}/%x_%A_%a.out
 #SBATCH --error={cluster_logs}/%x_%A_%a.err
 #SBATCH --mem={memory}
@@ -91,6 +93,13 @@ def write_conversion_slurm(
 set -euo pipefail
 source {_expandable_quote(activate)}
 cd {_expandable_quote(repo_dir)}
+task_name=$(python scripts/run_hmda_parquet_job.py \\
+    --manifest {_expandable_quote(cluster_manifest)} \\
+    --job-index "${{SLURM_ARRAY_TASK_ID}}" \\
+    --print-job-name)
+scontrol update \\
+    JobId="${{SLURM_ARRAY_JOB_ID}}_${{SLURM_ARRAY_TASK_ID}}" \\
+    JobName="${{task_name}}"
 /usr/bin/time -v python scripts/run_hmda_parquet_job.py \\
     --manifest {_expandable_quote(cluster_manifest)} \\
     --job-index "${{SLURM_ARRAY_TASK_ID}}" \\
@@ -112,12 +121,7 @@ def run_conversion_job(
     overwrite: bool = False,
 ) -> Path:
     """Convert the single year/source pair at ``job_index``."""
-    jobs = json.loads(Path(manifest).read_text())
-    if not isinstance(jobs, list) or not jobs:
-        raise ValueError("HMDA conversion manifest must be a nonempty list")
-    if job_index < 0 or job_index >= len(jobs):
-        raise IndexError(f"Job index {job_index} outside manifest range 0-{len(jobs) - 1}")
-    job = jobs[job_index]
+    job = _manifest_job(manifest, job_index)
     year = int(job["year"])
     source = str(job["source"])
     outputs = hmda.convert_lar(
@@ -129,6 +133,25 @@ def run_conversion_job(
         compression=compression,
     )
     return Path(outputs[0])
+
+
+def conversion_job_name(manifest: str | Path, job_index: int) -> str:
+    """Return the concise Slurm name for one manifest entry."""
+    job = _manifest_job(manifest, job_index)
+    return f"hmda-{job['year']}-{job['source']}"
+
+
+def _manifest_job(manifest: str | Path, job_index: int) -> dict:
+    """Read and validate one conversion job from a manifest."""
+    jobs = json.loads(Path(manifest).read_text())
+    if not isinstance(jobs, list) or not jobs:
+        raise ValueError("HMDA conversion manifest must be a nonempty list")
+    if job_index < 0 or job_index >= len(jobs):
+        raise IndexError(f"Job index {job_index} outside manifest range 0-{len(jobs) - 1}")
+    job = jobs[job_index]
+    if not isinstance(job, dict) or "year" not in job or "source" not in job:
+        raise ValueError(f"Invalid HMDA conversion job at index {job_index}")
+    return job
 
 
 def _expandable_quote(value: str) -> str:

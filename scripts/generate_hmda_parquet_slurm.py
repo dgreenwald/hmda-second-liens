@@ -26,6 +26,7 @@ def parse_args() -> argparse.Namespace:
         "--activate",
         default="/scratch/projects/greenwaldlab/venvs/hmda-second-liens/bin/activate",
     )
+    parser.add_argument("--account", default="torch_pr_609_general")
     parser.add_argument("--time", default="4:00:00")
     parser.add_argument("--memory", default="16G")
     parser.add_argument("--max-concurrent", type=int)
@@ -44,6 +45,7 @@ def main() -> None:
         repo_dir=args.repo_dir,
         data_dir=args.data_dir,
         activate=args.activate,
+        account=args.account,
         time_limit=args.time,
         memory=args.memory,
         max_concurrent=args.max_concurrent,
