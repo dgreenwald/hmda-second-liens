@@ -28,6 +28,8 @@ written beside the manifest and Slurm script regardless of the directory used fo
 By default, tasks use the same Python environment and `py_tools` data configuration as a simple
 batch script. Pass `--activate PATH` or `--data-dir PATH` only when the batch environment needs
 an explicit override.
+Use `--source all` to request every available source explicitly; the generator expands it into
+separate year/source array tasks. Omitting `--source` has the same behavior.
 
 Add `--submit` to submit the generated script immediately with `sbatch`. Without this flag,
 generation remains inspection-only. For example, a single conversion can be generated and

@@ -21,7 +21,12 @@ def conversion_jobs(
     sources: list[str] | tuple[str, ...] | None = None,
 ) -> list[dict[str, int | str]]:
     """Return one deterministic job per supported year/source pair."""
-    selected_sources = tuple(sources) if sources else tuple(SOURCE_YEARS)
+    requested_sources = tuple(sources) if sources else ("all",)
+    selected_sources = (
+        tuple(SOURCE_YEARS)
+        if "all" in requested_sources
+        else tuple(dict.fromkeys(requested_sources))
+    )
     unknown = sorted(set(selected_sources) - set(SOURCE_YEARS))
     if unknown:
         raise ValueError(f"Unknown HMDA source(s): {', '.join(unknown)}")

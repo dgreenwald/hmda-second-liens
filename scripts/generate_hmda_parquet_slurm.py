@@ -22,8 +22,8 @@ def parse_args() -> argparse.Namespace:
         "--source",
         action="append",
         dest="sources",
-        choices=("ffiec_three_year", "ffiec_snapshot", "cfpb", "nara"),
-        help="Repeat to include multiple sources; defaults to all sources.",
+        choices=("all", "ffiec_three_year", "ffiec_snapshot", "cfpb", "nara"),
+        help="Repeat for multiple sources; 'all' expands to every available source.",
     )
     parser.add_argument("--destination", type=Path, default=Path("output/slurm/hmda"))
     parser.add_argument("--data-dir")

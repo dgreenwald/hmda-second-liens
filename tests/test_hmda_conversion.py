@@ -23,6 +23,17 @@ def test_conversion_jobs_reject_years_absent_from_selected_source():
         hmda_conversion.conversion_jobs(years=[1989], sources=["cfpb"])
 
 
+def test_all_source_expands_to_one_job_per_available_explicit_source():
+    jobs = hmda_conversion.conversion_jobs(years=[2017], sources=["all"])
+
+    assert jobs == [
+        {"year": 2017, "source": "ffiec_three_year"},
+        {"year": 2017, "source": "ffiec_snapshot"},
+        {"year": 2017, "source": "cfpb"},
+    ]
+    assert all(job["source"] != "all" for job in jobs)
+
+
 def test_write_conversion_slurm_writes_manifest_and_capped_array(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     jobs = hmda_conversion.conversion_jobs(years=[2004, 2005], sources=["nara"])
