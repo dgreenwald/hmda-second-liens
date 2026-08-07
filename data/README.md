@@ -7,6 +7,23 @@ to this repo; `data/public/` holds small vendored public inputs.
 
 ## HMDA loan-level records
 
+### Parallel raw-to-parquet conversion
+
+Generate a Slurm array with one task for every supported year/source pair:
+
+```bash
+python scripts/generate_hmda_parquet_slurm.py \
+    --repo-dir "$LABDIR/hmda-second-liens" \
+    --data-dir "$PY_TOOLS_DATA_DIR/hmda" \
+    --activate "/scratch/projects/greenwaldlab/venvs/hmda-second-liens/bin/activate" \
+    --max-concurrent 8
+```
+
+This writes a JSON manifest and Slurm script under `output/slurm/hmda/`; it never submits.
+After inspection, submit with `sbatch output/slurm/hmda/hmda_parquet_jobs.slurm`. Repeated
+`--year` and `--source` options select a subset (for example, `--year 2004 --source nara`).
+Existing valid parquet files are skipped unless `--overwrite` is passed.
+
 The pipeline expects one cleaned parquet per year at
 `${HMDA_SECONDS_YEARLY_DIR:-data/raw/hmda/save}/hmda<year>.parquet`, in the schema produced by
 `py_tools.datasets.hmda.load_hmda` (see that module for the exact fixed-width layouts, which

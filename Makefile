@@ -11,7 +11,7 @@ ROOT := $(abspath .)
 SCRIPTS_DIR := $(ROOT)/scripts
 OUTPUT_DIR := $(ROOT)/output
 
-.PHONY: install test audit county-values county-value-coverage selection-data select-logistic select-mixture-logistic generate-density-ratio-pilot generate-first-order-logistic-grid evaluate-spline-purchaser-interactions diagnose-logistic-calibration diagnose-mixture-calibration diagnose-threshold-subgroups plausibility-checks evaluate-gradient-boosting evaluate-rf-mixture estimate-mixture-shares clean
+.PHONY: install test generate-hmda-parquet-jobs audit county-values county-value-coverage selection-data select-logistic select-mixture-logistic generate-density-ratio-pilot generate-first-order-logistic-grid evaluate-spline-purchaser-interactions diagnose-logistic-calibration diagnose-mixture-calibration diagnose-threshold-subgroups plausibility-checks evaluate-gradient-boosting evaluate-rf-mixture estimate-mixture-shares clean
 
 install:
 	$(PYTHON) -m pip install -e ".[dev]"
@@ -23,6 +23,9 @@ test:
 # Each target wraps one scripts/*.py CLI (see documentation/MIGRATION_PLAN.md, "Execution
 # order"). This is the pipeline contract; targets are filled in as each
 # stage is ported, so not all scripts exist yet.
+
+generate-hmda-parquet-jobs:
+	$(PYTHON) $(SCRIPTS_DIR)/generate_hmda_parquet_slurm.py
 
 audit:
 	$(PYTHON) $(SCRIPTS_DIR)/audit_sample.py
