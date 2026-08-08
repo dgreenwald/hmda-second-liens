@@ -31,6 +31,17 @@ an explicit override.
 Use `--source all` to request every available source explicitly; the generator expands it into
 separate year/source array tasks. Omitting `--source` has the same behavior.
 
+Compare the converted CFPB and FFIEC three-year releases for 2017 with aggregate-only output:
+
+```bash
+python scripts/compare_hmda_sources.py \
+    --output output/tables/hmda_2017_source_comparison.json
+```
+
+The report includes row and column counts, file sizes, common and source-specific variables,
+type differences, field completeness, geographic cardinality, and categorical coverage. It
+does not retain loan-level values.
+
 Add `--submit` to submit the generated script immediately with `sbatch`. Without this flag,
 generation remains inspection-only. For example, a single conversion can be generated and
 submitted with `--year 2003 --source nara --submit`.
