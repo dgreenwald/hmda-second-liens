@@ -1,0 +1,13 @@
+name: hmda-second-liens
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip
+  - scipy>=1.10
+  - python-dotenv>=1.0
+  - pytest>=7.0
+  - ruff>=0.6
+  - pip:
+      - "dgreenwald-py-tools[datasets]>=0.2,<1.0"
+      - "-e ."

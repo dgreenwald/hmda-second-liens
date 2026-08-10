@@ -11,7 +11,7 @@ ROOT := $(abspath .)
 SCRIPTS_DIR := $(ROOT)/scripts
 OUTPUT_DIR := $(ROOT)/output
 
-.PHONY: install test generate-hmda-parquet-jobs audit county-values county-value-coverage selection-data select-logistic select-mixture-logistic generate-density-ratio-pilot generate-first-order-logistic-grid evaluate-spline-purchaser-interactions diagnose-logistic-calibration diagnose-mixture-calibration diagnose-threshold-subgroups plausibility-checks evaluate-gradient-boosting evaluate-rf-mixture estimate-mixture-shares clean
+.PHONY: install test generate-hmda-parquet-jobs audit county-values county-value-coverage selection-data select-logistic generate-logistic-selection-coarse aggregate-logistic-selection-coarse generate-logistic-selection-refinement aggregate-logistic-selection-refinement finalize-logistic-selection select-mixture-logistic generate-density-ratio-pilot generate-first-order-logistic-grid evaluate-spline-purchaser-interactions diagnose-logistic-calibration diagnose-mixture-calibration diagnose-threshold-subgroups plausibility-checks evaluate-gradient-boosting evaluate-rf-mixture estimate-mixture-shares clean
 
 install:
 	$(PYTHON) -m pip install -e ".[dev]"
@@ -41,6 +41,21 @@ selection-data:
 
 select-logistic: selection-data
 	$(PYTHON) $(SCRIPTS_DIR)/select_logistic.py
+
+generate-logistic-selection-coarse:
+	$(PYTHON) $(SCRIPTS_DIR)/generate_logistic_selection_slurm.py --stage coarse
+
+aggregate-logistic-selection-coarse:
+	$(PYTHON) $(SCRIPTS_DIR)/aggregate_logistic_selection_shards.py --manifest $(OUTPUT_DIR)/slurm/logistic_selection/coarse/logistic_selection_jobs.json
+
+generate-logistic-selection-refinement:
+	$(PYTHON) $(SCRIPTS_DIR)/generate_logistic_selection_slurm.py --stage refinement --coarse-summary $(OUTPUT_DIR)/tables/logistic_selection_core_coarse_summary.csv
+
+aggregate-logistic-selection-refinement:
+	$(PYTHON) $(SCRIPTS_DIR)/aggregate_logistic_selection_shards.py --manifest $(OUTPUT_DIR)/slurm/logistic_selection/refinement/logistic_selection_jobs.json --coarse-cells $(OUTPUT_DIR)/tables/logistic_selection_core_coarse_cells.csv
+
+finalize-logistic-selection:
+	$(PYTHON) $(SCRIPTS_DIR)/finalize_logistic_selection.py
 
 select-mixture-logistic: selection-data
 	$(PYTHON) $(SCRIPTS_DIR)/select_mixture_logistic.py

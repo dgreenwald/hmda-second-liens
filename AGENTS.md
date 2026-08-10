@@ -40,6 +40,10 @@ count shares and mixture-adjusted probabilities. Read `documentation/MIGRATION_P
 - Depends on `dgreenwald-py-tools[datasets]` for the HMDA/FHFA/Zillow loaders.
 - Core logistic workflow: `make selection-data`, `make select-logistic`,
   `make diagnose-logistic-calibration`.
+- Cluster raw-logistic selection uses `make generate-logistic-selection-coarse`, aggregation,
+  then `make generate-logistic-selection-refinement`; see
+  `documentation/LOGISTIC_SELECTION_CLUSTER.md`. The generators never submit unless their CLI
+  is passed `--submit`, and immutable completed shards are reused on resubmission.
 - Mixture workflow: `make estimate-mixture-shares`, then
   `make diagnose-mixture-calibration`, then `make diagnose-threshold-subgroups`.
   Reverse/forward fold parameters are cached under `output/model/mixture_folds/` and must be
