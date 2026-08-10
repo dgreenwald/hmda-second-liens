@@ -40,50 +40,37 @@ BASE_VAR_LIST = [
     *config.ID_VARS,
 ]
 
-LEGACY_RAW_COLUMN_ALIASES = {
-    "year": "asof_date",
-    "resp_id": "respondent_id",
+CANONICAL_SCHEMA_VERSION = 1
+CANONICAL_TO_INTERNAL = {
+    "activity_year": "year",
+    "respondent_id": "resp_id",
+    "loan_purpose": "loan_purp",
+    "occupancy_type": "occupancy",
+    "loan_amount_000s": "loan_amt",
+    "applicant_income_000s": "app_income",
+    "sequence_number": "seq_num",
 }
-CFPB_RAW_COLUMN_ALIASES = {
-    "year": "as_of_year",
-    "resp_id": "respondent_id",
-    "loan_purp": "loan_purpose",
-    "occupancy": "owner_occupancy",
-    "loan_amt": "loan_amount_000s",
-    "app_income": "applicant_income_000s",
-    "seq_num": "sequence_number",
+INPUT_TO_CANONICAL = {
+    **{canonical: canonical for canonical in CANONICAL_TO_INTERNAL},
+    **{internal: canonical for canonical, internal in CANONICAL_TO_INTERNAL.items()},
+    "asof_date": "activity_year",
+    "as_of_year": "activity_year",
+    "owner_occupancy": "occupancy_type",
 }
-
-
-def raw_column_aliases(year: int, source: str = "auto") -> dict[str, str]:
-    """Return the provider schema used by one converted annual LAR."""
-    uses_cfpb = source == "cfpb" or (source == "auto" and year in (2015, 2016))
-    return CFPB_RAW_COLUMN_ALIASES if uses_cfpb else LEGACY_RAW_COLUMN_ALIASES
-
-
-def raw_input_columns(year: int, source: str = "auto") -> list[str]:
-    """Return the minimal provider-native columns needed by the cleaner."""
-    aliases = raw_column_aliases(year, source)
-    return list(
-        dict.fromkeys(
-            [
-                aliases["year"],
-                "action_taken",
-                aliases.get("loan_purp", "loan_purp"),
-                aliases.get("occupancy", "occupancy"),
-                *[
-                    aliases.get(variable, variable)
-                    for variable in BASE_VAR_LIST
-                    if variable != "year"
-                ],
-            ]
-        )
+INTERNAL_INPUT_COLUMNS = list(
+    dict.fromkeys(
+        [
+            "year",
+            "action_taken",
+            "loan_purp",
+            "occupancy",
+            *[variable for variable in BASE_VAR_LIST if variable != "year"],
+        ]
     )
-
-
-# Public legacy-schema constant retained for callers and tests that construct
-# pre-2015 extracts explicitly.
-RAW_INPUT_COLUMNS = raw_input_columns(2004, "nara")
+)
+CANONICAL_INPUT_COLUMNS = [
+    INPUT_TO_CANONICAL.get(column, column) for column in INTERNAL_INPUT_COLUMNS
+]
 NUMERIC_INPUT_COLUMNS = (
     "year",
     "action_taken",
@@ -158,14 +145,10 @@ def clean_frame(df_t: pd.DataFrame, df_county_values: pd.DataFrame) -> pd.DataFr
     """Apply sample restrictions and construct model features for one year."""
     df_t = df_t.rename(
         {
+            **CANONICAL_TO_INTERNAL,
             "asof_date": "year",
             "as_of_year": "year",
-            "respondent_id": "resp_id",
-            "loan_purpose": "loan_purp",
             "owner_occupancy": "occupancy",
-            "loan_amount_000s": "loan_amt",
-            "applicant_income_000s": "app_income",
-            "sequence_number": "seq_num",
         },
         axis=1,
     )
@@ -249,13 +232,20 @@ def load_and_clean_year(
         hmda_data_dir = config.HMDA_DATA_DIR
     if label_policy not in {"allow", "drop", "require"}:
         raise ValueError(f"Unknown label_policy {label_policy!r}")
-    aliases = raw_column_aliases(year, source)
-    available = raw_input_columns(year, source)
-    requested = available if columns is None else list(dict.fromkeys(columns))
-    requested = [aliases.get(column, column) for column in requested]
-    if allow_missing_columns:
-        requested = [column for column in requested if column in available]
-    selected_columns = list(dict.fromkeys(requested))
+    if columns is None:
+        selected_columns = CANONICAL_INPUT_COLUMNS.copy()
+    else:
+        requested = list(
+            dict.fromkeys(
+                INPUT_TO_CANONICAL.get(column, column)
+                for column in columns
+            )
+        )
+        selected_columns = (
+            [column for column in requested if column in CANONICAL_INPUT_COLUMNS]
+            if allow_missing_columns
+            else requested
+        )
     if label_policy == "drop" or (label_policy == "allow" and year < 2004):
         selected_columns = [
             column for column in selected_columns if column != config.LABEL_VAR
@@ -264,12 +254,19 @@ def load_and_clean_year(
         year=year,
         source=source,
         data_dir=hmda_data_dir,
+        schema="canonical",
+        schema_version=CANONICAL_SCHEMA_VERSION,
         columns=selected_columns,
     )
+    provenance = dict(df_t.attrs.get("hmda", {}))
     if label_policy == "drop":
         df_t = df_t.drop(columns=[config.LABEL_VAR], errors="ignore")
-    elif label_policy == "require" and config.LABEL_VAR not in df_t:
+    elif label_policy == "require" and (
+        config.LABEL_VAR not in df_t or df_t[config.LABEL_VAR].isna().all()
+    ):
         raise ValueError(
             f"HMDA {year} ({source}) is missing {config.LABEL_VAR}"
         )
-    return clean_frame(df_t, df_county_values)
+    cleaned = clean_frame(df_t, df_county_values)
+    cleaned.attrs["hmda"] = provenance
+    return cleaned

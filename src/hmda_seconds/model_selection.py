@@ -96,6 +96,12 @@ def prepare_selection_data(
         rows.append(
             {
                 "year": year,
+                "source": frame.attrs.get("hmda", {}).get("source"),
+                "source_schema": frame.attrs.get("hmda", {}).get("source_schema"),
+                "hmda_schema": frame.attrs.get("hmda", {}).get("schema"),
+                "hmda_schema_version": frame.attrs.get("hmda", {}).get(
+                    "schema_version"
+                ),
                 "n": len(frame),
                 "n_first": int(
                     (frame[config.LABEL_VAR] == config.FIRST_LIEN_CLASS).sum()

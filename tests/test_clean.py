@@ -162,9 +162,24 @@ def test_load_and_clean_year_uses_source_loader_and_drops_optional_columns(
         raw = pd.DataFrame([_base_row(extra_unused=7)]).drop(
             columns=[config.LABEL_VAR]
         )
-        raw = raw.rename(columns={"resp_id": "respondent_id"})
+        raw = raw.rename(
+            columns={
+                "asof_date": "activity_year",
+                "resp_id": "respondent_id",
+                "loan_purp": "loan_purpose",
+                "occupancy": "occupancy_type",
+                "loan_amt": "loan_amount_000s",
+                "app_income": "applicant_income_000s",
+                "seq_num": "sequence_number",
+            }
+        )
         raw["state_code"] = "06"
         raw["county_code"] = "037"
+        raw.attrs["hmda"] = {
+            "source": "nara",
+            "schema": "canonical",
+            "schema_version": 1,
+        }
         return raw
 
     monkeypatch.setattr(clean.hmda, "load", fake_load)
@@ -188,14 +203,17 @@ def test_load_and_clean_year_uses_source_loader_and_drops_optional_columns(
     assert len(out) == 1
     assert config.LABEL_VAR not in out
     assert out["resp_id"].item() == 111.0
+    assert out.attrs["hmda"]["source"] == "nara"
     assert calls == [
         {
             "year": 2005,
             "source": "auto",
             "data_dir": tmp_path,
+            "schema": "canonical",
+            "schema_version": 1,
             "columns": [
                 column
-                for column in clean.RAW_INPUT_COLUMNS
+                for column in clean.CANONICAL_INPUT_COLUMNS
                 if column != config.LABEL_VAR
             ],
         }
@@ -225,10 +243,10 @@ def test_load_and_clean_year_normalizes_cfpb_2015_schema(tmp_path, monkeypatch):
     raw = pd.DataFrame([_base_row(asof_date=2015)])
     raw = raw.rename(
         columns={
-            "asof_date": "as_of_year",
+            "asof_date": "activity_year",
             "resp_id": "respondent_id",
             "loan_purp": "loan_purpose",
-            "occupancy": "owner_occupancy",
+            "occupancy": "occupancy_type",
             "loan_amt": "loan_amount_000s",
             "app_income": "applicant_income_000s",
             "seq_num": "sequence_number",
@@ -248,6 +266,81 @@ def test_load_and_clean_year_normalizes_cfpb_2015_schema(tmp_path, monkeypatch):
     assert out["year"].item() == 2015
     assert out["resp_id"].item() == 111.0
     assert out["seq_num"].item() == 1
-    assert calls[0]["columns"] == clean.raw_input_columns(2015, "auto")
-    assert "as_of_year" in calls[0]["columns"]
-    assert "asof_date" not in calls[0]["columns"]
+    assert calls[0]["columns"] == clean.CANONICAL_INPUT_COLUMNS
+    assert calls[0]["schema"] == "canonical"
+    assert calls[0]["schema_version"] == 1
+    assert "activity_year" in calls[0]["columns"]
+
+
+def test_load_and_clean_year_uses_one_projection_across_provider_schemas(
+    tmp_path, monkeypatch
+):
+    calls = []
+    raw = pd.DataFrame([_base_row(asof_date=2014)]).rename(
+        columns={
+            "asof_date": "activity_year",
+            "resp_id": "respondent_id",
+            "loan_purp": "loan_purpose",
+            "occupancy": "occupancy_type",
+            "loan_amt": "loan_amount_000s",
+            "app_income": "applicant_income_000s",
+            "seq_num": "sequence_number",
+        }
+    )
+    county_values = COUNTY_VALUES.assign(year=2014)
+
+    def fake_load(**kwargs):
+        calls.append(kwargs)
+        return raw
+
+    monkeypatch.setattr(clean.hmda, "load", fake_load)
+
+    out = clean.load_and_clean_year(2014, county_values, hmda_data_dir=tmp_path)
+
+    assert len(out) == 1
+    assert len(calls) == 1
+    assert calls[0]["columns"] == clean.CANONICAL_INPUT_COLUMNS
+
+
+@pytest.mark.parametrize(
+    ("year", "source", "renames"),
+    [
+        (2005, "nara", {"resp_id": "respondent_id"}),
+        (
+            2015,
+            "cfpb",
+            {
+                "asof_date": "as_of_year",
+                "resp_id": "respondent_id",
+                "loan_purp": "loan_purpose",
+                "occupancy": "owner_occupancy",
+                "loan_amt": "loan_amount_000s",
+                "app_income": "applicant_income_000s",
+                "seq_num": "sequence_number",
+            },
+        ),
+    ],
+)
+def test_canonical_loader_integration_across_native_sources(
+    year, source, renames, tmp_path
+):
+    native = pd.DataFrame([_base_row(asof_date=year)]).rename(columns=renames)
+    path = tmp_path / "parquet" / source / str(year) / "lar.parquet"
+    path.parent.mkdir(parents=True)
+    native.to_parquet(path, index=False)
+    county_values = COUNTY_VALUES.assign(year=year)
+
+    out = clean.load_and_clean_year(
+        year,
+        county_values,
+        hmda_data_dir=tmp_path,
+        source=source,
+        label_policy="require",
+    )
+
+    assert len(out) == 1
+    assert out["year"].item() == year
+    assert out["resp_id"].item() == "111.0"
+    assert out.attrs["hmda"]["schema"] == "canonical"
+    assert out.attrs["hmda"]["schema_version"] == 1
+    assert out.attrs["hmda"]["source"] == source

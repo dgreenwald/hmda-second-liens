@@ -47,10 +47,12 @@ generation remains inspection-only. For example, a single conversion can be gene
 submitted with `--year 2003 --source nara --submit`.
 
 The cleaning and estimation pipeline reads these source-specific converted files through
-`py_tools.datasets.hmda.load(year=..., source="auto")`. Set `HMDA_SECONDS_HMDA_DATA_DIR` to
-the root containing the `raw/` and `parquet/` directories when it differs from
-`$PY_TOOLS_DATA_DIR/hmda`. The automatic source policy uses NARA through 2014, CFPB for
-2015--2016, and the declared FFIEC releases thereafter.
+`py_tools.datasets.hmda.load(year=..., source="auto", schema="canonical",
+schema_version=1)`. Set `HMDA_SECONDS_HMDA_DATA_DIR` to the root containing the `raw/` and
+`parquet/` directories when it differs from `$PY_TOOLS_DATA_DIR/hmda`. Provider-native names
+and dtypes are harmonized by the versioned canonical loader before the project applies its
+sample restrictions. The resolved source and source-schema cohort are recorded in the annual
+selection-data summary.
 
 Before model selection, `make selection-data` writes narrow cleaned 2004--2016 extracts under
 `$HMDA_SECONDS_EXTERNAL_DIR/intermediate/logistic_selection`. These are derived inputs—not a
