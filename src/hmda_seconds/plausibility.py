@@ -87,7 +87,7 @@ def continuity_summary(annual: pd.DataFrame) -> pd.DataFrame:
 
 def run_historical_plausibility(
     selection_data_dir: str | Path = config.SELECTION_DATA_DIR,
-    yearly_dir: str | Path = config.HMDA_YEARLY_DIR,
+    hmda_data_dir: str | Path = config.HMDA_DATA_DIR,
     output_dir: str | Path = config.TABLE_DIR,
     figure_dir: str | Path = config.FIGURE_DIR,
     raw_model_file: str | Path = config.SELECTED_LOGISTIC_MODEL_FILE,
@@ -99,7 +99,7 @@ def run_historical_plausibility(
 ) -> dict[str, pd.DataFrame]:
     """Apply the frozen final models and render the 1990--2016 share series."""
     selection_data_dir = Path(selection_data_dir)
-    yearly_dir = Path(yearly_dir)
+    hmda_data_dir = Path(hmda_data_dir)
     output_dir = Path(output_dir)
     figure_dir = Path(figure_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -128,7 +128,7 @@ def run_historical_plausibility(
             if county_values is None:
                 county_values = clean.build_county_value_panel(config.APPLY_YEARS)
             frame = _load_and_clean_application_year(
-                year, yearly_dir, county_values
+                year, hmda_data_dir, county_values
             )
         log_ratio = known.log_ratio(frame)
         evaluated = evaluation.adjust_log_ratio(log_ratio)
@@ -221,13 +221,13 @@ def render_annual_shares(annual: pd.DataFrame, output_file: str | Path) -> None:
 
 
 def _load_and_clean_application_year(
-    year: int, yearly_dir: Path, county_values: pd.DataFrame
+    year: int, hmda_data_dir: Path, county_values: pd.DataFrame
 ) -> pd.DataFrame:
     label_policy = "drop" if year < REPORTING_START_YEAR else "allow"
     return clean.load_and_clean_year(
         year,
         county_values,
-        yearly_dir=yearly_dir,
+        hmda_data_dir=hmda_data_dir,
         columns=HISTORICAL_REQUIRED_COLUMNS,
         allow_missing_columns=True,
         label_policy=label_policy,

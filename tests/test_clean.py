@@ -152,19 +152,23 @@ def test_pin_category_levels_is_defensive_and_supports_a_subset():
     assert not isinstance(pinned["purchaser_type"].dtype, pd.CategoricalDtype)
 
 
-def test_load_and_clean_year_tolerates_missing_requested_columns_and_drops_label(
-    tmp_path,
+def test_load_and_clean_year_uses_source_loader_and_drops_optional_columns(
+    tmp_path, monkeypatch
 ):
-    yearly_dir = tmp_path / "yearly"
-    yearly_dir.mkdir()
-    pd.DataFrame([_base_row(extra_unused=7)]).to_parquet(
-        yearly_dir / "hmda2005.parquet"
-    )
+    calls = []
+
+    def fake_load(**kwargs):
+        calls.append(kwargs)
+        return pd.DataFrame([_base_row(extra_unused=7)]).drop(
+            columns=[config.LABEL_VAR]
+        )
+
+    monkeypatch.setattr(clean.hmda, "load", fake_load)
 
     out = clean.load_and_clean_year(
         2005,
         COUNTY_VALUES,
-        yearly_dir=yearly_dir,
+        hmda_data_dir=tmp_path,
         columns=[
             "asof_date",
             "action_taken",
@@ -179,18 +183,33 @@ def test_load_and_clean_year_tolerates_missing_requested_columns_and_drops_label
 
     assert len(out) == 1
     assert config.LABEL_VAR not in out
+    assert calls == [
+        {
+            "year": 2005,
+            "source": "auto",
+            "data_dir": tmp_path,
+            "columns": [
+                column
+                for column in clean.RAW_INPUT_COLUMNS
+                if column != config.LABEL_VAR
+            ],
+        }
+    ]
 
 
-def test_load_and_clean_year_can_require_label(tmp_path):
-    yearly_dir = tmp_path / "yearly"
-    yearly_dir.mkdir()
-    raw = pd.DataFrame([_base_row()]).drop(columns=[config.LABEL_VAR])
-    raw.to_parquet(yearly_dir / "hmda2005.parquet")
+def test_load_and_clean_year_can_require_label(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        clean.hmda,
+        "load",
+        lambda **kwargs: pd.DataFrame([_base_row()]).drop(
+            columns=[config.LABEL_VAR]
+        ),
+    )
 
     with pytest.raises(ValueError, match="missing lien_status"):
         clean.load_and_clean_year(
             2005,
             COUNTY_VALUES,
-            yearly_dir=yearly_dir,
+            hmda_data_dir=tmp_path,
             label_policy="require",
         )

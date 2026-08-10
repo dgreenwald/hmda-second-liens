@@ -12,7 +12,7 @@ from hmda_seconds import config, model_selection
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data-dir", type=Path, default=config.SELECTION_DATA_DIR)
-    parser.add_argument("--yearly-dir", type=Path, default=config.HMDA_YEARLY_DIR)
+    parser.add_argument("--hmda-data-dir", type=Path, default=config.HMDA_DATA_DIR)
     parser.add_argument("--output-dir", type=Path, default=config.TABLE_DIR)
     return parser.parse_args()
 
@@ -21,7 +21,7 @@ def main() -> None:
     args = parse_args()
     summary = model_selection.prepare_selection_data(
         data_dir=args.data_dir,
-        yearly_dir=args.yearly_dir,
+        hmda_data_dir=args.hmda_data_dir,
     )
     args.output_dir.mkdir(parents=True, exist_ok=True)
     summary_file = args.output_dir / "logistic_selection_data_summary.csv"

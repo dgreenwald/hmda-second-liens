@@ -46,11 +46,16 @@ Add `--submit` to submit the generated script immediately with `sbatch`. Without
 generation remains inspection-only. For example, a single conversion can be generated and
 submitted with `--year 2003 --source nara --submit`.
 
-The pipeline expects one cleaned parquet per year at
-`${HMDA_SECONDS_YEARLY_DIR:-data/raw/hmda/save}/hmda<year>.parquet`, in the schema produced by
-`py_tools.datasets.hmda.load_hmda` (see that module for the exact fixed-width layouts, which
-change in 2004). `HMDA_SECONDS_YEARLY_DIR` (see `.env.example`) can point this at an
-already-materialized local cache instead.
+The cleaning and estimation pipeline reads these source-specific converted files through
+`py_tools.datasets.hmda.load(year=..., source="auto")`. Set `HMDA_SECONDS_HMDA_DATA_DIR` to
+the root containing the `raw/` and `parquet/` directories when it differs from
+`$PY_TOOLS_DATA_DIR/hmda`. The automatic source policy uses NARA through 2014, CFPB for
+2015--2016, and the declared FFIEC releases thereafter.
+
+Before model selection, `make selection-data` writes narrow cleaned 2004--2016 extracts under
+`$HMDA_SECONDS_EXTERNAL_DIR/intermediate/logistic_selection`. These are derived inputs—not a
+second download—and contain only the filtered sample and estimator columns needed by the
+parallel grid.
 
 **Sourcing raw LAR files for years 1990-2016 is not yet solved end-to-end and needs a follow-up
 pass before this repo can be reproduced from scratch by someone without an existing cache.**
@@ -77,9 +82,8 @@ What's confirmed so far:
   downloadable. openICPSR project 151921 ("Historical Home Mortgage Disclosure Act (HMDA)
   Data") is a second unverified lead.
 
-Until this is resolved, local development uses an existing pre-built cache pointed to via
-`HMDA_SECONDS_YEARLY_DIR` (see `.env.example`). Do not commit anything derived from raw HMDA
-microdata beyond the aggregated/binned outputs this letter is designed to release publicly.
+Do not commit anything derived from raw HMDA microdata beyond the aggregated/binned outputs
+this letter is designed to release publicly.
 
 ## FHFA county house price index
 
@@ -98,8 +102,11 @@ county ZHVI. The source vintage is pinned by `HMDA_SECONDS_ZILLOW_VINTAGE` and d
 Fetch the pinned input once with:
 
 ```bash
-python -c "from py_tools.datasets import zillow; zillow.download_raw(vintage='202608')"
+make download-zillow
 ```
+
+The target uses `HMDA_SECONDS_ZILLOW_VINTAGE` and the `py_tools` data root. Run
+`python scripts/download_zillow.py --help` for explicit data-directory and overwrite options.
 
 Run `make county-values` to regenerate the public scaling diagnostics, and
 `make county-value-coverage` to audit the scaled panel against the local HMDA files. The

@@ -58,11 +58,17 @@ SLURM_MAX_CONCURRENT = (
 EXTERNAL_DATA_DIR = Path(os.environ.get("HMDA_SECONDS_EXTERNAL_DIR", DATA_DIR))
 INTERMEDIATE_DIR = EXTERNAL_DATA_DIR / "intermediate"
 
-# Directory holding one cleaned HMDA extract per year, named hmda<year>.parquet,
-# in the same format produced by py_tools.datasets.hmda.load_hmda. See
-# data/README.md for how these are built from raw LAR files; override locally
-# to point at an already-materialized cache (e.g. an existing
-# /data/hmda/save/ directory) via the HMDA_SECONDS_YEARLY_DIR env var.
+# Root containing the source-specific ``raw/`` and ``parquet/`` directories
+# managed by py_tools.datasets.hmda. Match the default used by py_tools when
+# PY_TOOLS_DATA_DIR is set, while retaining a repository-relative fallback.
+HMDA_DATA_DIR = Path(
+    os.environ.get(
+        "HMDA_SECONDS_HMDA_DATA_DIR",
+        Path(os.environ.get("PY_TOOLS_DATA_DIR", RAW_DIR)) / "hmda",
+    )
+)
+# Legacy flat annual-cache path retained only for streaming audit commands
+# that have not yet migrated to the source-specific loader.
 HMDA_YEARLY_DIR = Path(
     os.environ.get("HMDA_SECONDS_YEARLY_DIR", RAW_DIR / "hmda" / "save")
 )

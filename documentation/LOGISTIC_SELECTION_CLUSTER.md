@@ -11,6 +11,7 @@ is passed.
 Copy `.env.example` to `.env` and set the machine-specific roots and Slurm defaults once:
 
 ```dotenv
+HMDA_SECONDS_HMDA_DATA_DIR=/absolute/path/to/py-tools/hmda
 HMDA_SECONDS_EXTERNAL_DIR=/absolute/path/to/hmda-second-liens/data
 HMDA_SECONDS_OUTPUT_DIR=/absolute/path/to/hmda-second-liens/output
 HMDA_SECONDS_SLURM_ACTIVATE=/absolute/path/to/venv/bin/activate

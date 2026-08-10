@@ -14,7 +14,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--selection-data-dir", type=Path, default=config.SELECTION_DATA_DIR
     )
-    parser.add_argument("--yearly-dir", type=Path, default=config.HMDA_YEARLY_DIR)
+    parser.add_argument("--hmda-data-dir", type=Path, default=config.HMDA_DATA_DIR)
     parser.add_argument("--output-dir", type=Path, default=config.TABLE_DIR)
     parser.add_argument("--figure-dir", type=Path, default=config.FIGURE_DIR)
     parser.add_argument(
@@ -30,7 +30,7 @@ def main() -> None:
     args = parse_args()
     results = plausibility.run_historical_plausibility(
         selection_data_dir=args.selection_data_dir,
-        yearly_dir=args.yearly_dir,
+        hmda_data_dir=args.hmda_data_dir,
         output_dir=args.output_dir,
         figure_dir=args.figure_dir,
         raw_model_file=args.raw_model,

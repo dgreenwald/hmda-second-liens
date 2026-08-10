@@ -18,13 +18,11 @@ the plan's original open question, no extra filter is needed here.
 from __future__ import annotations
 
 from collections.abc import Iterable
-from pathlib import Path
 from typing import Literal
 
 import numpy as np
 import pandas as pd
-import pyarrow.parquet as pq
-from py_tools.datasets import fhfa
+from py_tools.datasets import fhfa, hmda
 
 from . import config, county_values
 
@@ -41,6 +39,18 @@ BASE_VAR_LIST = [
     "lien_status",
     *config.ID_VARS,
 ]
+
+RAW_INPUT_COLUMNS = list(
+    dict.fromkeys(
+        [
+            "asof_date",
+            "action_taken",
+            "loan_purp",
+            "occupancy",
+            *[variable for variable in BASE_VAR_LIST if variable != "year"],
+        ]
+    )
+)
 
 # HMDA state codes for territories/non-states to exclude (matches the
 # original script): Puerto Rico, Guam, American Samoa, Virgin Islands,
@@ -165,29 +175,37 @@ def pin_category_levels(
 def load_and_clean_year(
     year: int,
     df_county_values: pd.DataFrame,
-    yearly_dir=None,
+    hmda_data_dir=None,
     *,
+    source: str = "auto",
     columns: Iterable[str] | None = None,
     allow_missing_columns: bool = False,
     label_policy: Literal["allow", "drop", "require"] = "allow",
 ) -> pd.DataFrame:
     """Read one annual extract with an explicit label/schema policy, then clean it."""
-    if yearly_dir is None:
-        yearly_dir = config.HMDA_YEARLY_DIR
+    if hmda_data_dir is None:
+        hmda_data_dir = config.HMDA_DATA_DIR
     if label_policy not in {"allow", "drop", "require"}:
         raise ValueError(f"Unknown label_policy {label_policy!r}")
-    path = Path(yearly_dir) / f"hmda{year:d}.parquet"
-    selected_columns = None
-    if columns is not None:
-        requested = list(dict.fromkeys(columns))
-        if allow_missing_columns:
-            available = set(pq.read_schema(path).names)
-            selected_columns = [column for column in requested if column in available]
-        else:
-            selected_columns = requested
-    df_t = pd.read_parquet(path, columns=selected_columns)
+    requested = RAW_INPUT_COLUMNS if columns is None else list(dict.fromkeys(columns))
+    requested = ["asof_date" if column == "year" else column for column in requested]
+    if allow_missing_columns:
+        requested = [column for column in requested if column in RAW_INPUT_COLUMNS]
+    selected_columns = list(dict.fromkeys(requested))
+    if label_policy == "drop" or (label_policy == "allow" and year < 2004):
+        selected_columns = [
+            column for column in selected_columns if column != config.LABEL_VAR
+        ]
+    df_t = hmda.load(
+        year=year,
+        source=source,
+        data_dir=hmda_data_dir,
+        columns=selected_columns,
+    )
     if label_policy == "drop":
         df_t = df_t.drop(columns=[config.LABEL_VAR], errors="ignore")
     elif label_policy == "require" and config.LABEL_VAR not in df_t:
-        raise ValueError(f"Annual extract {path} is missing {config.LABEL_VAR}")
+        raise ValueError(
+            f"HMDA {year} ({source}) is missing {config.LABEL_VAR}"
+        )
     return clean_frame(df_t, df_county_values)

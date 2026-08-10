@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -16,6 +17,24 @@ SCALING_METHODS = {
     "median_log_ratio": "scale_median_log_ratio",
     "anchor_2017": "scale_anchor_2017",
 }
+
+
+def download_zillow_county_zhvi(
+    vintage: str = config.ZILLOW_VINTAGE,
+    *,
+    data_dir: str | Path | None = None,
+    overwrite: bool = False,
+) -> Path:
+    """Download the pinned county ZHVI source CSV and return its path."""
+    kwargs = {
+        "dataset": "zhvi",
+        "geo": "county",
+        "vintage": vintage,
+        "overwrite": overwrite,
+    }
+    if data_dir is not None:
+        kwargs["data_dir"] = data_dir
+    return Path(zillow.download_raw(**kwargs))
 
 
 def load_zillow_county_zhvi(

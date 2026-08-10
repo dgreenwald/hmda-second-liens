@@ -79,7 +79,7 @@ def load_selection_years(
 def prepare_selection_data(
     data_dir: str | Path = config.SELECTION_DATA_DIR,
     years: Iterable[int] = range(2004, 2017),
-    yearly_dir: str | Path | None = None,
+    hmda_data_dir: str | Path | None = None,
 ) -> pd.DataFrame:
     """Clean and persist narrow labeled-year frames for resumable selection."""
     years = list(years)
@@ -89,7 +89,7 @@ def prepare_selection_data(
     rows = []
     for year in years:
         frame = clean.load_and_clean_year(
-            year, county_values, yearly_dir=yearly_dir
+            year, county_values, hmda_data_dir=hmda_data_dir
         )
         output = data_dir / f"hmda{year}.parquet"
         frame[SELECTION_COLUMNS].to_parquet(output, index=False)

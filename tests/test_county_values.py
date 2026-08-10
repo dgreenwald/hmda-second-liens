@@ -5,6 +5,34 @@ import pytest
 from hmda_seconds import county_values
 
 
+def test_download_zillow_uses_pinned_county_zhvi_configuration(
+    tmp_path, monkeypatch
+):
+    expected = tmp_path / "202608" / "County" / "County_zhvi.csv"
+    calls = []
+
+    def fake_download(**kwargs):
+        calls.append(kwargs)
+        return expected
+
+    monkeypatch.setattr(county_values.zillow, "download_raw", fake_download)
+
+    output = county_values.download_zillow_county_zhvi(
+        "202608", data_dir=tmp_path, overwrite=True
+    )
+
+    assert output == expected
+    assert calls == [
+        {
+            "dataset": "zhvi",
+            "geo": "county",
+            "vintage": "202608",
+            "overwrite": True,
+            "data_dir": tmp_path,
+        }
+    ]
+
+
 def test_annualize_zillow_requires_complete_year():
     dates = pd.date_range("2000-01-31", periods=14, freq="ME")
     df = pd.DataFrame(
