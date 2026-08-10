@@ -1,4 +1,6 @@
 import json
+import runpy
+import sys
 from pathlib import Path
 
 import pandas as pd
@@ -119,6 +121,26 @@ def test_default_slurm_has_no_environment_specific_activation(tmp_path):
     contents = script.read_text()
     assert "\nsource \"" not in contents
     assert "LABDIR" not in contents
+
+
+def test_generator_defaults_follow_central_config(monkeypatch):
+    script = (
+        Path(__file__).parents[1]
+        / "scripts"
+        / "generate_logistic_selection_slurm.py"
+    )
+    parse_args = runpy.run_path(str(script))["parse_args"]
+    monkeypatch.setattr(sys, "argv", [str(script), "--stage", "coarse"])
+
+    args = parse_args()
+
+    assert args.data_dir == config.SELECTION_DATA_DIR
+    assert args.output_root == config.RAW_LOGISTIC_CLUSTER_DIR
+    assert args.activate == config.SLURM_ACTIVATE
+    assert args.account == config.SLURM_ACCOUNT
+    assert args.time == config.SLURM_TIME
+    assert args.memory == config.SLURM_MEMORY
+    assert args.max_concurrent == config.SLURM_MAX_CONCURRENT
 
 
 def test_worker_publishes_models_and_resumes_from_immutable_shard(

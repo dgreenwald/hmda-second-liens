@@ -9,7 +9,7 @@ endif
 PYTHON ?= python3
 ROOT := $(abspath .)
 SCRIPTS_DIR := $(ROOT)/scripts
-OUTPUT_DIR := $(ROOT)/output
+OUTPUT_DIR := $(abspath $(if $(HMDA_SECONDS_OUTPUT_DIR),$(HMDA_SECONDS_OUTPUT_DIR),output))
 
 .PHONY: install test generate-hmda-parquet-jobs audit county-values county-value-coverage selection-data select-logistic generate-logistic-selection-coarse aggregate-logistic-selection-coarse generate-logistic-selection-refinement aggregate-logistic-selection-refinement finalize-logistic-selection select-mixture-logistic generate-density-ratio-pilot generate-first-order-logistic-grid evaluate-spline-purchaser-interactions diagnose-logistic-calibration diagnose-mixture-calibration diagnose-threshold-subgroups plausibility-checks evaluate-gradient-boosting evaluate-rf-mixture estimate-mixture-shares clean
 

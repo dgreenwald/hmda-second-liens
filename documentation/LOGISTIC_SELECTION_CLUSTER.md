@@ -6,20 +6,30 @@ window. The four coarse ridge values (or two refinement values) share the fitted
 transformation and warm-started ridge path. The generator never submits unless `--submit`
 is passed.
 
+## Cluster defaults in `.env`
+
+Copy `.env.example` to `.env` and set the machine-specific roots and Slurm defaults once:
+
+```dotenv
+HMDA_SECONDS_EXTERNAL_DIR=/absolute/path/to/hmda-second-liens/data
+HMDA_SECONDS_OUTPUT_DIR=/absolute/path/to/hmda-second-liens/output
+HMDA_SECONDS_SLURM_ACTIVATE=/absolute/path/to/venv/bin/activate
+HMDA_SECONDS_SLURM_ACCOUNT=torch_pr_609_general
+HMDA_SECONDS_SLURM_TIME=8:00:00
+HMDA_SECONDS_SLURM_MEMORY=32G
+HMDA_SECONDS_SLURM_MAX_CONCURRENT=8
+```
+
+The selection input then resolves to
+`$HMDA_SECONDS_EXTERNAL_DIR/intermediate/logistic_selection`. CLI arguments override every
+corresponding `.env` default.
+
 ## 1. Generate and run the coarse grid
 
-From the repository root on the cluster:
+With `.env` configured, generate the coarse manifest from the repository root:
 
 ```bash
-python scripts/generate_logistic_selection_slurm.py \
-    --stage coarse \
-    --data-dir data/intermediate/logistic_selection \
-    --output-root output/raw_logistic_selection \
-    --activate /path/to/venv/bin/activate \
-    --account torch_pr_609_general \
-    --time 8:00:00 \
-    --memory 32G \
-    --max-concurrent 8
+make generate-logistic-selection-coarse
 ```
 
 Inspect the 108-job manifest and Slurm file under
@@ -43,16 +53,7 @@ The next manifest is data-dependent but follows the frozen rule mechanically: ea
 specification receives the two decades adjacent to its own best coarse `C`.
 
 ```bash
-python scripts/generate_logistic_selection_slurm.py \
-    --stage refinement \
-    --coarse-summary output/tables/logistic_selection_core_coarse_summary.csv \
-    --data-dir data/intermediate/logistic_selection \
-    --output-root output/raw_logistic_selection \
-    --activate /path/to/venv/bin/activate \
-    --account torch_pr_609_general \
-    --time 8:00:00 \
-    --memory 32G \
-    --max-concurrent 8
+make generate-logistic-selection-refinement
 ```
 
 Inspect and submit `output/slurm/logistic_selection/refinement/logistic_selection_jobs.slurm`.

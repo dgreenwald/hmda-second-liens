@@ -33,6 +33,22 @@ RAW_LOGISTIC_SELECTION_MODEL_DIR = MODEL_DIR / "raw_logistic_selection"
 RAW_LOGISTIC_DIAGNOSTIC_MODEL_DIR = MODEL_DIR / "raw_logistic_diagnostics"
 FIGURE_DIR = OUTPUT_DIR / "figures"
 TABLE_DIR = OUTPUT_DIR / "tables"
+RAW_LOGISTIC_CLUSTER_DIR = OUTPUT_DIR / "raw_logistic_selection"
+
+# Optional cluster defaults. Command-line arguments continue to take
+# precedence, while keeping machine-specific paths and Slurm settings out of
+# source control.
+SLURM_ACTIVATE = os.environ.get("HMDA_SECONDS_SLURM_ACTIVATE")
+SLURM_ACCOUNT = os.environ.get(
+    "HMDA_SECONDS_SLURM_ACCOUNT", "torch_pr_609_general"
+)
+SLURM_TIME = os.environ.get("HMDA_SECONDS_SLURM_TIME", "8:00:00")
+SLURM_MEMORY = os.environ.get("HMDA_SECONDS_SLURM_MEMORY", "32G")
+SLURM_MAX_CONCURRENT = (
+    int(os.environ["HMDA_SECONDS_SLURM_MAX_CONCURRENT"])
+    if os.environ.get("HMDA_SECONDS_SLURM_MAX_CONCURRENT")
+    else None
+)
 
 # Large, regenerable, non-public intermediate files live outside the repo
 # rather than under output/, following the same convention the

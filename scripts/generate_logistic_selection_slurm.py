@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from hmda_seconds import config
 from hmda_seconds.hmda_conversion import submit_slurm
 from hmda_seconds.model_selection_cluster import (
     COARSE_STAGE,
@@ -25,24 +26,28 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--stage", choices=(COARSE_STAGE, REFINEMENT_STAGE), required=True)
     parser.add_argument("--coarse-summary", type=Path)
     parser.add_argument("--destination", type=Path)
+    parser.add_argument("--data-dir", default=config.SELECTION_DATA_DIR)
+    parser.add_argument("--output-root", default=config.RAW_LOGISTIC_CLUSTER_DIR)
     parser.add_argument(
-        "--data-dir", default="data/intermediate/logistic_selection"
+        "--activate",
+        default=config.SLURM_ACTIVATE,
+        help="Optional virtual-environment activation script.",
     )
+    parser.add_argument("--account", default=config.SLURM_ACCOUNT)
+    parser.add_argument("--time", default=config.SLURM_TIME)
+    parser.add_argument("--memory", default=config.SLURM_MEMORY)
     parser.add_argument(
-        "--output-root", default="output/raw_logistic_selection"
+        "--max-concurrent", type=int, default=config.SLURM_MAX_CONCURRENT
     )
-    parser.add_argument("--activate", help="Optional virtual-environment activation script.")
-    parser.add_argument("--account", default="torch_pr_609_general")
-    parser.add_argument("--time", default="8:00:00")
-    parser.add_argument("--memory", default="32G")
-    parser.add_argument("--max-concurrent", type=int)
     parser.add_argument("--submit", action="store_true")
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
-    destination = args.destination or Path("output/slurm/logistic_selection") / args.stage
+    destination = args.destination or (
+        config.OUTPUT_DIR / "slurm" / "logistic_selection" / args.stage
+    )
     if not destination.is_absolute():
         destination = REPOSITORY_ROOT / destination
     if args.stage == COARSE_STAGE:
