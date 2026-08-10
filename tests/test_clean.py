@@ -159,9 +159,13 @@ def test_load_and_clean_year_uses_source_loader_and_drops_optional_columns(
 
     def fake_load(**kwargs):
         calls.append(kwargs)
-        return pd.DataFrame([_base_row(extra_unused=7)]).drop(
+        raw = pd.DataFrame([_base_row(extra_unused=7)]).drop(
             columns=[config.LABEL_VAR]
         )
+        raw = raw.rename(columns={"resp_id": "respondent_id"})
+        raw["state_code"] = "06"
+        raw["county_code"] = "037"
+        return raw
 
     monkeypatch.setattr(clean.hmda, "load", fake_load)
 
@@ -183,6 +187,7 @@ def test_load_and_clean_year_uses_source_loader_and_drops_optional_columns(
 
     assert len(out) == 1
     assert config.LABEL_VAR not in out
+    assert out["resp_id"].item() == 111.0
     assert calls == [
         {
             "year": 2005,

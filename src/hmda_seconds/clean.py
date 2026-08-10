@@ -40,6 +40,10 @@ BASE_VAR_LIST = [
     *config.ID_VARS,
 ]
 
+RAW_COLUMN_ALIASES = {
+    "year": "asof_date",
+    "resp_id": "respondent_id",
+}
 RAW_INPUT_COLUMNS = list(
     dict.fromkeys(
         [
@@ -47,9 +51,27 @@ RAW_INPUT_COLUMNS = list(
             "action_taken",
             "loan_purp",
             "occupancy",
-            *[variable for variable in BASE_VAR_LIST if variable != "year"],
+            *[
+                RAW_COLUMN_ALIASES.get(variable, variable)
+                for variable in BASE_VAR_LIST
+                if variable != "year"
+            ],
         ]
     )
+)
+NUMERIC_INPUT_COLUMNS = (
+    "year",
+    "action_taken",
+    "loan_purp",
+    "occupancy",
+    "lien_status",
+    "state_code",
+    "county_code",
+    "app_income",
+    "loan_amt",
+    "loan_type",
+    "purchaser_type",
+    "edit_status",
 )
 
 # HMDA state codes for territories/non-states to exclude (matches the
@@ -109,7 +131,12 @@ def build_county_value_panel(
 
 def clean_frame(df_t: pd.DataFrame, df_county_values: pd.DataFrame) -> pd.DataFrame:
     """Apply sample restrictions and construct model features for one year."""
-    df_t = df_t.rename({"asof_date": "year"}, axis=1)
+    df_t = df_t.rename(
+        {"asof_date": "year", "respondent_id": "resp_id"}, axis=1
+    )
+    for variable in NUMERIC_INPUT_COLUMNS:
+        if variable in df_t:
+            df_t[variable] = pd.to_numeric(df_t[variable], errors="coerce")
 
     ix = (
         (df_t["action_taken"] == 1)
@@ -188,7 +215,7 @@ def load_and_clean_year(
     if label_policy not in {"allow", "drop", "require"}:
         raise ValueError(f"Unknown label_policy {label_policy!r}")
     requested = RAW_INPUT_COLUMNS if columns is None else list(dict.fromkeys(columns))
-    requested = ["asof_date" if column == "year" else column for column in requested]
+    requested = [RAW_COLUMN_ALIASES.get(column, column) for column in requested]
     if allow_missing_columns:
         requested = [column for column in requested if column in RAW_INPUT_COLUMNS]
     selected_columns = list(dict.fromkeys(requested))
