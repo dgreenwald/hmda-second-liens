@@ -40,25 +40,50 @@ BASE_VAR_LIST = [
     *config.ID_VARS,
 ]
 
-RAW_COLUMN_ALIASES = {
+LEGACY_RAW_COLUMN_ALIASES = {
     "year": "asof_date",
     "resp_id": "respondent_id",
 }
-RAW_INPUT_COLUMNS = list(
-    dict.fromkeys(
-        [
-            "asof_date",
-            "action_taken",
-            "loan_purp",
-            "occupancy",
-            *[
-                RAW_COLUMN_ALIASES.get(variable, variable)
-                for variable in BASE_VAR_LIST
-                if variable != "year"
-            ],
-        ]
+CFPB_RAW_COLUMN_ALIASES = {
+    "year": "as_of_year",
+    "resp_id": "respondent_id",
+    "loan_purp": "loan_purpose",
+    "occupancy": "owner_occupancy",
+    "loan_amt": "loan_amount_000s",
+    "app_income": "applicant_income_000s",
+    "seq_num": "sequence_number",
+}
+
+
+def raw_column_aliases(year: int, source: str = "auto") -> dict[str, str]:
+    """Return the provider schema used by one converted annual LAR."""
+    uses_cfpb = source == "cfpb" or (source == "auto" and year in (2015, 2016))
+    return CFPB_RAW_COLUMN_ALIASES if uses_cfpb else LEGACY_RAW_COLUMN_ALIASES
+
+
+def raw_input_columns(year: int, source: str = "auto") -> list[str]:
+    """Return the minimal provider-native columns needed by the cleaner."""
+    aliases = raw_column_aliases(year, source)
+    return list(
+        dict.fromkeys(
+            [
+                aliases["year"],
+                "action_taken",
+                aliases.get("loan_purp", "loan_purp"),
+                aliases.get("occupancy", "occupancy"),
+                *[
+                    aliases.get(variable, variable)
+                    for variable in BASE_VAR_LIST
+                    if variable != "year"
+                ],
+            ]
+        )
     )
-)
+
+
+# Public legacy-schema constant retained for callers and tests that construct
+# pre-2015 extracts explicitly.
+RAW_INPUT_COLUMNS = raw_input_columns(2004, "nara")
 NUMERIC_INPUT_COLUMNS = (
     "year",
     "action_taken",
@@ -132,7 +157,17 @@ def build_county_value_panel(
 def clean_frame(df_t: pd.DataFrame, df_county_values: pd.DataFrame) -> pd.DataFrame:
     """Apply sample restrictions and construct model features for one year."""
     df_t = df_t.rename(
-        {"asof_date": "year", "respondent_id": "resp_id"}, axis=1
+        {
+            "asof_date": "year",
+            "as_of_year": "year",
+            "respondent_id": "resp_id",
+            "loan_purpose": "loan_purp",
+            "owner_occupancy": "occupancy",
+            "loan_amount_000s": "loan_amt",
+            "applicant_income_000s": "app_income",
+            "sequence_number": "seq_num",
+        },
+        axis=1,
     )
     for variable in NUMERIC_INPUT_COLUMNS:
         if variable in df_t:
@@ -214,10 +249,12 @@ def load_and_clean_year(
         hmda_data_dir = config.HMDA_DATA_DIR
     if label_policy not in {"allow", "drop", "require"}:
         raise ValueError(f"Unknown label_policy {label_policy!r}")
-    requested = RAW_INPUT_COLUMNS if columns is None else list(dict.fromkeys(columns))
-    requested = [RAW_COLUMN_ALIASES.get(column, column) for column in requested]
+    aliases = raw_column_aliases(year, source)
+    available = raw_input_columns(year, source)
+    requested = available if columns is None else list(dict.fromkeys(columns))
+    requested = [aliases.get(column, column) for column in requested]
     if allow_missing_columns:
-        requested = [column for column in requested if column in RAW_INPUT_COLUMNS]
+        requested = [column for column in requested if column in available]
     selected_columns = list(dict.fromkeys(requested))
     if label_policy == "drop" or (label_policy == "allow" and year < 2004):
         selected_columns = [

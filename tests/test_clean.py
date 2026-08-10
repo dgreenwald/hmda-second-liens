@@ -218,3 +218,36 @@ def test_load_and_clean_year_can_require_label(tmp_path, monkeypatch):
             hmda_data_dir=tmp_path,
             label_policy="require",
         )
+
+
+def test_load_and_clean_year_normalizes_cfpb_2015_schema(tmp_path, monkeypatch):
+    calls = []
+    raw = pd.DataFrame([_base_row(asof_date=2015)])
+    raw = raw.rename(
+        columns={
+            "asof_date": "as_of_year",
+            "resp_id": "respondent_id",
+            "loan_purp": "loan_purpose",
+            "occupancy": "owner_occupancy",
+            "loan_amt": "loan_amount_000s",
+            "app_income": "applicant_income_000s",
+            "seq_num": "sequence_number",
+        }
+    )
+    county_values = COUNTY_VALUES.assign(year=2015)
+
+    def fake_load(**kwargs):
+        calls.append(kwargs)
+        return raw
+
+    monkeypatch.setattr(clean.hmda, "load", fake_load)
+
+    out = clean.load_and_clean_year(2015, county_values, hmda_data_dir=tmp_path)
+
+    assert len(out) == 1
+    assert out["year"].item() == 2015
+    assert out["resp_id"].item() == 111.0
+    assert out["seq_num"].item() == 1
+    assert calls[0]["columns"] == clean.raw_input_columns(2015, "auto")
+    assert "as_of_year" in calls[0]["columns"]
+    assert "asof_date" not in calls[0]["columns"]
