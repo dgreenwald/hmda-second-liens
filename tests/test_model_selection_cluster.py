@@ -18,6 +18,7 @@ from hmda_seconds.model_selection_cluster import (
     read_manifest,
     read_shard,
     refinement_jobs,
+    write_finalize_slurm,
     write_manifest,
     write_slurm_array,
 )
@@ -121,6 +122,34 @@ def test_default_slurm_has_no_environment_specific_activation(tmp_path):
     contents = script.read_text()
     assert "\nsource \"" not in contents
     assert "LABDIR" not in contents
+
+
+def test_finalize_slurm_uses_explicit_pipeline_paths(tmp_path):
+    script = write_finalize_slurm(
+        destination=tmp_path / "slurm" / "final",
+        repo_dir=tmp_path / "repo",
+        decision_file=tmp_path / "output" / "tables" / "decision.csv",
+        data_dir=tmp_path / "data" / "selection",
+        model_output=tmp_path / "output" / "model" / "selected.pkl",
+        activate="/cluster/venv/bin/activate",
+        account="test-account",
+        time_limit="12:00:00",
+        memory="24G",
+    )
+
+    contents = script.read_text()
+    destination = (tmp_path / "slurm" / "final").resolve()
+    assert "#SBATCH --job-name=hmda-logistic-final" in contents
+    assert "#SBATCH --account=test-account" in contents
+    assert "#SBATCH --time=12:00:00" in contents
+    assert "#SBATCH --mem=24G" in contents
+    assert f"#SBATCH --output={destination}/%x_%j.out" in contents
+    assert 'source "/cluster/venv/bin/activate"' in contents
+    assert f'cd "{(tmp_path / "repo").resolve()}"' in contents
+    assert f'--decision "{(tmp_path / "output" / "tables" / "decision.csv").resolve()}"' in contents
+    assert f'--data-dir "{(tmp_path / "data" / "selection").resolve()}"' in contents
+    assert f'--model-output "{(tmp_path / "output" / "model" / "selected.pkl").resolve()}"' in contents
+    assert "--overwrite" not in contents
 
 
 def test_generator_defaults_follow_central_config(monkeypatch):

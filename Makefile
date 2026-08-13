@@ -11,7 +11,7 @@ ROOT := $(abspath .)
 SCRIPTS_DIR := $(ROOT)/scripts
 OUTPUT_DIR := $(abspath $(if $(HMDA_SECONDS_OUTPUT_DIR),$(HMDA_SECONDS_OUTPUT_DIR),output))
 
-.PHONY: install test generate-hmda-parquet-jobs download-zillow audit county-values county-value-coverage selection-data select-logistic generate-logistic-selection-coarse aggregate-logistic-selection-coarse generate-logistic-selection-refinement aggregate-logistic-selection-refinement finalize-logistic-selection select-mixture-logistic generate-density-ratio-pilot generate-first-order-logistic-grid evaluate-spline-purchaser-interactions diagnose-logistic-calibration diagnose-mixture-calibration diagnose-threshold-subgroups plausibility-checks evaluate-gradient-boosting evaluate-rf-mixture estimate-mixture-shares clean
+.PHONY: install test generate-hmda-parquet-jobs download-zillow audit county-values county-value-coverage selection-data select-logistic generate-logistic-selection-coarse aggregate-logistic-selection-coarse generate-logistic-selection-refinement aggregate-logistic-selection-refinement generate-finalize-logistic-slurm submit-finalize-logistic finalize-logistic-selection select-mixture-logistic generate-density-ratio-pilot generate-first-order-logistic-grid evaluate-spline-purchaser-interactions diagnose-logistic-calibration diagnose-mixture-calibration diagnose-threshold-subgroups plausibility-checks evaluate-gradient-boosting evaluate-rf-mixture estimate-mixture-shares clean
 
 install:
 	$(PYTHON) -m pip install -e ".[dev]"
@@ -56,6 +56,12 @@ generate-logistic-selection-refinement:
 
 aggregate-logistic-selection-refinement:
 	$(PYTHON) $(SCRIPTS_DIR)/aggregate_logistic_selection_shards.py --manifest $(OUTPUT_DIR)/slurm/logistic_selection/refinement/logistic_selection_jobs.json --coarse-cells $(OUTPUT_DIR)/tables/logistic_selection_core_coarse_cells.csv
+
+generate-finalize-logistic-slurm:
+	$(PYTHON) $(SCRIPTS_DIR)/generate_finalize_logistic_slurm.py
+
+submit-finalize-logistic:
+	$(PYTHON) $(SCRIPTS_DIR)/generate_finalize_logistic_slurm.py --submit
 
 finalize-logistic-selection:
 	$(PYTHON) $(SCRIPTS_DIR)/finalize_logistic_selection.py

@@ -71,8 +71,21 @@ The summary averages Brier scores equally within horizon and then equally across
 
 ## 3. Refit the selected model
 
+Generate and submit the single-job batch refit with:
+
 ```bash
-python scripts/finalize_logistic_selection.py
+make submit-finalize-logistic
+```
+
+This writes the submitted script and its logs under
+`output/slurm/logistic_selection/final/`. The account, time, memory, and activation script use
+the same `.env` settings as the grid arrays. To inspect the script without submitting it, run
+`make generate-finalize-logistic-slurm` instead.
+
+For a local or already-allocated compute-node run, use:
+
+```bash
+make finalize-logistic-selection
 ```
 
 This fits the declared winner on 2004--2007 and writes the model and metadata sidecar under

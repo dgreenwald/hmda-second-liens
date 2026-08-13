@@ -388,6 +388,47 @@ python scripts/run_logistic_selection_job.py \\
     return manifest, script
 
 
+def write_finalize_slurm(
+    *,
+    destination: str | Path,
+    repo_dir: str | Path,
+    decision_file: str | Path = config.TABLE_DIR / "logistic_selection_decision.csv",
+    data_dir: str | Path = config.SELECTION_DATA_DIR,
+    model_output: str | Path = config.SELECTED_LOGISTIC_MODEL_FILE,
+    activate: str | None = None,
+    account: str = "torch_pr_609_general",
+    time_limit: str = "8:00:00",
+    memory: str = "32G",
+) -> Path:
+    """Write the single-job Slurm script for the selected-model refit."""
+    destination = Path(destination).resolve()
+    destination.mkdir(parents=True, exist_ok=True)
+    repo_dir = Path(repo_dir).resolve()
+    decision_file = Path(decision_file).resolve()
+    data_dir = Path(data_dir).resolve()
+    model_output = Path(model_output).resolve()
+    activation = f"source {_expandable_quote(activate)}\n" if activate else ""
+    script = destination / "finalize_logistic_selection.slurm"
+    script.write_text(
+        f"""#!/bin/bash
+#SBATCH --time={time_limit}
+#SBATCH --job-name=hmda-logistic-final
+#SBATCH --account={account}
+#SBATCH --output={destination.as_posix()}/%x_%j.out
+#SBATCH --error={destination.as_posix()}/%x_%j.err
+#SBATCH --mem={memory}
+
+set -euo pipefail
+{activation}cd {_expandable_quote(str(repo_dir))}
+python scripts/finalize_logistic_selection.py \\
+    --decision {_expandable_quote(str(decision_file))} \\
+    --data-dir {_expandable_quote(str(data_dir))} \\
+    --model-output {_expandable_quote(str(model_output))}
+"""
+    )
+    return script
+
+
 def _validate_coarse_summary(summary: pd.DataFrame) -> None:
     required = {
         "specification", "regularization_c", "n_horizons", "n_cells", "selection_brier"
