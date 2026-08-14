@@ -99,7 +99,6 @@ assert set(TRAIN_YEARS).isdisjoint(VALIDATE_YEARS)
 assert set(TRAIN_YEARS) | set(VALIDATE_YEARS) <= set(APPLY_YEARS)
 
 SELECTION_DATA_DIR = INTERMEDIATE_DIR / "logistic_selection"
-HMDA_ONLY_SELECTION_DATA_DIR = INTERMEDIATE_DIR / "hmda_only_logistic_selection"
 SELECTED_LOGISTIC_MODEL_FILE = MODEL_DIR / "logistic_selected.pkl"
 HMDA_ONLY_SELECTED_LOGISTIC_MODEL_FILE = MODEL_DIR / "logistic_hmda_only_selected.pkl"
 SELECTED_BOOSTING_MODEL_FILE = MODEL_DIR / "boosting_challenger.pkl"

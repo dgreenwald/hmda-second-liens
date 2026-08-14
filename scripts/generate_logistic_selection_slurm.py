@@ -50,11 +50,6 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     restricted = args.feature_set != CORE_FEATURE_SET
-    data_dir = (
-        config.HMDA_ONLY_SELECTION_DATA_DIR
-        if restricted and args.data_dir == config.SELECTION_DATA_DIR
-        else args.data_dir
-    )
     output_root = (
         config.HMDA_ONLY_RAW_LOGISTIC_CLUSTER_DIR
         if restricted and args.output_root == config.RAW_LOGISTIC_CLUSTER_DIR
@@ -72,7 +67,7 @@ def main() -> None:
         if args.coarse_summary is not None:
             raise ValueError("--coarse-summary is only valid for refinement")
         jobs = coarse_jobs(
-            data_dir=data_dir,
+            data_dir=args.data_dir,
             output_root=output_root,
             feature_set=args.feature_set,
         )
@@ -81,7 +76,7 @@ def main() -> None:
             raise ValueError("--coarse-summary is required for refinement")
         jobs = refinement_jobs(
             pd.read_csv(args.coarse_summary),
-            data_dir=data_dir,
+            data_dir=args.data_dir,
             output_root=output_root,
             feature_set=args.feature_set,
         )

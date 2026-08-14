@@ -29,9 +29,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--prior-summary", type=Path)
     parser.add_argument("--destination", type=Path)
     parser.add_argument("--repo-dir", type=Path, default=REPOSITORY_ROOT)
-    parser.add_argument(
-        "--data-dir", type=Path, default=config.HMDA_ONLY_SELECTION_DATA_DIR
-    )
+    parser.add_argument("--data-dir", type=Path, default=config.SELECTION_DATA_DIR)
     parser.add_argument(
         "--output-root", type=Path, default=config.HMDA_ONLY_BOOSTING_CLUSTER_DIR
     )

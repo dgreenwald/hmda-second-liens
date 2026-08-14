@@ -2,16 +2,18 @@
 
 ## Purpose
 
-This protocol selects restricted logistic and histogram-gradient-boosting challengers that can
-be estimated from HMDA LAR data alone. The restricted models omit
-`log_county_value_to_loan`, so they do not require FHFA or Zillow inputs. They are robustness
-and portability specifications; they do not replace the frozen primary logistic estimator or
-the existing four-feature boosting finalist.
+This protocol selects restricted logistic and histogram-gradient-boosting challengers whose
+predictors are available in HMDA LAR data alone. The restricted models omit
+`log_county_value_to_loan`; they are robustness and portability specifications and do not
+replace the frozen primary logistic estimator or the existing four-feature boosting finalist.
 
-The HMDA-only sample retains the project's loan-purpose, occupancy, action, lien-label,
-income, loan-amount, loan-type, state, and county validity restrictions. It does not inner-join
-the county-value panel. Consequently, results can differ because both the predictor set and
-the eligible sample differ from the full model. Comparisons must report this distinction.
+The searches reuse the existing narrow selection Parquets and read only `year`, lien status,
+`log_lti`, purchaser type, loan type, and state. This holds the estimation sample fixed relative
+to the full-feature search and avoids creating a redundant annual cache. The existing cache
+was originally constructed with the county-value merge, so the exact model-selection sample
+still reflects county-value availability even though the restricted estimator does not consume
+that variable. A fresh production fit can construct its three predictors from HMDA alone, but
+would need an explicit sample-comparability check if it does not reproduce that merge filter.
 
 ## Restricted logistic grid
 
@@ -46,12 +48,6 @@ immutable density-ratio shard has one unambiguous logical identity. Every fitted
 saved with artifact metadata before its result shard is published.
 
 ## Execution
-
-Prepare the independent HMDA-only annual files once:
-
-```bash
-make hmda-only-selection-data
-```
 
 The paths below show the repository-relative defaults. When
 `HMDA_SECONDS_OUTPUT_DIR` is set, the generators print the corresponding configured Slurm
