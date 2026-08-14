@@ -10,6 +10,9 @@ import pandas as pd
 from . import config
 
 CONTINUOUS_FORMS = ("linear", "spline_lti", "spline_both")
+CORE_FEATURE_SET = "core"
+HMDA_ONLY_FEATURE_SET = "hmda_only"
+FEATURE_SETS = (CORE_FEATURE_SET, HMDA_ONLY_FEATURE_SET)
 CORE_INTERACTION_STRUCTURES = ("none", "loan_type", "purchaser_type", "both")
 INTERACTION_STRUCTURES = (*CORE_INTERACTION_STRUCTURES, "purchaser_type_spline_lti")
 GEOGRAPHY_OPTIONS = (None, "region", "state")
@@ -35,6 +38,7 @@ class FeatureSpecification:
     continuous_form: str
     interactions: str
     geography: str | None = None
+    feature_set: str = CORE_FEATURE_SET
 
     def __post_init__(self) -> None:
         if self.continuous_form not in CONTINUOUS_FORMS:
@@ -50,13 +54,37 @@ class FeatureSpecification:
             )
         if self.geography not in GEOGRAPHY_OPTIONS:
             raise ValueError(f"Unknown geography option {self.geography!r}")
+        if self.feature_set not in FEATURE_SETS:
+            raise ValueError(f"Unknown feature set {self.feature_set!r}")
+        if (
+            self.feature_set == HMDA_ONLY_FEATURE_SET
+            and self.continuous_form == "spline_both"
+        ):
+            raise ValueError("HMDA-only specifications cannot spline county value")
 
     @property
     def name(self) -> str:
         parts = [self.continuous_form, self.interactions]
         if self.geography is not None:
             parts.append(self.geography)
-        return "__".join(parts)
+        name = "__".join(parts)
+        if self.feature_set == HMDA_ONLY_FEATURE_SET:
+            return f"hmda_only__{name}"
+        return name
+
+    @property
+    def continuous_variables(self) -> tuple[str, ...]:
+        """Return the primitive continuous inputs used by this specification."""
+        if self.feature_set == HMDA_ONLY_FEATURE_SET:
+            return ("log_lti",)
+        return tuple(config.CONTINUOUS_VARS)
+
+    def __setstate__(self, state: dict) -> None:
+        """Load artifacts created before ``feature_set`` was introduced."""
+        for key, value in state.items():
+            object.__setattr__(self, key, value)
+        if "feature_set" not in state:
+            object.__setattr__(self, "feature_set", CORE_FEATURE_SET)
 
 
 def core_specifications() -> list[FeatureSpecification]:
@@ -66,6 +94,33 @@ def core_specifications() -> list[FeatureSpecification]:
         for form in CONTINUOUS_FORMS
         for interactions in CORE_INTERACTION_STRUCTURES
     ]
+
+
+def hmda_only_specifications() -> list[FeatureSpecification]:
+    """Return the frozen 2-by-4 grid requiring only HMDA predictors."""
+    return [
+        FeatureSpecification(form, interactions, feature_set=HMDA_ONLY_FEATURE_SET)
+        for form in ("linear", "spline_lti")
+        for interactions in CORE_INTERACTION_STRUCTURES
+    ]
+
+
+def feature_specification_from_name(name: str) -> FeatureSpecification:
+    """Parse a canonical full or HMDA-only feature specification name."""
+    parts = name.split("__")
+    feature_set = CORE_FEATURE_SET
+    if parts and parts[0] == HMDA_ONLY_FEATURE_SET:
+        feature_set = HMDA_ONLY_FEATURE_SET
+        parts = parts[1:]
+    if len(parts) not in (2, 3):
+        raise ValueError(f"Invalid logistic specification {name!r}")
+    geography = None if len(parts) == 2 else parts[2]
+    specification = FeatureSpecification(
+        parts[0], parts[1], geography, feature_set=feature_set
+    )
+    if specification.name != name:
+        raise ValueError(f"Noncanonical logistic specification {name!r}")
+    return specification
 
 
 class LogisticFeatureTransformer:
@@ -87,7 +142,7 @@ class LogisticFeatureTransformer:
         self.basis_location_ = {}
         self.basis_scale_ = {}
 
-        for variable in config.CONTINUOUS_VARS:
+        for variable in self.specification.continuous_variables:
             values = _finite_values(df[variable], variable)
             self.raw_location_[variable] = float(values.mean())
             self.raw_scale_[variable] = _positive_scale(values.std(ddof=0))
@@ -128,19 +183,18 @@ class LogisticFeatureTransformer:
         continuous_bases = {}
         continuous_names = {}
 
-        for variable in config.CONTINUOUS_VARS:
+        for variable in self.specification.continuous_variables:
             values = _finite_values(df[variable], variable)
             standardized_raw[variable] = (
                 values - self.raw_location_[variable]
             ) / self.raw_scale_[variable]
             if self._uses_spline(variable):
                 basis = restricted_cubic_basis(values, self.knots_[variable])
-                basis = (
-                    basis - self.basis_location_[variable]
-                ) / self.basis_scale_[variable]
+                basis = (basis - self.basis_location_[variable]) / self.basis_scale_[
+                    variable
+                ]
                 basis_names = [
-                    f"{variable}_rcs_{index}"
-                    for index in range(1, basis.shape[1] + 1)
+                    f"{variable}_rcs_{index}" for index in range(1, basis.shape[1] + 1)
                 ]
                 blocks.append(basis)
                 names.extend(basis_names)
@@ -163,7 +217,7 @@ class LogisticFeatureTransformer:
 
         for variable in self._interaction_variables():
             matrix, indicator_names = indicators[variable]
-            for continuous in config.CONTINUOUS_VARS:
+            for continuous in self.specification.continuous_variables:
                 if self._uses_spline_interaction(variable, continuous):
                     for basis, basis_name in zip(
                         continuous_bases[continuous].T,
@@ -178,8 +232,7 @@ class LogisticFeatureTransformer:
                 else:
                     blocks.append(standardized_raw[continuous][:, None] * matrix)
                     names.extend(
-                        f"{continuous}_x_{indicator}"
-                        for indicator in indicator_names
+                        f"{continuous}_x_{indicator}" for indicator in indicator_names
                     )
 
         geography, geography_names = self._geography_indicators(df)
@@ -193,8 +246,7 @@ class LogisticFeatureTransformer:
         if self.specification.continuous_form == "spline_both":
             return True
         return (
-            self.specification.continuous_form == "spline_lti"
-            and variable == "log_lti"
+            self.specification.continuous_form == "spline_lti" and variable == "log_lti"
         )
 
     def _interaction_variables(self) -> tuple[str, ...]:
@@ -247,12 +299,12 @@ def restricted_cubic_basis(values: np.ndarray, knots: np.ndarray) -> np.ndarray:
     scale = (last - knots[0]) ** 2
     for knot in knots[:-2]:
         term = np.maximum(values - knot, 0.0) ** 3
-        term -= (
-            (last - knot) / denominator
-        ) * np.maximum(values - penultimate, 0.0) ** 3
-        term += (
-            (penultimate - knot) / denominator
-        ) * np.maximum(values - last, 0.0) ** 3
+        term -= ((last - knot) / denominator) * np.maximum(
+            values - penultimate, 0.0
+        ) ** 3
+        term += ((penultimate - knot) / denominator) * np.maximum(
+            values - last, 0.0
+        ) ** 3
         columns.append(term / scale)
     return np.column_stack(columns)
 

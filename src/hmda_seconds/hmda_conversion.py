@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import json
-import subprocess
 from pathlib import Path
 
+from py_tools import cluster
 from py_tools.datasets import hmda
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 
 SOURCE_YEARS = {
     "ffiec_three_year": tuple(hmda.THREE_YEAR_LAR_YEARS),
@@ -43,7 +45,9 @@ def conversion_jobs(
         unsupported = sorted(selected_years - matched_years)
         if unsupported:
             values = ", ".join(str(year) for year in unsupported)
-            raise ValueError(f"Requested year(s) unavailable from selected sources: {values}")
+            raise ValueError(
+                f"Requested year(s) unavailable from selected sources: {values}"
+            )
     if not jobs:
         raise ValueError("No HMDA conversion jobs selected")
     return jobs
@@ -53,7 +57,8 @@ def write_conversion_slurm(
     jobs: list[dict[str, int | str]],
     *,
     destination: str | Path,
-    data_dir: str | None = None,
+    data_dir: str | Path,
+    repo_dir: str | Path = REPOSITORY_ROOT,
     activate: str | None = None,
     account: str = "torch_pr_609_general",
     time_limit: str = "4:00:00",
@@ -66,8 +71,6 @@ def write_conversion_slurm(
     """Write a conversion manifest and Slurm array script without submitting it."""
     if not jobs:
         raise ValueError("jobs cannot be empty")
-    if max_concurrent is not None and max_concurrent <= 0:
-        raise ValueError("max_concurrent must be positive")
     if chunksize <= 0:
         raise ValueError("chunksize must be positive")
 
@@ -76,55 +79,40 @@ def write_conversion_slurm(
     manifest = destination / "hmda_parquet_jobs.json"
     manifest.write_text(json.dumps(jobs, indent=2) + "\n")
 
-    array = f"0-{len(jobs) - 1}"
-    if max_concurrent is not None:
-        array += f"%{max_concurrent}"
-    # Slurm does not expand shell variables in #SBATCH directive values, so
-    # use the concrete generated directory for logs.
-    cluster_logs = destination.as_posix()
-    years = " ".join(str(job["year"]) for job in jobs)
-    sources = " ".join(str(job["source"]) for job in jobs)
-    activation = f"source {_expandable_quote(activate)}\n" if activate else ""
-    data_argument = f" --data-dir {_expandable_quote(data_dir)}" if data_dir else ""
-    overwrite_argument = " --overwrite" if overwrite else ""
+    command = [
+        "python",
+        "scripts/run_hmda_parquet_job.py",
+        "--manifest",
+        manifest,
+        "--job-index",
+        cluster.SLURM_ARRAY_TASK_ID,
+        "--data-dir",
+        data_dir,
+        "--chunksize",
+        str(chunksize),
+        "--compression",
+        compression,
+    ]
+    if overwrite:
+        command.append("--overwrite")
     script = destination / "hmda_parquet_jobs.slurm"
-    script.write_text(
-        f"""#!/bin/bash
-#SBATCH --time={time_limit}
-#SBATCH --job-name=hmda-parquet
-#SBATCH --account={account}
-#SBATCH --output={cluster_logs}/%x_%A_%a.out
-#SBATCH --error={cluster_logs}/%x_%A_%a.err
-#SBATCH --mem={memory}
-#SBATCH --array={array}
-
-set -euo pipefail
-{activation}years=({years})
-sources=({sources})
-year="${{years[SLURM_ARRAY_TASK_ID]}}"
-source_name="${{sources[SLURM_ARRAY_TASK_ID]}}"
-
-python -m py_tools.datasets.hmda convert "${{year}}" \\
-    --source "${{source_name}}" \\
-    --chunksize {chunksize} \\
-    --compression {compression}{data_argument}{overwrite_argument}
-"""
+    cluster.write_slurm_script(
+        cluster.SlurmJob(
+            name="hmda-parquet",
+            command=tuple(command),
+            workdir=repo_dir,
+            log_dir=destination,
+            resources=cluster.SlurmResources(
+                time=time_limit,
+                memory=memory,
+                account=account,
+            ),
+            activate=activate,
+            array=cluster.SlurmArray(len(jobs), max_concurrent),
+        ),
+        script,
     )
     return manifest, script
-
-
-def submit_slurm(script: str | Path) -> str:
-    """Submit a generated Slurm script and return ``sbatch`` output."""
-    script = Path(script).resolve()
-    if not script.is_file():
-        raise FileNotFoundError(f"Slurm script not found: {script}")
-    result = subprocess.run(
-        ["sbatch", str(script)],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    return result.stdout.strip()
 
 
 def run_conversion_job(
@@ -163,15 +151,10 @@ def _manifest_job(manifest: str | Path, job_index: int) -> dict:
     if not isinstance(jobs, list) or not jobs:
         raise ValueError("HMDA conversion manifest must be a nonempty list")
     if job_index < 0 or job_index >= len(jobs):
-        raise IndexError(f"Job index {job_index} outside manifest range 0-{len(jobs) - 1}")
+        raise IndexError(
+            f"Job index {job_index} outside manifest range 0-{len(jobs) - 1}"
+        )
     job = jobs[job_index]
     if not isinstance(job, dict) or "year" not in job or "source" not in job:
         raise ValueError(f"Invalid HMDA conversion job at index {job_index}")
     return job
-
-
-def _expandable_quote(value: str) -> str:
-    """Double-quote a trusted cluster path while retaining variable expansion."""
-    if any(character in value for character in ('"', "`", "\\", "\n", "\r")):
-        raise ValueError("cluster paths cannot contain quotes, backticks, or newlines")
-    return f'"{value}"'

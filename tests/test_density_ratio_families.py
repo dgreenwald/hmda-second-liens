@@ -74,9 +74,7 @@ def test_logistic_family_reuses_path_and_matches_existing_fit(tmp_path, monkeypa
         calls.append(tuple(c_values))
         return original(training, specification, c_values)
 
-    monkeypatch.setattr(
-        logistic_family, "fit_candidate_path", recording_fit
-    )
+    monkeypatch.setattr(logistic_family, "fit_candidate_path", recording_fit)
     family = LogisticFamily(tmp_path)
     fitted = family.fit_many(training, configurations, train_years=(2005, 2006))
 
@@ -126,8 +124,45 @@ def test_gradient_boosting_family_matches_existing_fit(tmp_path):
     assert fitted.log_ratio(training) == pytest.approx(
         direct.log_ratio(training), abs=1e-12
     )
-    path = gradient_boosting.boosting_model_path(
-        (2005, 2006), parameters, tmp_path
+    path = gradient_boosting.boosting_model_path((2005, 2006), parameters, tmp_path)
+    assert path.exists() and metadata_path(path).exists()
+
+
+def test_hmda_only_boosting_uses_three_features_and_separate_identity(tmp_path):
+    training = synthetic_frame().drop(columns=["log_county_value_to_loan"])
+    parameters = gradient_boosting.BoostingParameters(
+        max_leaf_nodes=3,
+        learning_rate=0.1,
+        max_iter=8,
+        l2_regularization=1.0,
+        min_samples_leaf=10,
+    )
+    configuration = ModelConfiguration.from_mapping(
+        "hist_gradient_boosting",
+        boosting_family.HMDA_ONLY_SPECIFICATION,
+        asdict(parameters),
+        random_seed=config.BOOSTING_RANDOM_STATE,
+    )
+
+    fitted = next(
+        iter(
+            GradientBoostingFamily(tmp_path)
+            .fit_many(training, [configuration], train_years=(2005, 2006))
+            .values()
+        )
+    )
+
+    assert fitted.feature_names == (
+        "log_lti",
+        "purchaser_type",
+        "loan_type",
+    )
+    assert fitted.model_id.startswith("boosting_hmda_only__")
+    path = boosting_family.boosting_model_path(
+        (2005, 2006),
+        parameters,
+        tmp_path,
+        boosting_family.HMDA_ONLY_SPECIFICATION,
     )
     assert path.exists() and metadata_path(path).exists()
 
@@ -177,17 +212,13 @@ def test_family_reuses_matching_saved_fit(tmp_path, monkeypatch):
         "logistic", "linear__none", {"C": 0.1}
     )
     family = LogisticFamily(tmp_path)
-    first = family.fit_many(
-        training, [configuration], train_years=(2005, 2006)
-    )
+    first = family.fit_many(training, [configuration], train_years=(2005, 2006))
 
     def unexpected_fit(*args, **kwargs):
         raise AssertionError("saved fit should have been reused")
 
     monkeypatch.setattr(logistic_family, "fit_candidate_path", unexpected_fit)
-    second = family.fit_many(
-        training, [configuration], train_years=(2005, 2006)
-    )
+    second = family.fit_many(training, [configuration], train_years=(2005, 2006))
 
     assert next(iter(second.values())).log_ratio(training) == pytest.approx(
         next(iter(first.values())).log_ratio(training)

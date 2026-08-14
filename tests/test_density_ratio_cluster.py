@@ -1,10 +1,12 @@
 import json
 import runpy
+import sys
 from argparse import Namespace
 from pathlib import Path
 
 import pytest
 
+from hmda_seconds import config
 from hmda_seconds.density_ratio.cluster import (
     COARSE_C_VALUES,
     FIRST_ORDER_FEATURE_SPECIFICATIONS,
@@ -24,18 +26,19 @@ from hmda_seconds.density_ratio.shards import read_manifest
 def test_pilot_manifest_has_simple_and_spline_heavy_jobs(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     jobs = pilot_jobs(data_dir="$TEST_DATA/selection", output_root="$TEST_OUT")
+    repo_dir = tmp_path / "repo"
     manifest, script = write_slurm_array(
         jobs,
         destination=Path("slurm"),
-        repo_dir="$TEST_REPO",
+        repo_dir=repo_dir,
         activate="/cluster/venv/bin/activate",
     )
 
     restored = read_manifest(manifest)
-    assert [item.job.specification for item in restored] == list(
-        PILOT_SPECIFICATIONS
+    assert [item.job.specification for item in restored] == list(PILOT_SPECIFICATIONS)
+    assert all(
+        len(item.job.configurations) == len(COARSE_C_VALUES) for item in restored
     )
-    assert all(len(item.job.configurations) == len(COARSE_C_VALUES) for item in restored)
     assert all(item.job.train_years == (2013, 2014, 2015, 2016) for item in restored)
     contents = script.read_text()
     assert "#SBATCH --time=8:00:00" in contents
@@ -43,7 +46,7 @@ def test_pilot_manifest_has_simple_and_spline_heavy_jobs(tmp_path, monkeypatch):
     assert "#SBATCH --array=0-1" in contents
     assert "/usr/bin/time -v python scripts/run_density_ratio_job.py" in contents
     assert "sbatch " not in contents
-    assert 'cd "$TEST_REPO"' in contents
+    assert f"cd {repo_dir}" in contents
 
 
 def test_manifest_paths_expand_only_at_execution(monkeypatch):
@@ -86,7 +89,9 @@ def test_first_order_grid_is_the_frozen_coordinate_neighborhood():
             else (0.1,)
         )
         assert c_values == expected
-    assert all(starts == set(range(2005, 2014)) for starts in starts_by_specification.values())
+    assert all(
+        starts == set(range(2005, 2014)) for starts in starts_by_specification.values()
+    )
 
 
 def test_first_order_slurm_array_has_a_concurrency_cap(tmp_path, monkeypatch):
@@ -96,7 +101,7 @@ def test_first_order_slurm_array_has_a_concurrency_cap(tmp_path, monkeypatch):
     manifest, script = write_slurm_array(
         jobs,
         destination=Path("slurm/first_order"),
-        repo_dir="/cluster/repo",
+        repo_dir=tmp_path,
         activate="/cluster/venv/bin/activate",
         max_concurrent=3,
     )
@@ -104,6 +109,26 @@ def test_first_order_slurm_array_has_a_concurrency_cap(tmp_path, monkeypatch):
     assert len(read_manifest(manifest)) == 63
     assert "#SBATCH --array=0-62%3" in script.read_text()
     assert "sbatch " not in script.read_text()
+
+
+@pytest.mark.parametrize(
+    "script_name",
+    ("generate_density_ratio_slurm.py", "generate_first_order_logistic_slurm.py"),
+)
+def test_density_ratio_generators_follow_central_config(script_name, monkeypatch):
+    script = Path(__file__).parents[1] / "scripts" / script_name
+    parse_args = runpy.run_path(str(script))["parse_args"]
+    monkeypatch.setattr(sys, "argv", [str(script)])
+
+    args = parse_args()
+
+    assert args.repo_dir == Path(__file__).parents[1]
+    assert args.data_dir == config.SELECTION_DATA_DIR
+    assert args.output_root == config.OUTPUT_DIR / "density_ratio"
+    assert args.activate == config.SLURM_ACTIVATE
+    assert args.account == config.SLURM_ACCOUNT
+    assert args.time == config.SLURM_TIME
+    assert args.memory == config.SLURM_MEMORY
 
 
 def test_configuration_json_supports_seed_and_rejects_non_objects():
@@ -118,15 +143,17 @@ def test_configuration_json_supports_seed_and_rejects_non_objects():
         configurations_from_json("logistic", "linear__none", [json.dumps([1])])
 
 
-def test_slurm_destination_must_be_repository_relative(tmp_path):
+def test_slurm_destination_may_be_absolute(tmp_path):
     jobs = pilot_jobs(data_dir="data", output_root="output")
-    with pytest.raises(ValueError, match="relative"):
-        write_slurm_array(
-            jobs,
-            destination=tmp_path,
-            repo_dir="/cluster/repo",
-            activate="/cluster/venv/bin/activate",
-        )
+    manifest, script = write_slurm_array(
+        jobs,
+        destination=tmp_path,
+        repo_dir="/cluster/repo",
+        activate="/cluster/venv/bin/activate",
+    )
+
+    assert manifest.parent == tmp_path
+    assert f"--manifest {manifest}" in script.read_text()
 
 
 def test_worker_explicit_arguments_override_environment(tmp_path, monkeypatch):

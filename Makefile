@@ -11,7 +11,7 @@ ROOT := $(abspath .)
 SCRIPTS_DIR := $(ROOT)/scripts
 OUTPUT_DIR := $(abspath $(if $(HMDA_SECONDS_OUTPUT_DIR),$(HMDA_SECONDS_OUTPUT_DIR),output))
 
-.PHONY: install test generate-hmda-parquet-jobs download-zillow audit county-values county-value-coverage selection-data select-logistic generate-logistic-selection-coarse aggregate-logistic-selection-coarse generate-logistic-selection-refinement aggregate-logistic-selection-refinement generate-finalize-logistic-slurm submit-finalize-logistic finalize-logistic-selection select-mixture-logistic generate-density-ratio-pilot generate-first-order-logistic-grid evaluate-spline-purchaser-interactions diagnose-logistic-calibration diagnose-mixture-calibration diagnose-threshold-subgroups plausibility-checks evaluate-gradient-boosting evaluate-rf-mixture estimate-mixture-shares clean
+.PHONY: install test generate-hmda-parquet-jobs download-zillow audit county-values county-value-coverage selection-data hmda-only-selection-data select-logistic generate-logistic-selection-coarse aggregate-logistic-selection-coarse generate-logistic-selection-refinement aggregate-logistic-selection-refinement generate-hmda-only-logistic-coarse aggregate-hmda-only-logistic-coarse generate-hmda-only-logistic-refinement aggregate-hmda-only-logistic-refinement generate-finalize-logistic-slurm submit-finalize-logistic finalize-logistic-selection select-mixture-logistic generate-density-ratio-pilot generate-first-order-logistic-grid generate-hmda-only-boosting-screen aggregate-hmda-only-boosting-screen generate-hmda-only-boosting-survivors aggregate-hmda-only-boosting-survivors generate-hmda-only-boosting-refinement aggregate-hmda-only-boosting-refinement finalize-hmda-only-boosting-selection evaluate-spline-purchaser-interactions diagnose-logistic-calibration diagnose-mixture-calibration diagnose-threshold-subgroups plausibility-checks evaluate-gradient-boosting evaluate-rf-mixture estimate-mixture-shares clean
 
 install:
 	$(PYTHON) -m pip install -e ".[dev]"
@@ -42,6 +42,9 @@ county-value-coverage:
 selection-data:
 	$(PYTHON) $(SCRIPTS_DIR)/prepare_selection_data.py
 
+hmda-only-selection-data:
+	$(PYTHON) $(SCRIPTS_DIR)/prepare_selection_data.py --feature-set hmda_only
+
 select-logistic: selection-data
 	$(PYTHON) $(SCRIPTS_DIR)/select_logistic.py
 
@@ -56,6 +59,18 @@ generate-logistic-selection-refinement:
 
 aggregate-logistic-selection-refinement:
 	$(PYTHON) $(SCRIPTS_DIR)/aggregate_logistic_selection_shards.py --manifest $(OUTPUT_DIR)/slurm/logistic_selection/refinement/logistic_selection_jobs.json --coarse-cells $(OUTPUT_DIR)/tables/logistic_selection_core_coarse_cells.csv
+
+generate-hmda-only-logistic-coarse:
+	$(PYTHON) $(SCRIPTS_DIR)/generate_logistic_selection_slurm.py --stage coarse --feature-set hmda_only
+
+aggregate-hmda-only-logistic-coarse:
+	$(PYTHON) $(SCRIPTS_DIR)/aggregate_logistic_selection_shards.py --manifest $(OUTPUT_DIR)/slurm/hmda_only_logistic_selection/coarse/logistic_selection_jobs.json --model-output $(OUTPUT_DIR)/model/logistic_hmda_only_selected.pkl
+
+generate-hmda-only-logistic-refinement:
+	$(PYTHON) $(SCRIPTS_DIR)/generate_logistic_selection_slurm.py --stage refinement --feature-set hmda_only --coarse-summary $(OUTPUT_DIR)/tables/logistic_selection_hmda_only_coarse_summary.csv
+
+aggregate-hmda-only-logistic-refinement:
+	$(PYTHON) $(SCRIPTS_DIR)/aggregate_logistic_selection_shards.py --manifest $(OUTPUT_DIR)/slurm/hmda_only_logistic_selection/refinement/logistic_selection_jobs.json --coarse-cells $(OUTPUT_DIR)/tables/logistic_selection_hmda_only_coarse_cells.csv --model-output $(OUTPUT_DIR)/model/logistic_hmda_only_selected.pkl
 
 generate-finalize-logistic-slurm:
 	$(PYTHON) $(SCRIPTS_DIR)/generate_finalize_logistic_slurm.py
@@ -74,6 +89,27 @@ generate-density-ratio-pilot:
 
 generate-first-order-logistic-grid:
 	$(PYTHON) $(SCRIPTS_DIR)/generate_first_order_logistic_slurm.py
+
+generate-hmda-only-boosting-screen:
+	$(PYTHON) $(SCRIPTS_DIR)/generate_hmda_only_boosting_slurm.py --stage hmda_only_boosting_screen
+
+aggregate-hmda-only-boosting-screen:
+	$(PYTHON) $(SCRIPTS_DIR)/aggregate_density_ratio_shards.py --manifest $(OUTPUT_DIR)/slurm/hmda_only_boosting/screen/density_ratio_jobs.json --output-dir $(OUTPUT_DIR)/tables/hmda_only_boosting_screen
+
+generate-hmda-only-boosting-survivors:
+	$(PYTHON) $(SCRIPTS_DIR)/generate_hmda_only_boosting_slurm.py --stage hmda_only_boosting_survivors --prior-summary $(OUTPUT_DIR)/tables/hmda_only_boosting_screen/density_ratio_summary.csv
+
+aggregate-hmda-only-boosting-survivors:
+	$(PYTHON) $(SCRIPTS_DIR)/aggregate_density_ratio_shards.py --manifest $(OUTPUT_DIR)/slurm/hmda_only_boosting/survivors/density_ratio_jobs.json --output-dir $(OUTPUT_DIR)/tables/hmda_only_boosting_survivors
+
+generate-hmda-only-boosting-refinement:
+	$(PYTHON) $(SCRIPTS_DIR)/generate_hmda_only_boosting_slurm.py --stage hmda_only_boosting_refinement --prior-summary $(OUTPUT_DIR)/tables/hmda_only_boosting_survivors/density_ratio_summary.csv
+
+aggregate-hmda-only-boosting-refinement:
+	$(PYTHON) $(SCRIPTS_DIR)/aggregate_density_ratio_shards.py --manifest $(OUTPUT_DIR)/slurm/hmda_only_boosting/refinement/density_ratio_jobs.json --output-dir $(OUTPUT_DIR)/tables/hmda_only_boosting_refinement
+
+finalize-hmda-only-boosting-selection:
+	$(PYTHON) $(SCRIPTS_DIR)/finalize_hmda_only_boosting_selection.py --survivor-dir $(OUTPUT_DIR)/tables/hmda_only_boosting_survivors --refinement-dir $(OUTPUT_DIR)/tables/hmda_only_boosting_refinement
 
 evaluate-spline-purchaser-interactions: selection-data
 	$(PYTHON) $(SCRIPTS_DIR)/evaluate_spline_purchaser_interactions.py

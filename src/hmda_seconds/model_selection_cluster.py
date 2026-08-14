@@ -10,11 +10,19 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 import pandas as pd
+from py_tools import cluster
 
 from . import config, model_selection
 from .density_ratio import artifacts
 from .density_ratio.folds import reverse_folds
-from .logistic_features import FeatureSpecification, core_specifications
+from .logistic_features import (
+    CORE_FEATURE_SET,
+    HMDA_ONLY_FEATURE_SET,
+    FeatureSpecification,
+    core_specifications,
+    feature_specification_from_name,
+    hmda_only_specifications,
+)
 
 SCHEMA_VERSION = 1
 COARSE_STAGE = "coarse"
@@ -32,13 +40,18 @@ class RawLogisticJob:
     c_values: tuple[float, ...]
     data_dir: str
     output_root: str
+    feature_set: str = CORE_FEATURE_SET
     schema_version: int = SCHEMA_VERSION
 
     def __post_init__(self) -> None:
         if self.stage not in STAGES:
             raise ValueError(f"Unknown raw-logistic stage {self.stage!r}")
-        if self.specification not in {item.name for item in core_specifications()}:
-            raise ValueError(f"Unknown core specification {self.specification!r}")
+        if self.specification not in {
+            item.name for item in _specifications(self.feature_set)
+        }:
+            raise ValueError(
+                f"Unknown {self.feature_set} specification {self.specification!r}"
+            )
         fold_for_start(self.train_start)
         if not self.c_values or any(value <= 0 for value in self.c_values):
             raise ValueError("c_values must contain positive values")
@@ -52,6 +65,9 @@ class RawLogisticJob:
     def to_dict(self) -> dict[str, object]:
         values = asdict(self)
         values["c_values"] = list(self.c_values)
+        # Preserve the hashes and paths of existing core-search manifests.
+        if self.feature_set == CORE_FEATURE_SET:
+            values.pop("feature_set")
         return values
 
     @classmethod
@@ -63,6 +79,7 @@ class RawLogisticJob:
             c_values=tuple(float(value) for value in values["c_values"]),
             data_dir=str(values["data_dir"]),
             output_root=str(values["output_root"]),
+            feature_set=str(values.get("feature_set", CORE_FEATURE_SET)),
             schema_version=int(values.get("schema_version", SCHEMA_VERSION)),
         )
 
@@ -75,16 +92,24 @@ def fold_for_start(train_start: int):
     return matches[0]
 
 
-def coarse_jobs(*, data_dir: str | Path, output_root: str | Path) -> list[RawLogisticJob]:
-    """Return the frozen 12-specification, nine-fold coarse search."""
+def coarse_jobs(
+    *,
+    data_dir: str | Path,
+    output_root: str | Path,
+    feature_set: str = CORE_FEATURE_SET,
+) -> list[RawLogisticJob]:
+    """Return the declared nine-fold coarse search."""
     return _jobs(
         COARSE_STAGE,
         {
-            specification.name: tuple(float(value) for value in config.LOGISTIC_SELECTION_COARSE_C)
-            for specification in core_specifications()
+            specification.name: tuple(
+                float(value) for value in config.LOGISTIC_SELECTION_COARSE_C
+            )
+            for specification in _specifications(feature_set)
         },
         data_dir,
         output_root,
+        feature_set,
     )
 
 
@@ -93,20 +118,25 @@ def refinement_jobs(
     *,
     data_dir: str | Path,
     output_root: str | Path,
+    feature_set: str = CORE_FEATURE_SET,
 ) -> list[RawLogisticJob]:
     """Build the frozen adjacent-decade search from a complete coarse summary."""
-    _validate_coarse_summary(coarse_summary)
-    specifications = core_specifications()
+    specifications = _specifications(feature_set)
+    _validate_coarse_summary(coarse_summary, specifications)
     values = model_selection.refinement_grid(coarse_summary, specifications)
     return _jobs(
         REFINEMENT_STAGE,
-        {item.name: tuple(float(value) for value in values[item]) for item in specifications},
+        {
+            item.name: tuple(float(value) for value in values[item])
+            for item in specifications
+        },
         data_dir,
         output_root,
+        feature_set,
     )
 
 
-def _jobs(stage, values_by_specification, data_dir, output_root):
+def _jobs(stage, values_by_specification, data_dir, output_root, feature_set):
     return [
         RawLogisticJob(
             stage=stage,
@@ -115,10 +145,19 @@ def _jobs(stage, values_by_specification, data_dir, output_root):
             c_values=values_by_specification[specification.name],
             data_dir=str(data_dir),
             output_root=str(output_root),
+            feature_set=feature_set,
         )
-        for specification in core_specifications()
+        for specification in _specifications(feature_set)
         for fold in reverse_folds()
     ]
+
+
+def _specifications(feature_set: str) -> list[FeatureSpecification]:
+    if feature_set == CORE_FEATURE_SET:
+        return core_specifications()
+    if feature_set == HMDA_ONLY_FEATURE_SET:
+        return hmda_only_specifications()
+    raise ValueError(f"Unknown feature set {feature_set!r}")
 
 
 def write_manifest(jobs: list[RawLogisticJob], path: str | Path) -> Path:
@@ -132,7 +171,9 @@ def write_manifest(jobs: list[RawLogisticJob], path: str | Path) -> Path:
     }
     _atomic_bytes(
         path,
-        (json.dumps(payload, indent=2, sort_keys=True, allow_nan=False) + "\n").encode(),
+        (
+            json.dumps(payload, indent=2, sort_keys=True, allow_nan=False) + "\n"
+        ).encode(),
     )
     return path
 
@@ -151,13 +192,20 @@ def read_manifest(path: str | Path) -> list[RawLogisticJob]:
         raise ValueError("Raw-logistic manifest contains duplicate jobs")
     if len({job.stage for job in jobs}) != 1:
         raise ValueError("Raw-logistic manifest mixes stages")
+    if len({job.feature_set for job in jobs}) != 1:
+        raise ValueError("Raw-logistic manifest mixes feature sets")
+    specifications = _specifications(jobs[0].feature_set)
     expected_keys = {
         (specification.name, fold.train_start)
-        for specification in core_specifications()
+        for specification in specifications
         for fold in reverse_folds()
     }
     if {(job.specification, job.train_start) for job in jobs} != expected_keys:
-        raise ValueError("Raw-logistic manifest does not contain the complete 108-job grid")
+        if jobs[0].feature_set == CORE_FEATURE_SET:
+            raise ValueError(
+                "Raw-logistic manifest does not contain the complete 108-job grid"
+            )
+        raise ValueError("Raw-logistic manifest does not contain the complete job grid")
     expected_path_length = 4 if jobs[0].stage == COARSE_STAGE else 2
     if any(len(job.c_values) != expected_path_length for job in jobs):
         raise ValueError("Raw-logistic manifest has an invalid ridge-path length")
@@ -173,15 +221,13 @@ def expand_job_paths(job: RawLogisticJob) -> RawLogisticJob:
         c_values=job.c_values,
         data_dir=os.path.expandvars(os.path.expanduser(job.data_dir)),
         output_root=os.path.expandvars(os.path.expanduser(job.output_root)),
+        feature_set=job.feature_set,
     )
 
 
 def specification_from_name(name: str) -> FeatureSpecification:
-    """Restore one frozen core feature specification by name."""
-    matches = [item for item in core_specifications() if item.name == name]
-    if len(matches) != 1:
-        raise ValueError(f"Unknown core specification {name!r}")
-    return matches[0]
+    """Restore one canonical full or HMDA-only feature specification."""
+    return feature_specification_from_name(name)
 
 
 def shard_path(job: RawLogisticJob) -> Path:
@@ -189,9 +235,13 @@ def shard_path(job: RawLogisticJob) -> Path:
     digest = hashlib.sha256(
         json.dumps(job.to_dict(), sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()[:12]
-    return Path(job.output_root) / "shards" / (
-        f"raw_logistic__{job.stage}__{job.specification}"
-        f"__train_{job.train_start}_{job.train_start + 3}__{digest}.json"
+    return (
+        Path(job.output_root)
+        / "shards"
+        / (
+            f"raw_logistic__{job.stage}__{job.specification}"
+            f"__train_{job.train_start}_{job.train_start + 3}__{digest}.json"
+        )
     )
 
 
@@ -206,8 +256,13 @@ def execute_job(job: RawLogisticJob) -> Path:
 
     fold = fold_for_start(job.train_start)
     years = (*fold.train_years, *fold.validation_years)
-    data = model_selection.load_selection_years(job.data_dir, years)
     specification = specification_from_name(job.specification)
+    if specification.feature_set == CORE_FEATURE_SET:
+        data = model_selection.load_selection_years(job.data_dir, years)
+    else:
+        data = model_selection.load_selection_years(
+            job.data_dir, years, feature_set=specification.feature_set
+        )
     model_dir = Path(job.output_root) / "models"
     cells = model_selection.evaluate_candidate_grid(
         data,
@@ -217,7 +272,11 @@ def execute_job(job: RawLogisticJob) -> Path:
         n_jobs=1,
     )
     artifact_paths = [
-        str(model_selection.selected_model_path(fold.train_years, specification, value, model_dir))
+        str(
+            model_selection.selected_model_path(
+                fold.train_years, specification, value, model_dir
+            )
+        )
         for value in job.c_values
     ]
     shard = {
@@ -255,7 +314,9 @@ def aggregate_manifest(
     for job in jobs:
         path = shard_path(job)
         if not path.exists():
-            raise ValueError(f"Missing shard for {job.specification}, train {job.train_start}")
+            raise ValueError(
+                f"Missing shard for {job.specification}, train {job.train_start}"
+            )
         shard = read_shard(path)
         _validate_shard(job, shard, validate_artifacts=True)
         parts.append(pd.DataFrame(shard["cells"]))
@@ -267,7 +328,8 @@ def aggregate_manifest(
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     stage = jobs[0].stage
-    prefix = output_dir / f"logistic_selection_core_{stage}"
+    label = jobs[0].feature_set
+    prefix = output_dir / f"logistic_selection_{label}_{stage}"
     destinations = _write_tables(prefix, stage_cells, horizons, summary)
 
     if stage == REFINEMENT_STAGE:
@@ -277,6 +339,7 @@ def aggregate_manifest(
         expected_coarse_jobs = coarse_jobs(
             data_dir=jobs[0].data_dir,
             output_root=jobs[0].output_root,
+            feature_set=jobs[0].feature_set,
         )
         _validate_aggregated_cells(coarse, expected_coarse_jobs)
         combined = _sort_cells(pd.concat([coarse, stage_cells], ignore_index=True))
@@ -288,10 +351,12 @@ def aggregate_manifest(
         ]
         if combined.duplicated(key).any():
             raise ValueError("Coarse and refinement cells overlap")
-        combined_horizons, combined_summary = model_selection.aggregate_brier_cells(combined)
+        combined_horizons, combined_summary = model_selection.aggregate_brier_cells(
+            combined
+        )
         destinations.extend(
             _write_tables(
-                output_dir / "logistic_selection_core",
+                output_dir / f"logistic_selection_{label}",
                 combined,
                 combined_horizons,
                 combined_summary,
@@ -299,14 +364,21 @@ def aggregate_manifest(
         )
         winner = combined_summary.iloc[0]
         decision = pd.DataFrame(
-            [{
-                **winner.to_dict(),
-                "model_file": str(model_output),
-                "training_years": "2004-2007",
-                "selection_metric": "raw_brier_equal_horizon_weight",
-            }]
+            [
+                {
+                    **winner.to_dict(),
+                    "model_file": str(model_output),
+                    "training_years": "2004-2007",
+                    "selection_metric": "raw_brier_equal_horizon_weight",
+                }
+            ]
         )
-        decision_path = output_dir / "logistic_selection_decision.csv"
+        decision_name = (
+            "logistic_selection_decision.csv"
+            if label == CORE_FEATURE_SET
+            else f"logistic_selection_{label}_decision.csv"
+        )
+        decision_path = output_dir / decision_name
         _atomic_csv(decision, decision_path)
         destinations.append(decision_path)
     return destinations
@@ -330,13 +402,19 @@ def finalize_selection(
     if len(decision) != 1:
         raise ValueError("Selection decision must contain exactly one row")
     row = decision.iloc[0]
-    specification = FeatureSpecification(
-        str(row["continuous_form"]), str(row["interactions"])
-    )
-    data = model_selection.load_selection_years(data_dir, config.TRAIN_YEARS)
-    training = pd.concat(
-        [data[year] for year in config.TRAIN_YEARS], ignore_index=True
-    )
+    if "specification" in row:
+        specification = specification_from_name(str(row["specification"]))
+    else:
+        specification = FeatureSpecification(
+            str(row["continuous_form"]), str(row["interactions"])
+        )
+    if specification.feature_set == CORE_FEATURE_SET:
+        data = model_selection.load_selection_years(data_dir, config.TRAIN_YEARS)
+    else:
+        data = model_selection.load_selection_years(
+            data_dir, config.TRAIN_YEARS, feature_set=specification.feature_set
+        )
+    training = pd.concat([data[year] for year in config.TRAIN_YEARS], ignore_index=True)
     selected = model_selection.fit_selected_model(
         training, specification, float(row["regularization_c"])
     )
@@ -358,33 +436,38 @@ def write_slurm_array(
     """Write a manifest and Slurm array script without submitting it."""
     if not jobs:
         raise ValueError("jobs cannot be empty")
-    if max_concurrent is not None and max_concurrent <= 0:
-        raise ValueError("max_concurrent must be positive")
     destination = Path(destination).resolve()
     destination.mkdir(parents=True, exist_ok=True)
     manifest = write_manifest(jobs, destination / "logistic_selection_jobs.json")
-    array = f"0-{len(jobs) - 1}"
-    if max_concurrent is not None:
-        array += f"%{max_concurrent}"
-    activation = f"source {_expandable_quote(activate)}\n" if activate else ""
     repo_dir = Path(repo_dir).resolve()
     script = destination / "logistic_selection_jobs.slurm"
-    contents = f"""#!/bin/bash
-#SBATCH --time={time_limit}
-#SBATCH --job-name=hmda-logistic-{jobs[0].stage}
-#SBATCH --account={account}
-#SBATCH --output={destination.as_posix()}/%x_%A_%a.out
-#SBATCH --error={destination.as_posix()}/%x_%A_%a.err
-#SBATCH --mem={memory}
-#SBATCH --array={array}
-
-set -euo pipefail
-{activation}cd {_expandable_quote(str(repo_dir))}
-python scripts/run_logistic_selection_job.py \\
-    --manifest {_expandable_quote(str(manifest))} \\
-    --job-index "${{SLURM_ARRAY_TASK_ID}}"
-"""
-    script.write_text(contents)
+    cluster.write_slurm_script(
+        cluster.SlurmJob(
+            name=(
+                f"hmda-logistic-{jobs[0].stage}"
+                if jobs[0].feature_set == CORE_FEATURE_SET
+                else f"hmda-logistic-{jobs[0].feature_set}-{jobs[0].stage}"
+            ),
+            command=(
+                "python",
+                "scripts/run_logistic_selection_job.py",
+                "--manifest",
+                manifest,
+                "--job-index",
+                cluster.SLURM_ARRAY_TASK_ID,
+            ),
+            workdir=repo_dir,
+            log_dir=destination,
+            resources=cluster.SlurmResources(
+                time=time_limit,
+                memory=memory,
+                account=account,
+            ),
+            activate=activate,
+            array=cluster.SlurmArray(len(jobs), max_concurrent),
+        ),
+        script,
+    )
     return manifest, script
 
 
@@ -407,38 +490,57 @@ def write_finalize_slurm(
     decision_file = Path(decision_file).resolve()
     data_dir = Path(data_dir).resolve()
     model_output = Path(model_output).resolve()
-    activation = f"source {_expandable_quote(activate)}\n" if activate else ""
     script = destination / "finalize_logistic_selection.slurm"
-    script.write_text(
-        f"""#!/bin/bash
-#SBATCH --time={time_limit}
-#SBATCH --job-name=hmda-logistic-final
-#SBATCH --account={account}
-#SBATCH --output={destination.as_posix()}/%x_%j.out
-#SBATCH --error={destination.as_posix()}/%x_%j.err
-#SBATCH --mem={memory}
-
-set -euo pipefail
-{activation}cd {_expandable_quote(str(repo_dir))}
-python scripts/finalize_logistic_selection.py \\
-    --decision {_expandable_quote(str(decision_file))} \\
-    --data-dir {_expandable_quote(str(data_dir))} \\
-    --model-output {_expandable_quote(str(model_output))}
-"""
+    cluster.write_slurm_script(
+        cluster.SlurmJob(
+            name="hmda-logistic-final",
+            command=(
+                "python",
+                "scripts/finalize_logistic_selection.py",
+                "--decision",
+                decision_file,
+                "--data-dir",
+                data_dir,
+                "--model-output",
+                model_output,
+            ),
+            workdir=repo_dir,
+            log_dir=destination,
+            resources=cluster.SlurmResources(
+                time=time_limit,
+                memory=memory,
+                account=account,
+            ),
+            activate=activate,
+        ),
+        script,
     )
     return script
 
 
-def _validate_coarse_summary(summary: pd.DataFrame) -> None:
+def _validate_coarse_summary(
+    summary: pd.DataFrame, specifications: list[FeatureSpecification]
+) -> None:
     required = {
-        "specification", "regularization_c", "n_horizons", "n_cells", "selection_brier"
+        "specification",
+        "regularization_c",
+        "n_horizons",
+        "n_cells",
+        "selection_brier",
     }
     missing = required - set(summary)
     if missing:
         raise ValueError(f"Coarse summary missing columns: {sorted(missing)}")
-    expected_specs = {item.name for item in core_specifications()}
-    if set(summary["specification"]) != expected_specs or len(summary) != 48:
-        raise ValueError("Coarse summary must contain all 12 specifications and four C values")
+    expected_specs = {item.name for item in specifications}
+    expected_rows = 4 * len(specifications)
+    if set(summary["specification"]) != expected_specs or len(summary) != expected_rows:
+        if len(specifications) == len(core_specifications()):
+            raise ValueError(
+                "Coarse summary must contain all 12 specifications and four C values"
+            )
+        raise ValueError(
+            "Coarse summary must contain every declared specification and four C values"
+        )
     expected_c = {float(value) for value in config.LOGISTIC_SELECTION_COARSE_C}
     for specification, rows in summary.groupby("specification"):
         if set(rows["regularization_c"].astype(float)) != expected_c:
@@ -447,9 +549,7 @@ def _validate_coarse_summary(summary: pd.DataFrame) -> None:
         raise ValueError("Coarse summary does not contain the complete reverse design")
 
 
-def _validate_aggregated_cells(
-    cells: pd.DataFrame, jobs: list[RawLogisticJob]
-) -> None:
+def _validate_aggregated_cells(cells: pd.DataFrame, jobs: list[RawLogisticJob]) -> None:
     required = {
         "specification",
         "regularization_c",
@@ -477,7 +577,9 @@ def _validate_aggregated_cells(
         raise ValueError("Selection cells are missing, duplicate, or unexpected")
 
 
-def _validate_shard(job: RawLogisticJob, shard: dict, *, validate_artifacts: bool) -> None:
+def _validate_shard(
+    job: RawLogisticJob, shard: dict, *, validate_artifacts: bool
+) -> None:
     if shard.get("schema_version") != SCHEMA_VERSION:
         raise ValueError("Unsupported raw-logistic shard schema")
     restored = RawLogisticJob.from_dict(shard.get("job", {}))
@@ -499,8 +601,12 @@ def _validate_shard(job: RawLogisticJob, shard: dict, *, validate_artifacts: boo
         )
     )
     if set(observed) != expected or len(observed) != len(expected):
-        raise ValueError("Raw-logistic shard cells are missing, duplicate, or unexpected")
-    if set(cells["specification"]) != {job.specification} or set(cells["train_start"]) != {job.train_start}:
+        raise ValueError(
+            "Raw-logistic shard cells are missing, duplicate, or unexpected"
+        )
+    if set(cells["specification"]) != {job.specification} or set(
+        cells["train_start"]
+    ) != {job.train_start}:
         raise ValueError("Raw-logistic shard cell identity is inconsistent")
     paths = [Path(value) for value in shard.get("artifact_paths", [])]
     specification = specification_from_name(job.specification)
@@ -517,9 +623,7 @@ def _validate_shard(job: RawLogisticJob, shard: dict, *, validate_artifacts: boo
         raise ValueError("Raw-logistic shard artifact list is incomplete")
     if validate_artifacts:
         for path in paths:
-            metadata = artifacts.validate_existing_artifact(
-                path, allow_legacy=False
-            )
+            metadata = artifacts.validate_existing_artifact(path, allow_legacy=False)
             if (
                 metadata is None
                 or metadata.configuration.family != "raw_logistic"
@@ -533,13 +637,23 @@ def _validate_shard(job: RawLogisticJob, shard: dict, *, validate_artifacts: boo
 
 def _sort_cells(cells: pd.DataFrame) -> pd.DataFrame:
     return cells.sort_values(
-        ["specification", "regularization_c", "horizon", "validation_year", "train_start"]
+        [
+            "specification",
+            "regularization_c",
+            "horizon",
+            "validation_year",
+            "train_start",
+        ]
     ).reset_index(drop=True)
 
 
 def _write_tables(prefix, cells, horizons, summary):
     destinations = []
-    for suffix, frame in (("cells", cells), ("horizons", horizons), ("summary", summary)):
+    for suffix, frame in (
+        ("cells", cells),
+        ("horizons", horizons),
+        ("summary", summary),
+    ):
         path = Path(f"{prefix}_{suffix}.csv")
         _atomic_csv(frame, path)
         destinations.append(path)
@@ -552,7 +666,9 @@ def _atomic_csv(frame: pd.DataFrame, path: Path) -> None:
 
 def _atomic_bytes(path: Path, values: bytes, *, replace: bool = True) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    descriptor, name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
+    descriptor, name = tempfile.mkstemp(
+        prefix=f".{path.name}.", suffix=".tmp", dir=path.parent
+    )
     temporary = Path(name)
     try:
         with os.fdopen(descriptor, "wb") as file:
@@ -565,12 +681,8 @@ def _atomic_bytes(path: Path, values: bytes, *, replace: bool = True) -> None:
             try:
                 os.link(temporary, path)
             except FileExistsError as error:
-                raise FileExistsError(f"Conflicting shard already exists: {path}") from error
+                raise FileExistsError(
+                    f"Conflicting shard already exists: {path}"
+                ) from error
     finally:
         temporary.unlink(missing_ok=True)
-
-
-def _expandable_quote(value: str) -> str:
-    if any(character in value for character in ('"', "`", "\\", "\n", "\r")):
-        raise ValueError("cluster paths cannot contain quotes, backticks, or newlines")
-    return f'"{value}"'

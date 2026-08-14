@@ -34,14 +34,14 @@ RAW_LOGISTIC_DIAGNOSTIC_MODEL_DIR = MODEL_DIR / "raw_logistic_diagnostics"
 FIGURE_DIR = OUTPUT_DIR / "figures"
 TABLE_DIR = OUTPUT_DIR / "tables"
 RAW_LOGISTIC_CLUSTER_DIR = OUTPUT_DIR / "raw_logistic_selection"
+HMDA_ONLY_RAW_LOGISTIC_CLUSTER_DIR = OUTPUT_DIR / "hmda_only_raw_logistic_selection"
+HMDA_ONLY_BOOSTING_CLUSTER_DIR = OUTPUT_DIR / "hmda_only_boosting_selection"
 
 # Optional cluster defaults. Command-line arguments continue to take
 # precedence, while keeping machine-specific paths and Slurm settings out of
 # source control.
 SLURM_ACTIVATE = os.environ.get("HMDA_SECONDS_SLURM_ACTIVATE")
-SLURM_ACCOUNT = os.environ.get(
-    "HMDA_SECONDS_SLURM_ACCOUNT", "torch_pr_609_general"
-)
+SLURM_ACCOUNT = os.environ.get("HMDA_SECONDS_SLURM_ACCOUNT", "torch_pr_609_general")
 SLURM_TIME = os.environ.get("HMDA_SECONDS_SLURM_TIME", "8:00:00")
 SLURM_MEMORY = os.environ.get("HMDA_SECONDS_SLURM_MEMORY", "32G")
 SLURM_MAX_CONCURRENT = (
@@ -99,8 +99,11 @@ assert set(TRAIN_YEARS).isdisjoint(VALIDATE_YEARS)
 assert set(TRAIN_YEARS) | set(VALIDATE_YEARS) <= set(APPLY_YEARS)
 
 SELECTION_DATA_DIR = INTERMEDIATE_DIR / "logistic_selection"
+HMDA_ONLY_SELECTION_DATA_DIR = INTERMEDIATE_DIR / "hmda_only_logistic_selection"
 SELECTED_LOGISTIC_MODEL_FILE = MODEL_DIR / "logistic_selected.pkl"
+HMDA_ONLY_SELECTED_LOGISTIC_MODEL_FILE = MODEL_DIR / "logistic_hmda_only_selected.pkl"
 SELECTED_BOOSTING_MODEL_FILE = MODEL_DIR / "boosting_challenger.pkl"
+HMDA_ONLY_SELECTED_BOOSTING_MODEL_FILE = MODEL_DIR / "boosting_hmda_only_challenger.pkl"
 RF_MIXTURE_MODEL_FILE = MODEL_DIR / "rf_mixture_challenger.pkl"
 MIXTURE_SELECTED_LOGISTIC_MODEL_FILE = MODEL_DIR / "logistic_mixture_selected.pkl"
 LABEL_VAR = "lien_status"
@@ -126,8 +129,15 @@ CATEGORY_VARS = ["purchaser_type", "loan_type"]
 # columns in the same order, with an all-zero column for any value absent
 # from a given slice, regardless of what's actually present in it.
 CATEGORY_LEVELS = {
-    "purchaser_type": list(range(10)),  # matches py_tools.datasets.hmda's own category range
-    "loan_type": [1, 2, 3, 4],  # matches clean.clean_frame's loan_type.between(1, 4) filter
+    "purchaser_type": list(
+        range(10)
+    ),  # matches py_tools.datasets.hmda's own category range
+    "loan_type": [
+        1,
+        2,
+        3,
+        4,
+    ],  # matches clean.clean_frame's loan_type.between(1, 4) filter
 }
 
 # Not used as model features, but retained (unlike the original script, which

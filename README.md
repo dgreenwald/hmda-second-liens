@@ -13,7 +13,8 @@ plans, frozen protocols, implementation findings, and refactoring documentation 
 
 Cluster execution uses immutable result shards and a generated Slurm array; see the
 [density-ratio cluster workflow](documentation/DENSITY_RATIO_CLUSTER.md). Generation never
-submits jobs automatically.
+submits jobs automatically. Portable model variants that require HMDA alone follow the
+[HMDA-only model-selection protocol](documentation/HMDA_ONLY_MODEL_SELECTION_PROTOCOL.md).
 
 The original full-release Random Forest train/classify/validate workflow has been removed after
 the replacement estimators were validated through the common temporal-fold and metric

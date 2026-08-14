@@ -13,9 +13,9 @@ license = {file = "LICENSE"}
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "dgreenwald-py-tools[datasets]>=0.2.3,<1.0",
+    "dgreenwald-py-tools[datasets]>=0.2.4,<1.0",
     "python-dotenv>=1.0",
-    "scikit-learn>=1.2,<1.8",
+    "scikit-learn>=1.2,<2.0",
     "scipy>=1.10",
 ]
 

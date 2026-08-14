@@ -20,10 +20,10 @@ contains two tasks on the 2013--2016 source window:
 - `spline_lti__purchaser_type_spline_lti`.
 
 Both tasks fit the complete coarse ridge grid, `C = 0.0001, 0.01, 1, 100`, and evaluate all
-nine earlier labeled target years. The generated array requests eight hours and 32 GB per task,
-matching the existing transition-script template. `/usr/bin/time -v` records wall time and
-maximum resident memory in the task's Slurm log. Generator options can override repository,
-data, output, activation, time, memory, and source-window defaults.
+nine earlier labeled target years. The generated array uses the Slurm resources configured in
+`.env`. `/usr/bin/time -v` records wall time and maximum resident memory in the task's Slurm
+log. Generator options can override repository, data, output, activation, time, memory, and
+source-window defaults.
 
 Inspect the generated files before manually submitting:
 
@@ -76,17 +76,11 @@ requests from those measurements rather than extrapolating from the local machin
 ## Generate the first-order logistic search
 
 The frozen mixture-logistic protocol uses a coordinate-wise neighborhood rather than the full
-global grid. Generate its 63-job manifest after setting resources from the pilot:
+global grid. After setting the shared paths and resources in `.env`, generate its 63-job
+manifest with:
 
 ```bash
-python scripts/generate_first_order_logistic_slurm.py \
-    --repo-dir "$LABDIR/hmda-second-liens" \
-    --data-dir "$LABDIR/hmda-second-liens/data/intermediate/logistic_selection" \
-    --output-root "$LABDIR/hmda-second-liens/output/density_ratio" \
-    --activate "/scratch/projects/greenwaldlab/venvs/hmda-second-liens/bin/activate" \
-    --time "8:00:00" \
-    --memory "32G" \
-    --max-concurrent 4
+make generate-first-order-logistic-grid
 ```
 
 This writes a separate manifest and Slurm script under `output/slurm/first_order/` and never

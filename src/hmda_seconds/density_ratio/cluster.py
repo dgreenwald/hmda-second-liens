@@ -7,8 +7,12 @@ import os
 import tempfile
 from pathlib import Path
 
+from py_tools import cluster as cluster_tools
+
 from .. import model_selection
+from ..logistic_features import HMDA_ONLY_FEATURE_SET
 from .families import GradientBoostingFamily, LogisticFamily, RandomForestFamily
+from .families.gradient_boosting import HMDA_ONLY_SPECIFICATION
 from .folds import reverse_folds
 from .protocols import JobSpecification, ModelConfiguration
 from .runner import run_job
@@ -101,9 +105,7 @@ def first_order_logistic_jobs(
     jobs = []
     for specification in specifications:
         regularization_values = (
-            INCUMBENT_C_VALUES
-            if specification == INCUMBENT_SPECIFICATION
-            else (0.1,)
+            INCUMBENT_C_VALUES if specification == INCUMBENT_SPECIFICATION else (0.1,)
         )
         configurations = tuple(
             ModelConfiguration.from_mapping(
@@ -187,7 +189,8 @@ def write_slurm_array(
     *,
     destination: str | Path,
     repo_dir: str,
-    activate: str,
+    activate: str | None,
+    account: str | None = None,
     time_limit: str = "8:00:00",
     memory: str = "32G",
     job_name: str = "hmda-density-ratio-pilot",
@@ -196,35 +199,38 @@ def write_slurm_array(
     """Write a manifest and one Slurm array script; never submit either."""
     if not planned:
         raise ValueError("planned jobs cannot be empty")
-    if max_concurrent is not None and max_concurrent <= 0:
-        raise ValueError("max_concurrent must be positive")
     destination = Path(destination)
-    if destination.is_absolute():
-        raise ValueError("destination must be relative to the repository root")
     destination.mkdir(parents=True, exist_ok=True)
     manifest = write_manifest(planned, destination / "density_ratio_jobs.json")
     script = destination / "density_ratio_jobs.slurm"
-    manifest_on_cluster = f"{repo_dir}/{manifest.as_posix()}"
-    log_dir = f"{repo_dir}/{destination.as_posix()}"
-    array = f"0-{len(planned) - 1}"
-    if max_concurrent is not None:
-        array += f"%{max_concurrent}"
-    contents = f"""#!/bin/bash
-#SBATCH --time={time_limit}
-#SBATCH --job-name={job_name}
-#SBATCH --output={log_dir}/%x_%A_%a.out
-#SBATCH --error={log_dir}/%x_%A_%a.err
-#SBATCH --mem={memory}
-#SBATCH --array={array}
-
-set -euo pipefail
-source {_expandable_quote(activate)}
-cd {_expandable_quote(repo_dir)}
-/usr/bin/time -v python scripts/run_density_ratio_job.py \\
-    --manifest {_expandable_quote(manifest_on_cluster)} \\
-    --job-index "${{SLURM_ARRAY_TASK_ID}}"
-"""
-    script.write_text(contents)
+    repo_dir = Path(repo_dir).resolve()
+    manifest_on_cluster = manifest if manifest.is_absolute() else repo_dir / manifest
+    log_dir = destination if destination.is_absolute() else repo_dir / destination
+    cluster_tools.write_slurm_script(
+        cluster_tools.SlurmJob(
+            name=job_name,
+            command=(
+                "/usr/bin/time",
+                "-v",
+                "python",
+                "scripts/run_density_ratio_job.py",
+                "--manifest",
+                manifest_on_cluster,
+                "--job-index",
+                cluster_tools.SLURM_ARRAY_TASK_ID,
+            ),
+            workdir=repo_dir,
+            log_dir=log_dir,
+            resources=cluster_tools.SlurmResources(
+                time=time_limit,
+                memory=memory,
+                account=account,
+            ),
+            activate=activate,
+            array=cluster_tools.SlurmArray(len(planned), max_concurrent),
+        ),
+        script,
+    )
     return manifest, script
 
 
@@ -233,7 +239,16 @@ def execute_planned_job(planned: PlannedJob):
     inputs = dict(planned.job.input_paths)
     data_dir = Path(inputs["selection_data_dir"])
     years = (*planned.fold.train_years, *planned.fold.target_years)
-    data_by_year = model_selection.load_selection_years(data_dir, years)
+    restricted = (
+        planned.job.specification.startswith("hmda_only__")
+        or planned.job.specification == HMDA_ONLY_SPECIFICATION
+    )
+    if restricted:
+        data_by_year = model_selection.load_selection_years(
+            data_dir, years, feature_set=HMDA_ONLY_FEATURE_SET
+        )
+    else:
+        data_by_year = model_selection.load_selection_years(data_dir, years)
     artifact_root = (
         Path(planned.job.output_root)
         / "models"
@@ -252,9 +267,7 @@ def execute_planned_job(planned: PlannedJob):
 def aggregate_manifest(manifest: str | Path, output_dir: str | Path) -> list[Path]:
     """Validate a complete manifest and atomically write its three tables."""
     planned = [expand_job_paths(item) for item in read_manifest(manifest)]
-    aggregated = aggregate_shards(
-        planned, [shard_path(item.job) for item in planned]
-    )
+    aggregated = aggregate_shards(planned, [shard_path(item.job) for item in planned])
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     destinations = []
@@ -263,12 +276,6 @@ def aggregate_manifest(manifest: str | Path, output_dir: str | Path) -> list[Pat
         _atomic_csv(getattr(aggregated, name), destination)
         destinations.append(destination)
     return destinations
-
-
-def _expandable_quote(value: str) -> str:
-    """Quote a trusted generated path while retaining shell variable expansion."""
-    escaped = value.replace("\\", "\\\\").replace('"', '\\"').replace("`", "\\`")
-    return f'"{escaped}"'
 
 
 def _atomic_csv(frame, destination: Path) -> None:

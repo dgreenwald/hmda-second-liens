@@ -141,8 +141,10 @@ def build_county_value_panel(
     return panel[["fips", "year", "hpi", "county_value"]]
 
 
-def clean_frame(df_t: pd.DataFrame, df_county_values: pd.DataFrame) -> pd.DataFrame:
-    """Apply sample restrictions and construct model features for one year."""
+def clean_frame(
+    df_t: pd.DataFrame, df_county_values: pd.DataFrame | None = None
+) -> pd.DataFrame:
+    """Apply restrictions and construct full or HMDA-only model features."""
     df_t = df_t.rename(
         {
             **CANONICAL_TO_INTERNAL,
@@ -180,13 +182,15 @@ def clean_frame(df_t: pd.DataFrame, df_county_values: pd.DataFrame) -> pd.DataFr
 
     df_t["fips"] = (1000.0 * df_t["state_code"] + df_t["county_code"]).astype("Int64")
     df_t["state_code"] = df_t["state_code"].astype("Int64")
-    df_t = pd.merge(df_t, df_county_values, on=["fips", "year"], how="inner")
-
     df_t["log_lti"] = np.log(df_t["loan_amt"] / df_t["app_income"])
-    df_t["log_county_value_to_loan"] = np.log(
-        df_t["county_value"] / (1000.0 * df_t["loan_amt"])
-    )
-    df_t.dropna(subset=config.CONTINUOUS_VARS, inplace=True)
+    continuous = ["log_lti"]
+    if df_county_values is not None:
+        df_t = pd.merge(df_t, df_county_values, on=["fips", "year"], how="inner")
+        df_t["log_county_value_to_loan"] = np.log(
+            df_t["county_value"] / (1000.0 * df_t["loan_amt"])
+        )
+        continuous.append("log_county_value_to_loan")
+    df_t.dropna(subset=continuous, inplace=True)
 
     df_t["has_edit_status"] = pd.notnull(df_t["edit_status"])
     df_t["edit_status"] = df_t["edit_status"].fillna(0).astype(int)
@@ -219,7 +223,7 @@ def pin_category_levels(
 
 def load_and_clean_year(
     year: int,
-    df_county_values: pd.DataFrame,
+    df_county_values: pd.DataFrame | None = None,
     hmda_data_dir=None,
     *,
     source: str = "auto",
@@ -236,10 +240,7 @@ def load_and_clean_year(
         selected_columns = CANONICAL_INPUT_COLUMNS.copy()
     else:
         requested = list(
-            dict.fromkeys(
-                INPUT_TO_CANONICAL.get(column, column)
-                for column in columns
-            )
+            dict.fromkeys(INPUT_TO_CANONICAL.get(column, column) for column in columns)
         )
         selected_columns = (
             [column for column in requested if column in CANONICAL_INPUT_COLUMNS]
@@ -264,9 +265,7 @@ def load_and_clean_year(
     elif label_policy == "require" and (
         config.LABEL_VAR not in df_t or df_t[config.LABEL_VAR].isna().all()
     ):
-        raise ValueError(
-            f"HMDA {year} ({source}) is missing {config.LABEL_VAR}"
-        )
+        raise ValueError(f"HMDA {year} ({source}) is missing {config.LABEL_VAR}")
     cleaned = clean_frame(df_t, df_county_values)
     cleaned.attrs["hmda"] = provenance
     return cleaned

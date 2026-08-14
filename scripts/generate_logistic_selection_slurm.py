@@ -7,9 +7,10 @@ import argparse
 from pathlib import Path
 
 import pandas as pd
+from py_tools.cluster import submit_slurm
 
 from hmda_seconds import config
-from hmda_seconds.hmda_conversion import submit_slurm
+from hmda_seconds.logistic_features import CORE_FEATURE_SET, FEATURE_SETS
 from hmda_seconds.model_selection_cluster import (
     COARSE_STAGE,
     REFINEMENT_STAGE,
@@ -23,8 +24,11 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--stage", choices=(COARSE_STAGE, REFINEMENT_STAGE), required=True)
+    parser.add_argument(
+        "--stage", choices=(COARSE_STAGE, REFINEMENT_STAGE), required=True
+    )
     parser.add_argument("--coarse-summary", type=Path)
+    parser.add_argument("--feature-set", choices=FEATURE_SETS, default=CORE_FEATURE_SET)
     parser.add_argument("--destination", type=Path)
     parser.add_argument("--data-dir", default=config.SELECTION_DATA_DIR)
     parser.add_argument("--output-root", default=config.RAW_LOGISTIC_CLUSTER_DIR)
@@ -45,22 +49,41 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    restricted = args.feature_set != CORE_FEATURE_SET
+    data_dir = (
+        config.HMDA_ONLY_SELECTION_DATA_DIR
+        if restricted and args.data_dir == config.SELECTION_DATA_DIR
+        else args.data_dir
+    )
+    output_root = (
+        config.HMDA_ONLY_RAW_LOGISTIC_CLUSTER_DIR
+        if restricted and args.output_root == config.RAW_LOGISTIC_CLUSTER_DIR
+        else args.output_root
+    )
     destination = args.destination or (
-        config.OUTPUT_DIR / "slurm" / "logistic_selection" / args.stage
+        config.OUTPUT_DIR
+        / "slurm"
+        / ("hmda_only_logistic_selection" if restricted else "logistic_selection")
+        / args.stage
     )
     if not destination.is_absolute():
         destination = REPOSITORY_ROOT / destination
     if args.stage == COARSE_STAGE:
         if args.coarse_summary is not None:
             raise ValueError("--coarse-summary is only valid for refinement")
-        jobs = coarse_jobs(data_dir=args.data_dir, output_root=args.output_root)
+        jobs = coarse_jobs(
+            data_dir=data_dir,
+            output_root=output_root,
+            feature_set=args.feature_set,
+        )
     else:
         if args.coarse_summary is None:
             raise ValueError("--coarse-summary is required for refinement")
         jobs = refinement_jobs(
             pd.read_csv(args.coarse_summary),
-            data_dir=args.data_dir,
-            output_root=args.output_root,
+            data_dir=data_dir,
+            output_root=output_root,
+            feature_set=args.feature_set,
         )
     manifest, script = write_slurm_array(
         jobs,
@@ -75,7 +98,8 @@ def main() -> None:
     print(f"Wrote {manifest} ({len(jobs)} jobs)")
     print(f"Wrote {script}")
     if args.submit:
-        print(submit_slurm(script))
+        submission = submit_slurm(script)
+        print(f"Submitted batch job {submission.job_id}")
     else:
         print("No jobs were submitted. Pass --submit to submit automatically.")
 

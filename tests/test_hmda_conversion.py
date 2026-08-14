@@ -1,9 +1,11 @@
 import json
-from subprocess import CompletedProcess
+import runpy
+import sys
+from pathlib import Path
 
 import pytest
 
-from hmda_seconds import hmda_conversion
+from hmda_seconds import config, hmda_conversion
 
 
 def test_conversion_jobs_make_one_job_per_supported_year_and_source():
@@ -40,7 +42,8 @@ def test_write_conversion_slurm_writes_manifest_and_capped_array(tmp_path, monke
     manifest, script = hmda_conversion.write_conversion_slurm(
         jobs,
         destination="output/slurm/hmda",
-        data_dir="$PY_TOOLS_DATA_DIR/hmda",
+        data_dir=tmp_path / "data" / "hmda",
+        repo_dir=tmp_path,
         activate="/cluster/venv/bin/activate",
         account="test-account",
         max_concurrent=2,
@@ -52,31 +55,50 @@ def test_write_conversion_slurm_writes_manifest_and_capped_array(tmp_path, monke
     expected_log_root = tmp_path / "output/slurm/hmda"
     assert f"#SBATCH --output={expected_log_root}/%x_%A_%a.out" in contents
     assert f"#SBATCH --error={expected_log_root}/%x_%A_%a.err" in contents
-    assert "years=(2004 2005)" in contents
-    assert "sources=(nara nara)" in contents
-    assert 'year="${years[SLURM_ARRAY_TASK_ID]}"' in contents
-    assert "python -m py_tools.datasets.hmda convert" in contents
+    assert "python scripts/run_hmda_parquet_job.py" in contents
+    assert f"--manifest {manifest.resolve()}" in contents
+    assert '--job-index "${SLURM_ARRAY_TASK_ID}"' in contents
     assert "/usr/bin/time" not in contents
     assert "scontrol" not in contents
-    assert '--data-dir "$PY_TOOLS_DATA_DIR/hmda"' in contents
+    assert f"--data-dir {tmp_path}/data/hmda" in contents
     assert "sbatch " not in contents
 
 
 def test_default_slurm_has_no_environment_specific_setup(tmp_path):
     _, script = hmda_conversion.write_conversion_slurm(
-        [{"year": 2003, "source": "nara"}], destination=tmp_path
+        [{"year": 2003, "source": "nara"}],
+        destination=tmp_path,
+        data_dir=tmp_path / "hmda",
+        repo_dir=tmp_path,
     )
 
     contents = script.read_text()
-    assert "\nsource \"" not in contents
+    assert '\nsource "' not in contents
     assert "LABDIR" not in contents
     assert "PY_TOOLS_DATA_DIR" not in contents
-    assert "--data-dir" not in contents
+    assert f"--data-dir {tmp_path}/hmda" in contents
+
+
+def test_conversion_generator_defaults_follow_central_config(monkeypatch):
+    script = Path(__file__).parents[1] / "scripts" / "generate_hmda_parquet_slurm.py"
+    parse_args = runpy.run_path(str(script))["parse_args"]
+    monkeypatch.setattr(sys, "argv", [str(script)])
+
+    args = parse_args()
+
+    assert args.data_dir == config.HMDA_DATA_DIR
+    assert args.activate == config.SLURM_ACTIVATE
+    assert args.account == config.SLURM_ACCOUNT
+    assert args.time == config.SLURM_TIME
+    assert args.memory == config.SLURM_MEMORY
+    assert args.max_concurrent == config.SLURM_MAX_CONCURRENT
 
 
 def test_run_conversion_job_executes_only_selected_pair(tmp_path, monkeypatch):
     manifest = tmp_path / "jobs.json"
-    manifest.write_text(json.dumps([{"year": 2004, "source": "nara"}, {"year": 2017, "source": "cfpb"}]))
+    manifest.write_text(
+        json.dumps([{"year": 2004, "source": "nara"}, {"year": 2017, "source": "cfpb"}])
+    )
     calls = []
 
     def fake_convert(year, **kwargs):
@@ -98,23 +120,3 @@ def test_conversion_job_name_includes_year_and_source(tmp_path):
     manifest.write_text(json.dumps([{"year": 2004, "source": "nara"}]))
 
     assert hmda_conversion.conversion_job_name(manifest, 0) == "hmda-2004-nara"
-
-
-def test_submit_slurm_calls_sbatch_with_generated_script(tmp_path, monkeypatch):
-    script = tmp_path / "jobs.slurm"
-    script.write_text("#!/bin/bash\n")
-    calls = []
-
-    def fake_run(command, **kwargs):
-        calls.append((command, kwargs))
-        return CompletedProcess(command, 0, "Submitted batch job 12345\n", "")
-
-    monkeypatch.setattr(hmda_conversion.subprocess, "run", fake_run)
-
-    assert hmda_conversion.submit_slurm(script) == "Submitted batch job 12345"
-    assert calls == [
-        (
-            ["sbatch", str(script.resolve())],
-            {"check": True, "capture_output": True, "text": True},
-        )
-    ]

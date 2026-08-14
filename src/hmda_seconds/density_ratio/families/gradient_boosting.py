@@ -19,6 +19,8 @@ from ..weighting import equal_source_prior_weights
 from ._validation import require_parameters, validate_request
 
 SPECIFICATION = "primitive_continuous_and_native_categories"
+HMDA_ONLY_SPECIFICATION = "hmda_only_primitive_and_native_categories"
+SPECIFICATIONS = (SPECIFICATION, HMDA_ONLY_SPECIFICATION)
 PARAMETERS = {
     "max_leaf_nodes",
     "learning_rate",
@@ -28,6 +30,8 @@ PARAMETERS = {
 }
 BOOSTING_FEATURES = [*config.CONTINUOUS_VARS, *config.CATEGORY_VARS]
 CATEGORICAL_MASK = np.array([False, False, True, True])
+HMDA_ONLY_BOOSTING_FEATURES = ["log_lti", *config.CATEGORY_VARS]
+HMDA_ONLY_CATEGORICAL_MASK = np.array([False, True, True])
 PROBABILITY_EPSILON = 1e-12
 
 
@@ -62,16 +66,20 @@ class BoostingDensityRatioModel:
     n_training: int = 0
     n_first_lien: int = 0
     n_second_lien: int = 0
+    specification: str = SPECIFICATION
 
     @property
     def model_id(self) -> str:
+        prefix = (
+            "boosting" if self.specification == SPECIFICATION else "boosting_hmda_only"
+        )
         return (
-            f"boosting__{self.parameters.identifier}"
+            f"{prefix}__{self.parameters.identifier}"
             f"__train_{min(self.train_years)}_{max(self.train_years)}"
         )
 
     def log_ratio(self, frame: pd.DataFrame) -> np.ndarray:
-        features = boosting_features(frame)
+        features = boosting_features(frame, self.specification)
         probability = numerical.predict_class_probability(
             self.classifier, features, config.SECOND_LIEN_CLASS
         )
@@ -80,16 +88,35 @@ class BoostingDensityRatioModel:
         )
         return logit(probability)
 
+    def __setstate__(self, state: dict) -> None:
+        """Load artifacts created before the specification field existed."""
+        self.__dict__.update(state)
+        if "specification" not in state:
+            self.specification = SPECIFICATION
 
-def boosting_features(frame: pd.DataFrame) -> np.ndarray:
-    """Construct the four primitive boosting features without engineering."""
-    missing = set(BOOSTING_FEATURES) - set(frame.columns)
+
+def boosting_schema(specification: str) -> tuple[list[str], np.ndarray]:
+    """Return the ordered feature names and native-categorical mask."""
+    if specification == SPECIFICATION:
+        return BOOSTING_FEATURES, CATEGORICAL_MASK
+    if specification == HMDA_ONLY_SPECIFICATION:
+        return HMDA_ONLY_BOOSTING_FEATURES, HMDA_ONLY_CATEGORICAL_MASK
+    raise ValueError(f"Unknown boosting specification {specification!r}")
+
+
+def boosting_features(
+    frame: pd.DataFrame, specification: str = SPECIFICATION
+) -> np.ndarray:
+    """Construct the declared primitive boosting features without engineering."""
+    names, categorical_mask = boosting_schema(specification)
+    missing = set(names) - set(frame.columns)
     if missing:
         raise ValueError(f"Missing boosting features: {sorted(missing)}")
-    features = frame[BOOSTING_FEATURES].to_numpy(dtype=float)
+    features = frame[names].to_numpy(dtype=float)
     if not np.isfinite(features).all():
         raise ValueError("Boosting features contain non-finite values")
-    for index, variable in enumerate(config.CATEGORY_VARS, start=2):
+    for index in np.flatnonzero(categorical_mask):
+        variable = names[index]
         unknown = set(np.unique(features[:, index])) - set(
             config.CATEGORY_LEVELS[variable]
         )
@@ -99,10 +126,13 @@ def boosting_features(frame: pd.DataFrame) -> np.ndarray:
 
 
 def fit_boosting_ratio_model(
-    training: pd.DataFrame, parameters: BoostingParameters
+    training: pd.DataFrame,
+    parameters: BoostingParameters,
+    specification: str = SPECIFICATION,
 ) -> tuple[BoostingDensityRatioModel, dict]:
     """Fit an equal-source-prior histogram-boosting classifier."""
-    features = boosting_features(training)
+    feature_names, categorical_mask = boosting_schema(specification)
+    features = boosting_features(training, specification)
     labels = training[config.LABEL_VAR].to_numpy()
     is_second = labels == config.SECOND_LIEN_CLASS
     weights = equal_source_prior_weights(training, is_second)
@@ -119,7 +149,7 @@ def fit_boosting_ratio_model(
         max_leaf_nodes=parameters.max_leaf_nodes,
         min_samples_leaf=parameters.min_samples_leaf,
         l2_regularization=parameters.l2_regularization,
-        categorical_features=CATEGORICAL_MASK,
+        categorical_features=categorical_mask,
         early_stopping=False,
         random_state=config.BOOSTING_RANDOM_STATE,
     )
@@ -132,6 +162,8 @@ def fit_boosting_ratio_model(
         n_training=counts[0],
         n_first_lien=counts[1],
         n_second_lien=counts[2],
+        feature_names=tuple(feature_names),
+        specification=specification,
     )
     return fitted, {
         "fit_seconds": time.perf_counter() - start,
@@ -149,7 +181,7 @@ def save_boosting_model(
         model_id=model.model_id,
         configuration=ModelConfiguration.from_mapping(
             "hist_gradient_boosting",
-            SPECIFICATION,
+            model.specification,
             asdict(model.parameters),
             random_seed=config.BOOSTING_RANDOM_STATE,
         ),
@@ -181,12 +213,14 @@ def boosting_model_path(
     train_years: Sequence[int],
     parameters: BoostingParameters,
     model_dir: str | Path = config.BOOSTING_FOLD_MODEL_DIR,
+    specification: str = SPECIFICATION,
 ) -> Path:
     years = tuple(train_years)
     if not years:
         raise ValueError("train_years cannot be empty")
+    prefix = "" if specification == SPECIFICATION else "hmda_only__"
     return Path(model_dir) / (
-        f"{parameters.identifier}__train_{min(years)}_{max(years)}.pkl"
+        f"{prefix}{parameters.identifier}__train_{min(years)}_{max(years)}.pkl"
     )
 
 
@@ -220,7 +254,7 @@ class GradientBoostingFamily:
                 raise ValueError(
                     "Boosting random_seed does not match the frozen estimator seed"
                 )
-            if configuration.specification != SPECIFICATION:
+            if configuration.specification not in SPECIFICATIONS:
                 raise ValueError(
                     f"Unknown boosting specification {configuration.specification!r}"
                 )
@@ -233,12 +267,17 @@ class GradientBoostingFamily:
                 min_samples_leaf=int(values["min_samples_leaf"]),
             )
             path = boosting_model_path(
-                train_years, parameters, self.artifact_dir
+                train_years,
+                parameters,
+                self.artifact_dir,
+                configuration.specification,
             )
             if path.exists():
                 model = load_boosting_model(path)
             else:
-                model, _ = fit_boosting_ratio_model(training, parameters)
+                model, _ = fit_boosting_ratio_model(
+                    training, parameters, configuration.specification
+                )
             if not path.exists():
                 save_boosting_model(model, path)
             if model.model_id in result:

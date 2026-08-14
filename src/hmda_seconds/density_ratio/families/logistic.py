@@ -12,7 +12,11 @@ import pandas as pd
 from sklearn.linear_model import LogisticRegression
 
 from ... import config, model_selection
-from ...logistic_features import FeatureSpecification, LogisticFeatureTransformer
+from ...logistic_features import (
+    FeatureSpecification,
+    LogisticFeatureTransformer,
+    feature_specification_from_name,
+)
 from .. import artifacts, numerical
 from ..protocols import FittedDensityRatioModel, ModelConfiguration
 from ..weighting import equal_source_prior_weights
@@ -255,11 +259,4 @@ class LogisticFamily:
 
 
 def _parse_specification(name: str) -> FeatureSpecification:
-    parts = name.split("__")
-    if len(parts) not in (2, 3):
-        raise ValueError(f"Invalid logistic specification {name!r}")
-    geography = None if len(parts) == 2 else parts[2]
-    specification = FeatureSpecification(parts[0], parts[1], geography)
-    if specification.name != name:
-        raise ValueError(f"Noncanonical logistic specification {name!r}")
-    return specification
+    return feature_specification_from_name(name)

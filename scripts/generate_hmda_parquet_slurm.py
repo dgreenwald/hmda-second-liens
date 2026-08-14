@@ -6,9 +6,11 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from py_tools.cluster import submit_slurm
+
+from hmda_seconds import config
 from hmda_seconds.hmda_conversion import (
     conversion_jobs,
-    submit_slurm,
     write_conversion_slurm,
 )
 
@@ -25,16 +27,19 @@ def parse_args() -> argparse.Namespace:
         choices=("all", "ffiec_three_year", "ffiec_snapshot", "cfpb", "nara"),
         help="Repeat for multiple sources; 'all' expands to every available source.",
     )
-    parser.add_argument("--destination", type=Path, default=Path("output/slurm/hmda"))
-    parser.add_argument("--data-dir")
+    parser.add_argument("--destination", type=Path)
+    parser.add_argument("--data-dir", type=Path, default=config.HMDA_DATA_DIR)
     parser.add_argument(
         "--activate",
+        default=config.SLURM_ACTIVATE,
         help="Optional virtual-environment activation script.",
     )
-    parser.add_argument("--account", default="torch_pr_609_general")
-    parser.add_argument("--time", default="4:00:00")
-    parser.add_argument("--memory", default="16G")
-    parser.add_argument("--max-concurrent", type=int)
+    parser.add_argument("--account", default=config.SLURM_ACCOUNT)
+    parser.add_argument("--time", default=config.SLURM_TIME)
+    parser.add_argument("--memory", default=config.SLURM_MEMORY)
+    parser.add_argument(
+        "--max-concurrent", type=int, default=config.SLURM_MAX_CONCURRENT
+    )
     parser.add_argument("--chunksize", type=int, default=100_000)
     parser.add_argument("--compression", default="zstd")
     parser.add_argument("--overwrite", action="store_true")
@@ -48,7 +53,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    destination = args.destination
+    destination = args.destination or (config.OUTPUT_DIR / "slurm" / "hmda")
     if not destination.is_absolute():
         destination = REPOSITORY_ROOT / destination
     jobs = conversion_jobs(args.years, args.sources)
@@ -56,6 +61,7 @@ def main() -> None:
         jobs,
         destination=destination,
         data_dir=args.data_dir,
+        repo_dir=REPOSITORY_ROOT,
         activate=args.activate,
         account=args.account,
         time_limit=args.time,
@@ -68,7 +74,8 @@ def main() -> None:
     print(f"Wrote {manifest} ({len(jobs)} jobs)")
     print(f"Wrote {script}")
     if args.submit:
-        print(submit_slurm(script))
+        submission = submit_slurm(script)
+        print(f"Submitted batch job {submission.job_id}")
     else:
         print("No jobs were submitted. Pass --submit to submit automatically.")
 

@@ -6,8 +6,9 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from py_tools.cluster import submit_slurm
+
 from hmda_seconds import config
-from hmda_seconds.hmda_conversion import submit_slurm
 from hmda_seconds.model_selection_cluster import write_finalize_slurm
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -16,9 +17,15 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--destination", type=Path)
-    parser.add_argument("--decision", type=Path, default=config.TABLE_DIR / "logistic_selection_decision.csv")
+    parser.add_argument(
+        "--decision",
+        type=Path,
+        default=config.TABLE_DIR / "logistic_selection_decision.csv",
+    )
     parser.add_argument("--data-dir", type=Path, default=config.SELECTION_DATA_DIR)
-    parser.add_argument("--model-output", type=Path, default=config.SELECTED_LOGISTIC_MODEL_FILE)
+    parser.add_argument(
+        "--model-output", type=Path, default=config.SELECTED_LOGISTIC_MODEL_FILE
+    )
     parser.add_argument("--activate", default=config.SLURM_ACTIVATE)
     parser.add_argument("--account", default=config.SLURM_ACCOUNT)
     parser.add_argument("--time", default=config.SLURM_TIME)
@@ -47,7 +54,8 @@ def main() -> None:
     )
     print(f"Wrote {script}")
     if args.submit:
-        print(submit_slurm(script))
+        submission = submit_slurm(script)
+        print(f"Submitted batch job {submission.job_id}")
     else:
         print("No job was submitted. Pass --submit to submit automatically.")
 

@@ -55,6 +55,16 @@ def test_valid_first_lien_row_passes_and_computes_features():
     assert isinstance(row["loan_type"], (int, np.integer))
 
 
+def test_hmda_only_cleaning_does_not_require_county_value_match():
+    df = pd.DataFrame([_base_row(county_code=99)])
+
+    out = clean.clean_frame(df)
+
+    assert len(out) == 1
+    assert out.iloc[0]["fips"] == 6099
+    assert "log_county_value_to_loan" not in out
+
+
 def test_edit_status_and_small_loan_flags():
     df = pd.DataFrame([_base_row(lien_status=2, edit_status=5, loan_amt=5.0)])
     out = clean.clean_frame(df, COUNTY_VALUES)
@@ -146,9 +156,9 @@ def test_pin_category_levels_is_defensive_and_supports_a_subset():
     pinned = clean.pin_category_levels(frame, ["loan_type"])
 
     assert not isinstance(frame["loan_type"].dtype, pd.CategoricalDtype)
-    assert list(pinned["loan_type"].cat.categories) == config.CATEGORY_LEVELS[
-        "loan_type"
-    ]
+    assert (
+        list(pinned["loan_type"].cat.categories) == config.CATEGORY_LEVELS["loan_type"]
+    )
     assert not isinstance(pinned["purchaser_type"].dtype, pd.CategoricalDtype)
 
 
@@ -159,9 +169,7 @@ def test_load_and_clean_year_uses_source_loader_and_drops_optional_columns(
 
     def fake_load(**kwargs):
         calls.append(kwargs)
-        raw = pd.DataFrame([_base_row(extra_unused=7)]).drop(
-            columns=[config.LABEL_VAR]
-        )
+        raw = pd.DataFrame([_base_row(extra_unused=7)]).drop(columns=[config.LABEL_VAR])
         raw = raw.rename(
             columns={
                 "asof_date": "activity_year",
@@ -224,9 +232,7 @@ def test_load_and_clean_year_can_require_label(tmp_path, monkeypatch):
     monkeypatch.setattr(
         clean.hmda,
         "load",
-        lambda **kwargs: pd.DataFrame([_base_row()]).drop(
-            columns=[config.LABEL_VAR]
-        ),
+        lambda **kwargs: pd.DataFrame([_base_row()]).drop(columns=[config.LABEL_VAR]),
     )
 
     with pytest.raises(ValueError, match="missing lien_status"):

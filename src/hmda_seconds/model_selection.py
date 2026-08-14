@@ -22,6 +22,8 @@ from .density_ratio import folds as temporal_folds
 from .density_ratio.protocols import ModelConfiguration, TemporalFold
 from .logistic_features import (
     CENSUS_REGION_BY_STATE,
+    CORE_FEATURE_SET,
+    HMDA_ONLY_FEATURE_SET,
     FeatureSpecification,
     LogisticFeatureTransformer,
     core_specifications,
@@ -34,6 +36,22 @@ SELECTION_COLUMNS = [
     *config.CATEGORY_VARS,
     "state_code",
 ]
+HMDA_ONLY_SELECTION_COLUMNS = [
+    "year",
+    config.LABEL_VAR,
+    "log_lti",
+    *config.CATEGORY_VARS,
+    "state_code",
+]
+
+
+def selection_columns(feature_set: str = CORE_FEATURE_SET) -> list[str]:
+    """Return the persisted columns required by a declared feature set."""
+    if feature_set == CORE_FEATURE_SET:
+        return SELECTION_COLUMNS.copy()
+    if feature_set == HMDA_ONLY_FEATURE_SET:
+        return HMDA_ONLY_SELECTION_COLUMNS.copy()
+    raise ValueError(f"Unknown feature set {feature_set!r}")
 
 
 @dataclass
@@ -67,11 +85,16 @@ class SelectedLogisticModel:
 def load_selection_years(
     data_dir: str | Path = config.SELECTION_DATA_DIR,
     years: Iterable[int] = range(2004, 2017),
+    *,
+    feature_set: str = CORE_FEATURE_SET,
 ) -> dict[int, pd.DataFrame]:
     """Load the narrow cleaned frames used by every candidate."""
     data_dir = Path(data_dir)
     return {
-        year: pd.read_parquet(data_dir / f"hmda{year}.parquet", columns=SELECTION_COLUMNS)
+        year: pd.read_parquet(
+            data_dir / f"hmda{year}.parquet",
+            columns=selection_columns(feature_set),
+        )
         for year in years
     }
 
@@ -80,22 +103,30 @@ def prepare_selection_data(
     data_dir: str | Path = config.SELECTION_DATA_DIR,
     years: Iterable[int] = range(2004, 2017),
     hmda_data_dir: str | Path | None = None,
+    *,
+    feature_set: str = CORE_FEATURE_SET,
 ) -> pd.DataFrame:
     """Clean and persist narrow labeled-year frames for resumable selection."""
     years = list(years)
     data_dir = Path(data_dir)
     data_dir.mkdir(parents=True, exist_ok=True)
-    county_values = clean.build_county_value_panel(config.APPLY_YEARS)
+    columns = selection_columns(feature_set)
+    county_values = (
+        clean.build_county_value_panel(config.APPLY_YEARS)
+        if feature_set == CORE_FEATURE_SET
+        else None
+    )
     rows = []
     for year in years:
         frame = clean.load_and_clean_year(
             year, county_values, hmda_data_dir=hmda_data_dir
         )
         output = data_dir / f"hmda{year}.parquet"
-        frame[SELECTION_COLUMNS].to_parquet(output, index=False)
+        frame[columns].to_parquet(output, index=False)
         rows.append(
             {
                 "year": year,
+                "feature_set": feature_set,
                 "source": frame.attrs.get("hmda", {}).get("source"),
                 "source_schema": frame.attrs.get("hmda", {}).get("source_schema"),
                 "hmda_schema": frame.attrs.get("hmda", {}).get("schema"),
@@ -161,10 +192,13 @@ def evaluate_candidate_grid(
             if missing_c:
                 tasks.append((specification, missing_c))
 
-        with threadpool_limits(
-            limits=config.LOGISTIC_SELECTION_THREADS_PER_JOB,
-            user_api="blas",
-        ), ThreadPoolExecutor(max_workers=n_jobs) as executor:
+        with (
+            threadpool_limits(
+                limits=config.LOGISTIC_SELECTION_THREADS_PER_JOB,
+                user_api="blas",
+            ),
+            ThreadPoolExecutor(max_workers=n_jobs) as executor,
+        ):
             futures = [
                 executor.submit(
                     _evaluate_fold_specification,
@@ -249,8 +283,7 @@ def _evaluate_fold_specification(
         validation = data_by_year[validation_year]
         validation_features = transformer.transform(validation)
         validation_second = (
-            validation[config.LABEL_VAR].to_numpy()
-            == config.SECOND_LIEN_CLASS
+            validation[config.LABEL_VAR].to_numpy() == config.SECOND_LIEN_CLASS
         )
         for regularization_c, model in models.items():
             if _cell_complete(
@@ -279,9 +312,7 @@ def _evaluate_fold_specification(
                     "validation_year": validation_year,
                     "horizon": fold.horizon_for(validation_year),
                     "n_validation": len(validation),
-                    "brier_score": np.mean(
-                        (probability - validation_second) ** 2
-                    ),
+                    "brier_score": np.mean((probability - validation_second) ** 2),
                     "observed_second_share": validation_second.mean(),
                     "mean_predicted_second_share": probability.mean(),
                     "fit_seconds": diagnostics["fit_seconds"],
@@ -325,8 +356,7 @@ def fit_regularization_path(
                 warnings.simplefilter("always", ConvergenceWarning)
                 classifier.fit(features, labels, sample_weight=sample_weight)
             converged = not any(
-                issubclass(warning.category, ConvergenceWarning)
-                for warning in caught
+                issubclass(warning.category, ConvergenceWarning) for warning in caught
             )
         fit_seconds = time.perf_counter() - start
         models[regularization_c] = copy.deepcopy(classifier)
@@ -465,9 +495,7 @@ def load_selected_model(
     input_file: str | Path = config.SELECTED_LOGISTIC_MODEL_FILE,
 ) -> SelectedLogisticModel:
     """Load a trusted bundle written by :func:`save_selected_model`."""
-    model, metadata = artifacts.load_pickle_artifact(
-        input_file, SelectedLogisticModel
-    )
+    model, metadata = artifacts.load_pickle_artifact(input_file, SelectedLogisticModel)
     if metadata is not None:
         artifacts.validate_metadata_identity(
             metadata,
@@ -556,9 +584,7 @@ def run_model_selection(
     core_horizons.to_csv(
         output_dir / "logistic_selection_core_horizons.csv", index=False
     )
-    core_summary.to_csv(
-        output_dir / "logistic_selection_core_summary.csv", index=False
-    )
+    core_summary.to_csv(output_dir / "logistic_selection_core_summary.csv", index=False)
 
     selected_row = core_summary.iloc[0]
     selected_specification = FeatureSpecification(
@@ -584,9 +610,7 @@ def run_model_selection(
             }
         ]
     )
-    decision.to_csv(
-        output_dir / "logistic_selection_decision.csv", index=False
-    )
+    decision.to_csv(output_dir / "logistic_selection_decision.csv", index=False)
 
     results = {
         "core_cells": core_cells,
@@ -630,8 +654,7 @@ def run_geographic_challengers(
             specification: config.LOGISTIC_SELECTION_COARSE_C
             for specification in specifications
         },
-        checkpoint_file=output_dir
-        / "logistic_selection_geography_coarse_cells.csv",
+        checkpoint_file=output_dir / "logistic_selection_geography_coarse_cells.csv",
         model_dir=config.RAW_LOGISTIC_SELECTION_MODEL_DIR,
     )
     _, coarse_summary = aggregate_brier_cells(coarse_cells)
@@ -682,9 +705,7 @@ def run_geographic_challengers(
         "geography_coefficients": coefficients,
     }
     for name, frame in outputs.items():
-        frame.to_csv(
-            output_dir / f"logistic_selection_{name}.csv", index=False
-        )
+        frame.to_csv(output_dir / f"logistic_selection_{name}.csv", index=False)
     return outputs
 
 
@@ -713,12 +734,8 @@ def run_spline_purchaser_challenger(
         model_dir=config.RAW_LOGISTIC_SELECTION_MODEL_DIR,
     )
     coarse_horizons, coarse_summary = aggregate_brier_cells(coarse_cells)
-    coarse_horizons.to_csv(
-        output_dir / f"{prefix}_coarse_horizons.csv", index=False
-    )
-    coarse_summary.to_csv(
-        output_dir / f"{prefix}_coarse_summary.csv", index=False
-    )
+    coarse_horizons.to_csv(output_dir / f"{prefix}_coarse_horizons.csv", index=False)
+    coarse_summary.to_csv(output_dir / f"{prefix}_coarse_summary.csv", index=False)
 
     refinement_cells = evaluate_candidate_grid(
         data_by_year,
@@ -767,8 +784,7 @@ def run_spline_purchaser_challenger(
                 "challenger_c": float(best["regularization_c"]),
                 "challenger_selection_brier": float(best["selection_brier"]),
                 "brier_difference_from_core": (
-                    float(best["selection_brier"])
-                    - float(decision["selection_brier"])
+                    float(best["selection_brier"]) - float(decision["selection_brier"])
                 ),
                 "n_cells_challenger_improves": int(
                     (comparison["brier_difference_from_core"] < 0).sum()
@@ -811,9 +827,7 @@ def geographic_incremental_brier(
     for row in best.itertuples():
         challenger = geography_cells.loc[
             (geography_cells["specification"] == row.specification)
-            & np.isclose(
-                geography_cells["regularization_c"], row.regularization_c
-            ),
+            & np.isclose(geography_cells["regularization_c"], row.regularization_c),
             ["train_start", "validation_year", "brier_score"],
         ].rename(columns={"brier_score": "geography_brier"})
         comparison = core.merge(
@@ -867,9 +881,7 @@ def coefficient_stability(
             ignore_index=True,
         )
         for specification, regularization_c in candidates.items():
-            selected = fit_selected_model(
-                training, specification, regularization_c
-            )
+            selected = fit_selected_model(training, specification, regularization_c)
             save_selected_model(
                 selected,
                 selected_model_path(

@@ -6,10 +6,13 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from hmda_seconds import config
 from hmda_seconds.density_ratio.cluster import (
     first_order_logistic_jobs,
     write_slurm_array,
 )
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 
 
 def parse_args() -> argparse.Namespace:
@@ -17,21 +20,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--destination", type=Path, default=Path("output/slurm/first_order")
     )
-    parser.add_argument("--repo-dir", default="${LABDIR}/hmda-second-liens")
-    parser.add_argument(
-        "--data-dir",
-        default="${LABDIR}/hmda-second-liens/data/intermediate/logistic_selection",
-    )
+    parser.add_argument("--repo-dir", type=Path, default=REPOSITORY_ROOT)
+    parser.add_argument("--data-dir", type=Path, default=config.SELECTION_DATA_DIR)
     parser.add_argument(
         "--output-root",
-        default="${LABDIR}/hmda-second-liens/output/density_ratio",
+        type=Path,
+        default=config.OUTPUT_DIR / "density_ratio",
     )
-    parser.add_argument(
-        "--activate",
-        default="/scratch/projects/greenwaldlab/venvs/hmda-second-liens/bin/activate",
-    )
-    parser.add_argument("--time", default="8:00:00")
-    parser.add_argument("--memory", default="32G")
+    parser.add_argument("--activate", default=config.SLURM_ACTIVATE)
+    parser.add_argument("--account", default=config.SLURM_ACCOUNT)
+    parser.add_argument("--time", default=config.SLURM_TIME)
+    parser.add_argument("--memory", default=config.SLURM_MEMORY)
     parser.add_argument("--max-concurrent", type=int, default=4)
     return parser.parse_args()
 
@@ -47,6 +46,7 @@ def main() -> None:
         destination=args.destination,
         repo_dir=args.repo_dir,
         activate=args.activate,
+        account=args.account,
         time_limit=args.time,
         memory=args.memory,
         job_name="hmda-logistic-first-order",
