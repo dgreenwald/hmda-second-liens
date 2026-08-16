@@ -21,9 +21,9 @@ contains two tasks on the 2013--2016 source window:
 
 Both tasks fit the complete coarse ridge grid, `C = 0.0001, 0.01, 1, 100`, and evaluate all
 nine earlier labeled target years. The generated array uses the Slurm resources configured in
-`.env`. `/usr/bin/time -v` records wall time and maximum resident memory in the task's Slurm
-log. Generator options can override repository, data, output, activation, time, memory, and
-source-window defaults.
+`.env`. Generator options can override repository, data, output, activation, time, memory, and
+source-window defaults. Inspect elapsed time and peak memory through Slurm accounting, for
+example with `sacct --format=JobIDRaw,State,Elapsed,TotalCPU,MaxRSS`.
 
 Inspect the generated files before manually submitting:
 

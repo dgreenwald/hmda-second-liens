@@ -44,7 +44,8 @@ def test_pilot_manifest_has_simple_and_spline_heavy_jobs(tmp_path, monkeypatch):
     assert "#SBATCH --time=8:00:00" in contents
     assert "#SBATCH --mem=32G" in contents
     assert "#SBATCH --array=0-1" in contents
-    assert "/usr/bin/time -v python scripts/run_density_ratio_job.py" in contents
+    assert "python scripts/run_density_ratio_job.py" in contents
+    assert "/usr/bin/time" not in contents
     assert "sbatch " not in contents
     assert f"cd {repo_dir}" in contents
 

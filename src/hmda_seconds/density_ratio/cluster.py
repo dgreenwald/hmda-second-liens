@@ -210,8 +210,6 @@ def write_slurm_array(
         cluster_tools.SlurmJob(
             name=job_name,
             command=(
-                "/usr/bin/time",
-                "-v",
                 "python",
                 "scripts/run_density_ratio_job.py",
                 "--manifest",
