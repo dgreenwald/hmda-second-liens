@@ -10,8 +10,9 @@ PYTHON ?= python3
 ROOT := $(abspath .)
 SCRIPTS_DIR := $(ROOT)/scripts
 OUTPUT_DIR := $(abspath $(if $(HMDA_SECONDS_OUTPUT_DIR),$(HMDA_SECONDS_OUTPUT_DIR),output))
+FINALIZE_LOGISTIC_FLAGS ?=
 
-.PHONY: install test generate-hmda-parquet-jobs download-zillow audit county-values county-value-coverage selection-data select-logistic generate-logistic-selection-coarse aggregate-logistic-selection-coarse generate-logistic-selection-refinement aggregate-logistic-selection-refinement generate-hmda-only-logistic-coarse aggregate-hmda-only-logistic-coarse generate-hmda-only-logistic-refinement aggregate-hmda-only-logistic-refinement generate-finalize-logistic-slurm submit-finalize-logistic finalize-logistic-selection select-mixture-logistic generate-density-ratio-pilot generate-first-order-logistic-grid generate-hmda-only-boosting-screen aggregate-hmda-only-boosting-screen generate-hmda-only-boosting-survivors aggregate-hmda-only-boosting-survivors generate-hmda-only-boosting-refinement aggregate-hmda-only-boosting-refinement finalize-hmda-only-boosting-selection evaluate-spline-purchaser-interactions diagnose-logistic-calibration diagnose-mixture-calibration diagnose-threshold-subgroups plausibility-checks evaluate-gradient-boosting evaluate-rf-mixture estimate-mixture-shares clean
+.PHONY: install test generate-hmda-parquet-jobs download-zillow audit county-values county-value-coverage selection-data select-logistic generate-logistic-selection-coarse aggregate-logistic-selection-coarse generate-logistic-selection-refinement aggregate-logistic-selection-refinement generate-hmda-only-logistic-coarse aggregate-hmda-only-logistic-coarse generate-hmda-only-logistic-refinement aggregate-hmda-only-logistic-refinement generate-finalize-logistic-slurm submit-finalize-logistic finalize-logistic-selection generate-finalize-hmda-only-logistic-slurm select-mixture-logistic generate-density-ratio-pilot generate-first-order-logistic-grid generate-hmda-only-boosting-screen aggregate-hmda-only-boosting-screen generate-hmda-only-boosting-survivors aggregate-hmda-only-boosting-survivors generate-hmda-only-boosting-refinement aggregate-hmda-only-boosting-refinement finalize-hmda-only-boosting-selection evaluate-spline-purchaser-interactions diagnose-logistic-calibration diagnose-mixture-calibration diagnose-threshold-subgroups plausibility-checks evaluate-gradient-boosting evaluate-rf-mixture estimate-mixture-shares clean
 
 install:
 	$(PYTHON) -m pip install -e ".[dev]"
@@ -77,6 +78,9 @@ submit-finalize-logistic:
 
 finalize-logistic-selection:
 	$(PYTHON) $(SCRIPTS_DIR)/finalize_logistic_selection.py
+
+generate-finalize-hmda-only-logistic-slurm:
+	$(PYTHON) $(SCRIPTS_DIR)/generate_finalize_logistic_slurm.py --feature-set hmda_only $(FINALIZE_LOGISTIC_FLAGS)
 
 select-mixture-logistic: selection-data
 	$(PYTHON) $(SCRIPTS_DIR)/select_mixture_logistic.py

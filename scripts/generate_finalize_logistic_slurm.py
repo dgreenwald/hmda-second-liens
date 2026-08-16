@@ -9,6 +9,11 @@ from pathlib import Path
 from py_tools.cluster import submit_slurm
 
 from hmda_seconds import config
+from hmda_seconds.logistic_features import (
+    CORE_FEATURE_SET,
+    FEATURE_SETS,
+    HMDA_ONLY_FEATURE_SET,
+)
 from hmda_seconds.model_selection_cluster import write_finalize_slurm
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -16,6 +21,7 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--feature-set", choices=FEATURE_SETS, default=CORE_FEATURE_SET)
     parser.add_argument("--destination", type=Path)
     parser.add_argument(
         "--decision",
@@ -36,17 +42,31 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    restricted = args.feature_set == HMDA_ONLY_FEATURE_SET
+    decision = args.decision
+    if restricted and decision == config.TABLE_DIR / "logistic_selection_decision.csv":
+        decision = config.TABLE_DIR / "logistic_selection_hmda_only_decision.csv"
+    model_output = args.model_output
+    if restricted and model_output == config.SELECTED_LOGISTIC_MODEL_FILE:
+        model_output = config.HMDA_ONLY_SELECTED_LOGISTIC_MODEL_FILE
     destination = args.destination or (
-        config.OUTPUT_DIR / "slurm" / "logistic_selection" / "final"
+        config.OUTPUT_DIR
+        / "slurm"
+        / (
+            "hmda_only_logistic_selection"
+            if restricted
+            else "logistic_selection"
+        )
+        / "final"
     )
     if not destination.is_absolute():
         destination = REPOSITORY_ROOT / destination
     script = write_finalize_slurm(
         destination=destination,
         repo_dir=REPOSITORY_ROOT,
-        decision_file=args.decision,
+        decision_file=decision,
         data_dir=args.data_dir,
-        model_output=args.model_output,
+        model_output=model_output,
         activate=args.activate,
         account=args.account,
         time_limit=args.time,

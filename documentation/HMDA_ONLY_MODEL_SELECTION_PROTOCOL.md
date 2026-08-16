@@ -65,6 +65,19 @@ sbatch output/slurm/hmda_only_logistic_selection/refinement/logistic_selection_j
 make aggregate-hmda-only-logistic-refinement
 ```
 
+After reviewing the decision table, generate the single-job 2004--2007 refit, adding the
+generator's `--submit` flag when ready:
+
+```bash
+make generate-finalize-hmda-only-logistic-slurm
+python scripts/generate_finalize_logistic_slurm.py --feature-set hmda_only --submit
+```
+
+Equivalently, pass the flag through the Make target with
+`make generate-finalize-hmda-only-logistic-slurm FINALIZE_LOGISTIC_FLAGS=--submit`. The fitted
+artifact is written to `$HMDA_SECONDS_OUTPUT_DIR/model/logistic_hmda_only_selected.pkl` with
+its required metadata sidecar.
+
 For boosting, complete and aggregate each stage before generating the next:
 
 ```bash
