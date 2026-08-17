@@ -95,8 +95,20 @@ make aggregate-hmda-only-boosting-refinement
 make finalize-hmda-only-boosting-selection
 ```
 
-Generation never submits boosting jobs automatically. Aggregation refuses to produce a
-decision from missing or duplicate candidates, folds, horizons, or shards.
+After reviewing the decision table, generate the single-job 2004--2007 refit and submit it
+when ready:
+
+```bash
+make generate-finalize-hmda-only-boosting-slurm
+make submit-finalize-hmda-only-boosting
+```
+
+Equivalently, pass `--submit` through the generator target with
+`make generate-finalize-hmda-only-boosting-slurm FINALIZE_HMDA_ONLY_BOOSTING_FLAGS=--submit`.
+The fitted artifact and required metadata sidecar are written under
+`$HMDA_SECONDS_OUTPUT_DIR/model/boosting_hmda_only_challenger.pkl`. Stage generation never
+submits boosting arrays automatically. Aggregation refuses to produce a decision from missing
+or duplicate candidates, folds, horizons, or shards.
 
 Before submitting an array, its first manifest entry can be exercised directly on a compute
 node:

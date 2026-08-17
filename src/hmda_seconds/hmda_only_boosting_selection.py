@@ -9,15 +9,19 @@ from dataclasses import asdict
 from pathlib import Path
 
 import pandas as pd
+from py_tools import cluster as cluster_tools
 
-from . import config, gradient_boosting
+from . import config, gradient_boosting, model_selection
 from .density_ratio.cluster import make_job
 from .density_ratio.families.gradient_boosting import (
     HMDA_ONLY_SPECIFICATION,
     BoostingParameters,
+    fit_boosting_ratio_model,
+    save_boosting_model,
 )
 from .density_ratio.folds import reverse_folds
 from .density_ratio.protocols import ModelConfiguration
+from .logistic_features import HMDA_ONLY_FEATURE_SET
 
 SCREEN_STAGE = "hmda_only_boosting_screen"
 SURVIVOR_STAGE = "hmda_only_boosting_survivors"
@@ -165,6 +169,88 @@ def finalize_selection_tables(
     _atomic_csv(decision, decision_path)
     destinations.append(decision_path)
     return destinations
+
+
+def fit_final_model(
+    decision_file: str | Path,
+    *,
+    data_dir: str | Path = config.SELECTION_DATA_DIR,
+    model_output: str | Path = config.HMDA_ONLY_SELECTED_BOOSTING_MODEL_FILE,
+    overwrite: bool = False,
+) -> Path:
+    """Refit the declared HMDA-only boosting winner on 2004--2007."""
+    model_output = Path(model_output)
+    if model_output.exists() and not overwrite:
+        raise FileExistsError(
+            f"Selected model already exists: {model_output}; "
+            "pass --overwrite to replace it"
+        )
+    decision = pd.read_csv(decision_file)
+    if len(decision) != 1:
+        raise ValueError("Selection decision must contain exactly one row")
+    row = decision.iloc[0]
+    if row.get("family") != FAMILY:
+        raise ValueError("Selection decision has the wrong model family")
+    if row.get("specification") != HMDA_ONLY_SPECIFICATION:
+        raise ValueError("Selection decision has the wrong boosting specification")
+    parameters = _parameters_from_row(row)
+    data = model_selection.load_selection_years(
+        data_dir,
+        config.TRAIN_YEARS,
+        feature_set=HMDA_ONLY_FEATURE_SET,
+    )
+    training = pd.concat([data[year] for year in config.TRAIN_YEARS], ignore_index=True)
+    fitted, _ = fit_boosting_ratio_model(
+        training,
+        parameters,
+        specification=HMDA_ONLY_SPECIFICATION,
+    )
+    save_boosting_model(fitted, model_output)
+    return model_output
+
+
+def write_finalize_slurm(
+    *,
+    destination: str | Path,
+    repo_dir: str | Path,
+    decision_file: str | Path = config.TABLE_DIR / "hmda_only_boosting_decision.csv",
+    data_dir: str | Path = config.SELECTION_DATA_DIR,
+    model_output: str | Path = config.HMDA_ONLY_SELECTED_BOOSTING_MODEL_FILE,
+    activate: str | None = None,
+    account: str | None = "torch_pr_609_general",
+    time_limit: str = "8:00:00",
+    memory: str = "32G",
+) -> Path:
+    """Write the single-job Slurm script for the selected boosting refit."""
+    destination = Path(destination).resolve()
+    destination.mkdir(parents=True, exist_ok=True)
+    repo_dir = Path(repo_dir).resolve()
+    script = destination / "finalize_hmda_only_boosting.slurm"
+    cluster_tools.write_slurm_script(
+        cluster_tools.SlurmJob(
+            name="hmda-only-boost-final",
+            command=(
+                "python",
+                "scripts/finalize_hmda_only_boosting.py",
+                "--decision",
+                Path(decision_file).resolve(),
+                "--data-dir",
+                Path(data_dir).resolve(),
+                "--model-output",
+                Path(model_output).resolve(),
+            ),
+            workdir=repo_dir,
+            log_dir=destination,
+            resources=cluster_tools.SlurmResources(
+                time=time_limit,
+                memory=memory,
+                account=account,
+            ),
+            activate=activate,
+        ),
+        script,
+    )
+    return script
 
 
 def _configurations(parameters):
