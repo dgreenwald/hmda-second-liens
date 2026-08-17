@@ -102,3 +102,11 @@ python scripts/aggregate_density_ratio_shards.py \
 The summary table applies the frozen equal-within-horizon, then equal-across-horizon objective.
 Apply the stopping rule in `MIXTURE_LOGISTIC_SELECTION_PROTOCOL.md` before proposing any further
 jobs.
+
+## Frozen boosting workflow
+
+The unrestricted histogram-gradient-boosting challenger uses the same immutable family,
+runner, and shard contract in a staged screen/survivor/refinement workflow. Its complete
+generation, submission, aggregation, frozen-winner verification, and final-refit commands are
+documented in `BOOSTING_SELECTION_CLUSTER.md`. The HMDA-only variant remains documented
+separately in `HMDA_ONLY_MODEL_SELECTION_PROTOCOL.md`.

@@ -1,4 +1,4 @@
-"""Compatibility wrappers for staged HMDA-only boosting selection."""
+"""Frozen unrestricted gradient-boosting selection on cluster shards."""
 
 from __future__ import annotations
 
@@ -6,11 +6,8 @@ from pathlib import Path
 
 import pandas as pd
 
-from . import (
-    config,
-    model_selection,  # noqa: F401 - retained compatibility patch point
-)
-from .staged_boosting import HMDA_ONLY_VARIANT
+from . import config
+from .staged_boosting import CORE_VARIANT
 from .staged_boosting import finalize_selection_tables as _finalize_tables
 from .staged_boosting import fit_final_model as _fit_final_model
 from .staged_boosting import refinement_jobs as _refinement_jobs
@@ -18,13 +15,13 @@ from .staged_boosting import screen_jobs as _screen_jobs
 from .staged_boosting import survivor_jobs as _survivor_jobs
 from .staged_boosting import write_finalize_slurm as _write_finalize_slurm
 
-SCREEN_STAGE, SURVIVOR_STAGE, REFINEMENT_STAGE = HMDA_ONLY_VARIANT.stages
-STAGES = HMDA_ONLY_VARIANT.stages
+SCREEN_STAGE, SURVIVOR_STAGE, REFINEMENT_STAGE = CORE_VARIANT.stages
+STAGES = CORE_VARIANT.stages
 
 
 def screen_jobs(*, data_dir: str | Path, output_root: str | Path):
-    """Return the frozen HMDA-only structure-screen jobs."""
-    return _screen_jobs(HMDA_ONLY_VARIANT, data_dir=data_dir, output_root=output_root)
+    """Return the frozen unrestricted structure-screen jobs."""
+    return _screen_jobs(CORE_VARIANT, data_dir=data_dir, output_root=output_root)
 
 
 def survivor_jobs(
@@ -33,9 +30,9 @@ def survivor_jobs(
     data_dir: str | Path,
     output_root: str | Path,
 ):
-    """Return the frozen HMDA-only survivor jobs."""
+    """Return the frozen unrestricted survivor jobs."""
     return _survivor_jobs(
-        HMDA_ONLY_VARIANT,
+        CORE_VARIANT,
         screen_summary,
         data_dir=data_dir,
         output_root=output_root,
@@ -48,9 +45,9 @@ def refinement_jobs(
     data_dir: str | Path,
     output_root: str | Path,
 ):
-    """Return the frozen HMDA-only refinement jobs."""
+    """Return the frozen unrestricted refinement jobs."""
     return _refinement_jobs(
-        HMDA_ONLY_VARIANT,
+        CORE_VARIANT,
         survivor_summary,
         data_dir=data_dir,
         output_root=output_root,
@@ -62,11 +59,11 @@ def finalize_selection_tables(
     refinement_dir: str | Path,
     output_dir: str | Path,
     *,
-    model_output: str | Path = config.HMDA_ONLY_SELECTED_BOOSTING_MODEL_FILE,
+    model_output: str | Path = config.SELECTED_BOOSTING_MODEL_FILE,
 ) -> list[Path]:
-    """Write the HMDA-only combined tables and decision."""
+    """Write baseline-compatible combined tables and decision."""
     return _finalize_tables(
-        HMDA_ONLY_VARIANT,
+        CORE_VARIANT,
         survivor_dir,
         refinement_dir,
         output_dir,
@@ -78,12 +75,12 @@ def fit_final_model(
     decision_file: str | Path,
     *,
     data_dir: str | Path = config.SELECTION_DATA_DIR,
-    model_output: str | Path = config.HMDA_ONLY_SELECTED_BOOSTING_MODEL_FILE,
+    model_output: str | Path = config.SELECTED_BOOSTING_MODEL_FILE,
     overwrite: bool = False,
 ) -> Path:
-    """Refit the declared HMDA-only winner on 2004--2007."""
+    """Refit the frozen unrestricted winner on 2004--2007."""
     return _fit_final_model(
-        HMDA_ONLY_VARIANT,
+        CORE_VARIANT,
         decision_file,
         data_dir=data_dir,
         model_output=model_output,
@@ -95,25 +92,25 @@ def write_finalize_slurm(
     *,
     destination: str | Path,
     repo_dir: str | Path,
-    decision_file: str | Path = config.TABLE_DIR / "hmda_only_boosting_decision.csv",
+    decision_file: str | Path = config.TABLE_DIR / "boosting_challenger_decision.csv",
     data_dir: str | Path = config.SELECTION_DATA_DIR,
-    model_output: str | Path = config.HMDA_ONLY_SELECTED_BOOSTING_MODEL_FILE,
+    model_output: str | Path = config.SELECTED_BOOSTING_MODEL_FILE,
     activate: str | None = None,
     account: str | None = "torch_pr_609_general",
     time_limit: str = "8:00:00",
     memory: str = "32G",
 ) -> Path:
-    """Write the HMDA-only selected-model Slurm script."""
+    """Write the unrestricted selected-model Slurm script."""
     return _write_finalize_slurm(
-        HMDA_ONLY_VARIANT,
+        CORE_VARIANT,
         destination=destination,
         repo_dir=repo_dir,
         decision_file=decision_file,
         data_dir=data_dir,
         model_output=model_output,
-        worker_script="scripts/finalize_hmda_only_boosting.py",
-        job_name="hmda-only-boost-final",
-        script_name="finalize_hmda_only_boosting.slurm",
+        worker_script="scripts/finalize_boosting.py",
+        job_name="hmda-boost-final",
+        script_name="finalize_boosting.slurm",
         activate=activate,
         account=account,
         time_limit=time_limit,

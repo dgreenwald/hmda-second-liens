@@ -64,9 +64,11 @@ count shares and mixture-adjusted probabilities. Read `documentation/MIGRATION_P
   known-source-prior models to 1990--2016, writes annual aggregate shares and the 2003--2004
   continuity table, and renders the predicted/actual series. It checkpoints annual aggregates
   and never retains loan-level historical probabilities.
-- Gradient-boosting challenger: `make evaluate-gradient-boosting` runs the frozen staged
-  histogram-boosting density-ratio grid, reuses per-fold artifacts in
-  `output/model/boosting_folds/`, and produces reverse and forward calibration diagnostics.
+- Gradient-boosting challenger: `make evaluate-gradient-boosting` retains the sequential local
+  compatibility workflow and produces reverse and forward calibration diagnostics. The
+  reproducible cluster selection uses `make generate-boosting-screen`, then the survivor and
+  refinement stages, followed by the batch final refit; see
+  `documentation/BOOSTING_SELECTION_CLUSTER.md`. Do not expand or retune the frozen grid.
 - Random Forest mixture robustness: `make evaluate-rf-mixture` applies equal source-year class
   priors and annual target mixture shares to the fixed 50-tree, depth-10 full-sample forest.
   Reuse saved fits in `output/model/rf_mixture_folds/`; do not reopen RF tuning automatically.

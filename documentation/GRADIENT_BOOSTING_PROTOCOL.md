@@ -56,3 +56,12 @@ Save every fitted fold/candidate object under `output/model/boosting_folds/`. Re
 challenger on 2004--2007 and save it as `output/model/boosting_challenger.pkl`, regardless of
 whether it replaces logistic. Persist only aggregate validation outputs, never loan-level
 probabilities.
+
+## Cluster reproduction
+
+The original `make evaluate-gradient-boosting` entry point remains the sequential local
+compatibility workflow. The same frozen screen, survivor, refinement, and 2004--2007 refit can
+be reproduced with immutable Slurm shards and a batch final fit. See
+`BOOSTING_SELECTION_CLUSTER.md` for the complete commands and retry rules. Cluster
+finalization verifies the documented 7-leaf, learning-rate 0.05, 200-iteration, L2-10 winner
+before writing the established `boosting_challenger_*` compatibility tables.

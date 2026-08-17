@@ -35,6 +35,7 @@ FIGURE_DIR = OUTPUT_DIR / "figures"
 TABLE_DIR = OUTPUT_DIR / "tables"
 RAW_LOGISTIC_CLUSTER_DIR = OUTPUT_DIR / "raw_logistic_selection"
 HMDA_ONLY_RAW_LOGISTIC_CLUSTER_DIR = OUTPUT_DIR / "hmda_only_raw_logistic_selection"
+BOOSTING_CLUSTER_DIR = OUTPUT_DIR / "boosting_selection"
 HMDA_ONLY_BOOSTING_CLUSTER_DIR = OUTPUT_DIR / "hmda_only_boosting_selection"
 
 # Optional cluster defaults. Command-line arguments continue to take

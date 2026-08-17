@@ -150,6 +150,44 @@ def aggregate_brier(
     return horizons, summary
 
 
+def translate_cluster_cells(cells: pd.DataFrame) -> pd.DataFrame:
+    """Translate family-neutral shard cells to the legacy boosting table schema."""
+    rows = []
+    for row in cells.to_dict("records"):
+        parameters = BoostingParameters(**json.loads(row["hyperparameters"]))
+        rows.append(
+            {
+                "parameter_id": parameters.identifier,
+                **asdict(parameters),
+                "train_start": row["train_start"],
+                "train_end": row["train_end"],
+                "validation_year": row["target_year"],
+                "horizon": row["horizon"],
+                "n_validation": row["n_observations"],
+                "actual_second_share": row["actual_second_share"],
+                "mixture_share": row["mixture_share"],
+                "mixture_share_error": (
+                    row["mixture_share"] - row["actual_second_share"]
+                ),
+                "mean_adjusted_probability": row["mean_probability"],
+                "adjusted_brier": row["brier_score"],
+                "adjusted_log_loss": row["log_loss"],
+                "adjusted_hard_share_050": row["hard_share_050"],
+                "fit_seconds": np.nan,
+                "prediction_seconds": np.nan,
+                "n_iter_fitted": parameters.max_iter,
+                "optimizer_converged": row["optimizer_converged"],
+                "mixture_at_boundary": row["mixture_at_boundary"],
+                "mixture_em_difference": row["mixture_em_difference"],
+            }
+        )
+    return (
+        pd.DataFrame(rows)
+        .sort_values(["parameter_id", "train_start", "validation_year"])
+        .reset_index(drop=True)
+    )
+
+
 def run_boosting_challenger(
     data_dir: str | Path = config.SELECTION_DATA_DIR,
     output_dir: str | Path = config.TABLE_DIR,
@@ -464,47 +502,10 @@ def evaluate_grid(
         artifact_root=model_dir,
         output_root=model_dir / "runner",
     )
-    candidates_by_id = {candidate.identifier: candidate for candidate in candidates}
-    diagnostics = {}
-    rows = []
-    for row in aggregated.cells.to_dict("records"):
-        parameters = BoostingParameters(**json.loads(row["hyperparameters"]))
-        candidate = candidates_by_id[parameters.identifier]
-        key = (candidate.identifier, row["train_start"])
-        if key not in diagnostics:
-            path = boosting_model_path(
-                range(row["train_start"], row["train_end"] + 1),
-                candidate,
-                model_dir,
-            )
-            diagnostics[key] = load_boosting_model(path).classifier.n_iter_
-        rows.append(
-            {
-                "parameter_id": candidate.identifier,
-                **asdict(candidate),
-                "train_start": row["train_start"],
-                "train_end": row["train_end"],
-                "validation_year": row["target_year"],
-                "horizon": row["horizon"],
-                "n_validation": row["n_observations"],
-                "actual_second_share": row["actual_second_share"],
-                "mixture_share": row["mixture_share"],
-                "mixture_share_error": (
-                    row["mixture_share"] - row["actual_second_share"]
-                ),
-                "mean_adjusted_probability": row["mean_probability"],
-                "adjusted_brier": row["brier_score"],
-                "adjusted_log_loss": row["log_loss"],
-                "adjusted_hard_share_050": row["hard_share_050"],
-                "fit_seconds": np.nan,
-                "prediction_seconds": np.nan,
-                "n_iter_fitted": diagnostics[key],
-                "optimizer_converged": row["optimizer_converged"],
-                "mixture_at_boundary": row["mixture_at_boundary"],
-                "mixture_em_difference": row["mixture_em_difference"],
-            }
-        )
-    new_cells = pd.DataFrame(rows)
+    new_cells = translate_cluster_cells(aggregated.cells)
+    expected_ids = {candidate.identifier for candidate in candidates}
+    if set(new_cells["parameter_id"]) != expected_ids:
+        raise ValueError("Shared runner returned an unexpected boosting configuration")
     keys = ["parameter_id", "train_start", "validation_year"]
     cells = (
         pd.concat([cells, new_cells], ignore_index=True)
