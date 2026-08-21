@@ -13,8 +13,9 @@ OUTPUT_DIR := $(abspath $(if $(HMDA_SECONDS_OUTPUT_DIR),$(HMDA_SECONDS_OUTPUT_DI
 FINALIZE_LOGISTIC_FLAGS ?=
 FINALIZE_BOOSTING_FLAGS ?=
 FINALIZE_HMDA_ONLY_BOOSTING_FLAGS ?=
+SYNC_BOOSTING_FLAGS ?=
 
-.PHONY: install test generate-hmda-parquet-jobs download-zillow audit county-values county-value-coverage selection-data select-logistic generate-logistic-selection-coarse aggregate-logistic-selection-coarse generate-logistic-selection-refinement aggregate-logistic-selection-refinement generate-hmda-only-logistic-coarse aggregate-hmda-only-logistic-coarse generate-hmda-only-logistic-refinement aggregate-hmda-only-logistic-refinement generate-finalize-logistic-slurm submit-finalize-logistic finalize-logistic-selection generate-finalize-hmda-only-logistic-slurm select-mixture-logistic generate-density-ratio-pilot generate-first-order-logistic-grid generate-boosting-screen aggregate-boosting-screen generate-boosting-survivors aggregate-boosting-survivors generate-boosting-refinement aggregate-boosting-refinement finalize-boosting-selection generate-finalize-boosting-slurm submit-finalize-boosting finalize-boosting generate-hmda-only-boosting-screen aggregate-hmda-only-boosting-screen generate-hmda-only-boosting-survivors aggregate-hmda-only-boosting-survivors generate-hmda-only-boosting-refinement aggregate-hmda-only-boosting-refinement finalize-hmda-only-boosting-selection generate-finalize-hmda-only-boosting-slurm submit-finalize-hmda-only-boosting finalize-hmda-only-boosting evaluate-spline-purchaser-interactions diagnose-logistic-calibration diagnose-mixture-calibration diagnose-threshold-subgroups plausibility-checks evaluate-gradient-boosting evaluate-rf-mixture estimate-mixture-shares clean
+.PHONY: install test generate-hmda-parquet-jobs download-zillow audit county-values county-value-coverage selection-data select-logistic generate-logistic-selection-coarse aggregate-logistic-selection-coarse generate-logistic-selection-refinement aggregate-logistic-selection-refinement generate-hmda-only-logistic-coarse aggregate-hmda-only-logistic-coarse generate-hmda-only-logistic-refinement aggregate-hmda-only-logistic-refinement generate-finalize-logistic-slurm submit-finalize-logistic finalize-logistic-selection generate-finalize-hmda-only-logistic-slurm select-mixture-logistic generate-density-ratio-pilot generate-first-order-logistic-grid generate-boosting-screen aggregate-boosting-screen generate-boosting-survivors aggregate-boosting-survivors generate-boosting-refinement aggregate-boosting-refinement finalize-boosting-selection generate-finalize-boosting-slurm submit-finalize-boosting finalize-boosting sync-selection-results sync-boosting-results generate-hmda-only-boosting-screen aggregate-hmda-only-boosting-screen generate-hmda-only-boosting-survivors aggregate-hmda-only-boosting-survivors generate-hmda-only-boosting-refinement aggregate-hmda-only-boosting-refinement finalize-hmda-only-boosting-selection generate-finalize-hmda-only-boosting-slurm submit-finalize-hmda-only-boosting finalize-hmda-only-boosting evaluate-spline-purchaser-interactions diagnose-logistic-calibration diagnose-mixture-calibration diagnose-threshold-subgroups plausibility-checks evaluate-gradient-boosting evaluate-rf-mixture estimate-mixture-shares clean
 
 install:
 	$(PYTHON) -m pip install -e ".[dev]"
@@ -122,6 +123,11 @@ submit-finalize-boosting:
 
 finalize-boosting:
 	$(PYTHON) $(SCRIPTS_DIR)/finalize_boosting.py
+
+sync-selection-results:
+	$(PYTHON) $(SCRIPTS_DIR)/sync_boosting_results.py $(SYNC_BOOSTING_FLAGS)
+
+sync-boosting-results: sync-selection-results
 
 generate-hmda-only-boosting-screen:
 	$(PYTHON) $(SCRIPTS_DIR)/generate_hmda_only_boosting_slurm.py --stage hmda_only_boosting_screen

@@ -91,6 +91,56 @@ Equivalently, generate and submit in one command with
 `output/model/boosting_challenger.pkl` and its required `.metadata.json` sidecar. It refuses to
 overwrite an existing artifact.
 
+## Sync model-selection results back to a local machine
+
+NYU directs command-line transfers through the Torch Data Transfer Node rather than login or
+compute nodes. The local sync target therefore defaults to `dtn.torch.hpc.nyu.edu` and sends
+the complete unrestricted and HMDA-only logistic and boosting results with one authenticated
+`rsync` invocation. It does not transfer raw HMDA files, selection-data Parquets, or loan-level
+output.
+
+Set the environment-specific connection values in the local `.env` file:
+
+```bash
+HMDA_SECONDS_CLUSTER_USER=dlg340
+HMDA_SECONDS_CLUSTER_REPO=/home/dlg340/research/hmda-second-liens
+```
+
+First inspect the network-free plan:
+
+```bash
+make sync-selection-results
+```
+
+Then perform the transfer. This prompts for cluster authentication once:
+
+```bash
+make sync-selection-results SYNC_BOOSTING_FLAGS=--apply
+```
+
+The command stages all four workflows' full selection models, immutable shards, Slurm
+manifests and logs, aggregate selection tables, and final models. It validates artifact
+digests, reaggregates the shards, verifies each decision (including the unrestricted frozen
+L2-1 boosting decision), and only then replaces local selection outputs.
+Conflicting local files are retained under `output/sync_backups/<UTC timestamp>/`. A failed
+transfer or validation leaves current local results untouched and reports the retained staging
+directory for inspection or recovery.
+
+After fixing a missing or incomplete cluster artifact, reuse a retained partial transfer rather
+than starting a new local staging tree:
+
+```bash
+make sync-selection-results \
+  SYNC_BOOSTING_FLAGS="--apply --staging-dir /absolute/path/to/.boosting-sync-staging-..."
+```
+
+The retry still uses one authenticated DTN session, while rsync's checksum comparison avoids
+retransferring matching files already present in that staging directory.
+
+See NYU's [data-transfer guidance](https://services.rt.nyu.edu/docs/hpc/storage/data_transfers/)
+for the DTN requirement and the recommendation to use Globus for transfers that outgrow this
+single-session workflow.
+
 ## Retry behavior
 
 Stage generators never submit arrays. Completed matching shards and fitted fold artifacts are
