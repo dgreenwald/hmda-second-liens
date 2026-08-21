@@ -158,7 +158,7 @@ def test_finalization_preserves_legacy_tables_and_verifies_frozen_winner(tmp_pat
     assert "adjusted_brier" in cells
     assert "configuration_id" not in cells
     assert decision["parameter_id"] == CORE_FROZEN_WINNER.identifier
-    assert json.loads(decision["hyperparameters"])["l2_regularization"] == 10.0
+    assert json.loads(decision["hyperparameters"])["l2_regularization"] == 1.0
 
 
 def test_finalization_rejects_a_winner_that_differs_from_frozen_result(tmp_path):
@@ -167,7 +167,7 @@ def test_finalization_rejects_a_winner_that_differs_from_frozen_result(tmp_path)
     survivor_dir = tmp_path / "survivors"
     refinement_dir = tmp_path / "refinement"
     output_dir = tmp_path / "tables"
-    _write_stage(survivor_dir, [base, other], [0.01, 0.11])
+    _write_stage(survivor_dir, [base, other], [0.11, 0.01])
     _write_stage(
         refinement_dir,
         gradient_boosting.refinement_grid(base),

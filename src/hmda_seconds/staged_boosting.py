@@ -53,7 +53,7 @@ CORE_FROZEN_WINNER = BoostingParameters(
     max_leaf_nodes=7,
     learning_rate=0.05,
     max_iter=200,
-    l2_regularization=10.0,
+    l2_regularization=1.0,
     min_samples_leaf=1_000,
 )
 

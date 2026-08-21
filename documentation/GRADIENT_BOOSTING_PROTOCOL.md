@@ -63,5 +63,5 @@ The original `make evaluate-gradient-boosting` entry point remains the sequentia
 compatibility workflow. The same frozen screen, survivor, refinement, and 2004--2007 refit can
 be reproduced with immutable Slurm shards and a batch final fit. See
 `BOOSTING_SELECTION_CLUSTER.md` for the complete commands and retry rules. Cluster
-finalization verifies the documented 7-leaf, learning-rate 0.05, 200-iteration, L2-10 winner
+finalization verifies the documented 7-leaf, learning-rate 0.05, 200-iteration, L2-1 winner
 before writing the established `boosting_challenger_*` compatibility tables.

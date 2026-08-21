@@ -10,8 +10,12 @@ reverse-time folds, mixture adjustment, or selection objective.
 The unrestricted model uses `log_lti`, `log_county_value_to_loan`, purchaser type, and loan
 type. The first two variables are continuous and the categories use native categorical
 handling. The expected frozen winner has 7 leaves, learning rate 0.05, 200 iterations, L2
-regularization 10, and 1,000 observations per leaf. Finalization refuses to publish a decision
+regularization 1, and 1,000 observations per leaf. Finalization refuses to publish a decision
 if the distributed result selects a different configuration.
+
+This winner reflects the canonical-loader selection-data refresh completed after the original
+local challenger run. The earlier L2-10 result used the preceding selection-data vintage; it is
+not the reproduction target for refreshed inputs.
 
 All commands below run from the repository root on the cluster. Paths are repository-relative
 defaults; when `HMDA_SECONDS_OUTPUT_DIR` is set, submit the path printed by each generator.

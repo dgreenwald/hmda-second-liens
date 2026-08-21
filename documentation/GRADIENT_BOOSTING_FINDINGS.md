@@ -19,12 +19,17 @@ The staged grid selects:
 - 7 maximum leaf nodes;
 - learning rate 0.05;
 - 200 boosting iterations;
-- L2 leaf regularization 10; and
+- L2 leaf regularization 1; and
 - 1,000 minimum observations per leaf.
 
-The choice of L2 is not substantively important. Holding the other settings fixed, selection
-Brier is 0.026773 at L2 10, 0.026780 at L2 0, and 0.026787 at L2 1. Larger trees, a learning
-rate of 0.1, and 400 iterations perform somewhat worse; 100 iterations clearly underfit.
+The refreshed canonical-loader selection data reverse the very close L2 ordering from the
+original local run. Holding the other settings fixed, selection Brier is 0.026648 at L2 1,
+0.026691 at L2 10, and 0.026692 at L2 0. Larger trees, a learning rate of 0.1, and 400
+iterations perform somewhat worse; 100 iterations clearly underfit. All six eligible
+candidates contain the complete 45-cell reverse design.
+
+The reverse and forward diagnostic values below record the earlier selection-data vintage and
+L2-10 fit. Regenerate them from the refreshed L2-1 decision before treating them as current.
 
 ## Reverse-time comparison
 
