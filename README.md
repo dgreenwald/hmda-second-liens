@@ -15,6 +15,8 @@ Cluster execution uses immutable result shards and a generated Slurm array; see 
 [density-ratio cluster workflow](documentation/DENSITY_RATIO_CLUSTER.md). Generation never
 submits jobs automatically. Portable model variants using HMDA-only predictors follow the
 [HMDA-only model-selection protocol](documentation/HMDA_ONLY_MODEL_SELECTION_PROTOCOL.md).
+The synchronized four-model results are summarized in the
+[logistic and boosting model-performance summary](documentation/MODEL_PERFORMANCE_SUMMARY.md).
 
 ## Sync results from the cluster
 

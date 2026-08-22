@@ -172,7 +172,6 @@ def transfer_command(request: SyncRequest, files_from: Path, staging: Path) -> l
         "--checksum",
         "--partial",
         "--relative",
-        "--protect-args",
         f"--files-from={files_from}",
         "-e",
         "ssh",

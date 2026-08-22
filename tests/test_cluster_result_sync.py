@@ -32,6 +32,7 @@ def test_transfer_command_uses_one_torch_dtn_source(tmp_path):
     assert command.count("rsync") == 1
     assert "--recursive" in command
     assert "--files-from=" in " ".join(command)
+    assert "--protect-args" not in command
     assert command[-2] == (
         "dlg340@dtn.torch.hpc.nyu.edu:"
         "/home/dlg340/research/hmda-second-liens/"
