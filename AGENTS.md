@@ -69,6 +69,15 @@ count shares and mixture-adjusted probabilities. Read `documentation/MIGRATION_P
   reproducible cluster selection uses `make generate-boosting-screen`, then the survivor and
   refinement stages, followed by the batch final refit; see
   `documentation/BOOSTING_SELECTION_CLUSTER.md`. Do not expand or retune the frozen grid.
+- Sync completed cluster selection results from the local machine with
+  `make sync-selection-results`. Configure `HMDA_SECONDS_CLUSTER_USER` and
+  `HMDA_SECONDS_CLUSTER_REPO` in the local `.env`; the host defaults to NYU's Torch Data
+  Transfer Node. The target is a network-free preview unless `SYNC_BOOSTING_FLAGS=--apply` is
+  passed. The applied sync retrieves unrestricted and HMDA-only logistic and boosting results,
+  validates artifacts and selection decisions before replacing local outputs, and preserves
+  conflicts under `output/sync_backups/`. It must not transfer raw HMDA data, selection-data
+  Parquets, or loan-level output. See `documentation/BOOSTING_SELECTION_CLUSTER.md` for partial
+  transfer recovery.
 - Random Forest mixture robustness: `make evaluate-rf-mixture` applies equal source-year class
   priors and annual target mixture shares to the fixed 50-tree, depth-10 full-sample forest.
   Reuse saved fits in `output/model/rf_mixture_folds/`; do not reopen RF tuning automatically.
