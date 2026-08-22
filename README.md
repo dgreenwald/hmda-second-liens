@@ -18,19 +18,27 @@ submits jobs automatically. Portable model variants using HMDA-only predictors f
 
 ## Sync results from the cluster
 
-Run the sync from the repository root on the local machine. Configure the cluster account and
-repository path in the local `.env` file (the host defaults to NYU's Torch Data Transfer Node):
+Run the sync from the repository root on the local machine. Configure the cluster account,
+repository path, and local destination in the local `.env` file (the host defaults to NYU's
+Torch Data Transfer Node):
 
 ```bash
 HMDA_SECONDS_CLUSTER_USER=dlg340
 HMDA_SECONDS_CLUSTER_REPO=/home/dlg340/research/hmda-second-liens
+HMDA_SECONDS_OUTPUT_DIR=/absolute/path/to/local/hmda-second-liens-output
 ```
+
+`HMDA_SECONDS_OUTPUT_DIR` is the local output root into which the synchronized `model/`,
+selection-result, `slurm/`, and `tables/` paths are placed. If it is unset, the destination is
+the repository's `output/` directory. For a one-off destination, pass the equivalent CLI option
+through the Make variable, for example
+`make sync-selection-results SYNC_CLUSTER_FLAGS="--output-dir /absolute/path/to/output"`.
 
 Preview the transfer without using the network, then apply it:
 
 ```bash
 make sync-selection-results
-make sync-selection-results SYNC_BOOSTING_FLAGS=--apply
+make sync-selection-results SYNC_CLUSTER_FLAGS=--apply
 ```
 
 The applied sync uses one authenticated `rsync` session to retrieve the unrestricted and

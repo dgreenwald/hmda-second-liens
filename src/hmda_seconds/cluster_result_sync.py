@@ -209,14 +209,14 @@ def sync_results(
     request.output_dir.mkdir(parents=True, exist_ok=True)
     if staging_dir is None:
         staging = Path(
-            tempfile.mkdtemp(prefix=".boosting-sync-staging-", dir=request.output_dir)
+            tempfile.mkdtemp(prefix=".cluster-sync-staging-", dir=request.output_dir)
         )
     else:
         staging = Path(staging_dir).resolve()
         output_dir = request.output_dir.resolve()
         if (
             staging.parent != output_dir
-            or not staging.name.startswith(".boosting-sync-staging-")
+            or not staging.name.startswith(".cluster-sync-staging-")
             or not staging.is_dir()
         ):
             raise ValueError(

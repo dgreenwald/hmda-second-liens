@@ -3,8 +3,8 @@ from pathlib import Path, PurePosixPath
 import pandas as pd
 import pytest
 
-from hmda_seconds import boosting_result_sync
-from hmda_seconds.boosting_result_sync import (
+from hmda_seconds import cluster_result_sync
+from hmda_seconds.cluster_result_sync import (
     DEFAULT_DTN_HOST,
     EXPECTED_WINNER,
     PROMOTION_PATHS,
@@ -39,7 +39,7 @@ def test_transfer_command_uses_one_torch_dtn_source(tmp_path):
 
 
 def test_transfer_scope_contains_all_four_workflows_but_no_microdata():
-    paths = "\n".join(boosting_result_sync.TRANSFER_PATHS)
+    paths = "\n".join(cluster_result_sync.TRANSFER_PATHS)
     assert "raw_logistic_selection/" in paths
     assert "hmda_only_raw_logistic_selection/" in paths
     assert "boosting_selection/" in paths
@@ -54,7 +54,7 @@ def test_plan_is_network_free(tmp_path, monkeypatch, capsys):
     def unexpected(*args, **kwargs):
         raise AssertionError("plan mode must not invoke subprocesses")
 
-    monkeypatch.setattr(boosting_result_sync.subprocess, "run", unexpected)
+    monkeypatch.setattr(cluster_result_sync.subprocess, "run", unexpected)
     assert sync_results(_request(tmp_path), apply=False) is None
     output = capsys.readouterr().out
     assert "one authenticated rsync invocation" in output
@@ -68,15 +68,15 @@ def test_apply_invokes_rsync_once_then_validates_and_promotes(tmp_path, monkeypa
     def fake_run(command, check):
         calls.append((command, check))
 
-    monkeypatch.setattr(boosting_result_sync.subprocess, "run", fake_run)
+    monkeypatch.setattr(cluster_result_sync.subprocess, "run", fake_run)
     monkeypatch.setattr(
-        boosting_result_sync,
+        cluster_result_sync,
         "validate_staged_results",
         lambda path: events.append(("validate", path)),
     )
     backup = tmp_path / "output" / "sync_backups" / "test"
     monkeypatch.setattr(
-        boosting_result_sync,
+        cluster_result_sync,
         "promote_results",
         lambda staged, output: events.append(("promote", staged, output)) or backup,
     )
@@ -95,30 +95,30 @@ def test_failed_transfer_preserves_existing_output_and_staging(tmp_path, monkeyp
     existing.write_text("old\n")
 
     def fail(*args, **kwargs):
-        raise boosting_result_sync.subprocess.CalledProcessError(23, "rsync")
+        raise cluster_result_sync.subprocess.CalledProcessError(23, "rsync")
 
-    monkeypatch.setattr(boosting_result_sync.subprocess, "run", fail)
-    with pytest.raises(boosting_result_sync.subprocess.CalledProcessError):
+    monkeypatch.setattr(cluster_result_sync.subprocess, "run", fail)
+    with pytest.raises(cluster_result_sync.subprocess.CalledProcessError):
         sync_results(request, apply=True)
 
     assert existing.read_text() == "old\n"
-    assert list(request.output_dir.glob(".boosting-sync-staging-*"))
+    assert list(request.output_dir.glob(".cluster-sync-staging-*"))
 
 
 def test_apply_can_resume_retained_staging(tmp_path, monkeypatch):
     request = _request(tmp_path)
     request.output_dir.mkdir(parents=True)
-    staging = request.output_dir / ".boosting-sync-staging-retained"
+    staging = request.output_dir / ".cluster-sync-staging-retained"
     staging.mkdir()
     calls = []
     monkeypatch.setattr(
-        boosting_result_sync.subprocess,
+        cluster_result_sync.subprocess,
         "run",
         lambda command, check: calls.append(command),
     )
-    monkeypatch.setattr(boosting_result_sync, "validate_staged_results", lambda path: None)
+    monkeypatch.setattr(cluster_result_sync, "validate_staged_results", lambda path: None)
     monkeypatch.setattr(
-        boosting_result_sync,
+        cluster_result_sync,
         "promote_results",
         lambda staged, output: output / "sync_backups" / "test",
     )
@@ -175,7 +175,7 @@ def test_promote_rolls_back_after_move_failure(tmp_path, monkeypatch):
     conflict.mkdir(parents=True)
     (conflict / "result").write_text("old")
 
-    real_move = boosting_result_sync.shutil.move
+    real_move = cluster_result_sync.shutil.move
     calls = 0
 
     def fail_third_move(source, destination):
@@ -185,7 +185,7 @@ def test_promote_rolls_back_after_move_failure(tmp_path, monkeypatch):
             raise OSError("simulated promotion failure")
         return real_move(source, destination)
 
-    monkeypatch.setattr(boosting_result_sync.shutil, "move", fail_third_move)
+    monkeypatch.setattr(cluster_result_sync.shutil, "move", fail_third_move)
     with pytest.raises(OSError, match="simulated"):
         promote_results(staged, output)
 
@@ -194,7 +194,7 @@ def test_promote_rolls_back_after_move_failure(tmp_path, monkeypatch):
 
 def test_validation_rejects_missing_transfer_paths(tmp_path):
     with pytest.raises(FileNotFoundError, match="missing"):
-        boosting_result_sync.validate_staged_results(tmp_path)
+        cluster_result_sync.validate_staged_results(tmp_path)
 
 
 def test_combined_selection_rejects_wrong_winner(tmp_path):
@@ -213,7 +213,7 @@ def test_combined_selection_rejects_wrong_winner(tmp_path):
     ).to_csv(tables / "boosting_challenger_decision.csv", index=False)
 
     with pytest.raises(ValueError, match="wrong winner"):
-        boosting_result_sync._validate_combined_selection(tmp_path)
+        cluster_result_sync._validate_combined_selection(tmp_path)
 
 
 def test_request_requires_absolute_remote_repo(tmp_path):

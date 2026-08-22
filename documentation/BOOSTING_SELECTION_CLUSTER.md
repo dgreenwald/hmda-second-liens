@@ -115,7 +115,7 @@ make sync-selection-results
 Then perform the transfer. This prompts for cluster authentication once:
 
 ```bash
-make sync-selection-results SYNC_BOOSTING_FLAGS=--apply
+make sync-selection-results SYNC_CLUSTER_FLAGS=--apply
 ```
 
 The command stages all four workflows' full selection models, immutable shards, Slurm
@@ -131,7 +131,7 @@ than starting a new local staging tree:
 
 ```bash
 make sync-selection-results \
-  SYNC_BOOSTING_FLAGS="--apply --staging-dir /absolute/path/to/.boosting-sync-staging-..."
+  SYNC_CLUSTER_FLAGS="--apply --staging-dir /absolute/path/to/.cluster-sync-staging-..."
 ```
 
 The retry still uses one authenticated DTN session, while rsync's checksum comparison avoids

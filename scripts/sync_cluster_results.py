@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Sync validated logistic and boosting selection results from the Torch DTN."""
+"""Sync validated model-selection results from the cluster."""
 
 from __future__ import annotations
 
 import argparse
 from pathlib import Path
 
-from hmda_seconds.boosting_result_sync import request_from_environment, sync_results
+from hmda_seconds.cluster_result_sync import request_from_environment, sync_results
 
 
 def parse_args() -> argparse.Namespace:

@@ -72,7 +72,7 @@ count shares and mixture-adjusted probabilities. Read `documentation/MIGRATION_P
 - Sync completed cluster selection results from the local machine with
   `make sync-selection-results`. Configure `HMDA_SECONDS_CLUSTER_USER` and
   `HMDA_SECONDS_CLUSTER_REPO` in the local `.env`; the host defaults to NYU's Torch Data
-  Transfer Node. The target is a network-free preview unless `SYNC_BOOSTING_FLAGS=--apply` is
+  Transfer Node. The target is a network-free preview unless `SYNC_CLUSTER_FLAGS=--apply` is
   passed. The applied sync retrieves unrestricted and HMDA-only logistic and boosting results,
   validates artifacts and selection decisions before replacing local outputs, and preserves
   conflicts under `output/sync_backups/`. It must not transfer raw HMDA data, selection-data
