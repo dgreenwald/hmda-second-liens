@@ -13,12 +13,6 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--run-id")
-    parser.add_argument(
-        "--run-root",
-        type=Path,
-        default=config.OUTPUT_DIR / "slurm" / "model_family_comparison_runs",
-    )
     parser.add_argument("--repository-root", type=Path, default=REPOSITORY_ROOT)
     parser.add_argument("--data-dir", type=Path, default=config.SELECTION_DATA_DIR)
     parser.add_argument(
@@ -43,10 +37,8 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    prepared = model_family_cluster.prepare_run(
+    prepared = model_family_cluster.prepare_workflow(
         repository_root=args.repository_root,
-        run_root=args.run_root,
-        run_id=args.run_id,
         data_dir=args.data_dir,
         output_root=args.output_root,
         table_dir=args.table_dir,
@@ -63,11 +55,11 @@ def main() -> None:
         boosting_file=args.boosting_model,
         hmda_boosting_file=args.hmda_boosting_model,
     )
-    print(f"Prepared run in {prepared.run_dir}")
+    print(f"Prepared workflow in {prepared.orchestration_dir}")
     print(f"Fit array: {prepared.array_script}")
     print(f"Dependent aggregation: {prepared.aggregate_script}")
     if args.submit:
-        submitted = model_family_cluster.submit_run(prepared)
+        submitted = model_family_cluster.submit_workflow(prepared)
         print(f"Submitted fit array {submitted['fit_array']['job_id']}")
         print(f"Submitted aggregate job {submitted['aggregate']['job_id']}")
     else:

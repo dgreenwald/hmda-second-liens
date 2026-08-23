@@ -126,10 +126,10 @@ target year, and scores all probabilities through the shared evaluator. The desi
 45 reverse and nine forward cells per finalist, or 216 model-cell records in total. Logistic
 versus boosting differences are matched within the unrestricted and HMDA-only predictor sets.
 
-The preferred cluster entry point prepares the 40-task array and a dependent aggregation job.
-With `--submit`, one invocation submits both jobs and records their IDs under a run-specific
-directory; the aggregation job uses `afterok` and therefore runs only if every array task
-succeeds:
+The preferred cluster entry point prepares the 40-task array and a dependent aggregation job
+under the canonical `output/slurm/model_family_comparison/` directory. With `--submit`, one
+invocation submits both jobs and records their IDs in `submission.json`; the aggregation job
+uses `afterok` and therefore runs only if every array task succeeds:
 
 ```bash
 make model-family-comparison-cluster-submit
@@ -145,12 +145,10 @@ make submit-model-family-comparison
 make aggregate-model-family-comparison
 ```
 
-To rerun only the validator/aggregator for an automated cluster run, without refitting any
-model, pass the run-directory name recorded at submission:
+To rerun only the canonical validator/aggregator without refitting any model, use:
 
 ```bash
-make aggregate-model-family-comparison-run \
-  MODEL_FAMILY_COMPARISON_RUN_ID=<RUN_ID>
+make aggregate-model-family-comparison
 ```
 
 The generator does not submit unless passed `--submit`. Aggregation requires every immutable

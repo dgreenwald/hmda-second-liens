@@ -7,7 +7,6 @@ import os
 import subprocess
 import tempfile
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
 
 from py_tools import cluster as cluster_tools
@@ -17,20 +16,19 @@ from .density_ratio.cluster import write_slurm_array
 
 
 @dataclass(frozen=True)
-class PreparedComparisonRun:
+class PreparedComparisonWorkflow:
     """Paths needed to submit and audit one comparison workflow."""
 
-    run_dir: Path
+    orchestration_dir: Path
     manifest: Path
     array_script: Path
     aggregate_script: Path
 
 
-def prepare_run(
+def prepare_workflow(
     *,
     repository_root: str | Path,
-    run_root: str | Path,
-    run_id: str | None = None,
+    orchestration_dir: str | Path = config.OUTPUT_DIR / "slurm" / "model_family_comparison",
     data_dir: str | Path = config.SELECTION_DATA_DIR,
     output_root: str | Path = config.MODEL_FAMILY_COMPARISON_DIR,
     table_dir: str | Path = config.TABLE_DIR,
@@ -43,18 +41,10 @@ def prepare_run(
     aggregate_memory: str = "16G",
     max_concurrent: int | None = config.SLURM_MAX_CONCURRENT,
     **artifact_files,
-) -> PreparedComparisonRun:
-    """Write a run-specific array and its dependent aggregation job."""
+) -> PreparedComparisonWorkflow:
+    """Write the canonical array and its dependent aggregation job."""
     repository_root = Path(repository_root).resolve()
-    resolved_id = run_id or datetime.now().astimezone().strftime("%Y%m%d-%H%M%S")
-    if not resolved_id or any(
-        character not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.-"
-        for character in resolved_id
-    ):
-        raise ValueError("run_id contains unsafe characters")
-    run_dir = Path(run_root).resolve() / resolved_id
-    if run_dir.exists():
-        raise FileExistsError(f"Cluster comparison run already exists: {run_dir}")
+    orchestration_dir = Path(orchestration_dir).resolve()
     jobs = model_family_comparison.comparison_jobs(
         data_dir=data_dir,
         output_root=output_root,
@@ -62,7 +52,7 @@ def prepare_run(
     )
     manifest, array_script = write_slurm_array(
         jobs,
-        destination=run_dir,
+        destination=orchestration_dir,
         repo_dir=str(repository_root),
         activate=activate,
         account=account,
@@ -71,7 +61,7 @@ def prepare_run(
         job_name="hmda-model-family-diagnostics",
         max_concurrent=max_concurrent,
     )
-    aggregate_script = run_dir / "aggregate_model_family_comparison.slurm"
+    aggregate_script = orchestration_dir / "aggregate_model_family_comparison.slurm"
     cluster_tools.write_slurm_script(
         cluster_tools.SlurmJob(
             name="hmda-model-family-aggregate",
@@ -86,7 +76,7 @@ def prepare_run(
                 Path(figure_dir).resolve(),
             ),
             workdir=repository_root,
-            log_dir=run_dir,
+            log_dir=orchestration_dir,
             resources=cluster_tools.SlurmResources(
                 time=aggregate_time,
                 memory=aggregate_memory,
@@ -96,14 +86,18 @@ def prepare_run(
         ),
         aggregate_script,
     )
-    return PreparedComparisonRun(run_dir, manifest, array_script, aggregate_script)
+    return PreparedComparisonWorkflow(
+        orchestration_dir, manifest, array_script, aggregate_script
+    )
 
 
-def submit_run(prepared: PreparedComparisonRun) -> dict[str, dict[str, str | None]]:
+def submit_workflow(
+    prepared: PreparedComparisonWorkflow,
+) -> dict[str, dict[str, str | None]]:
     """Submit the fit array and aggregate only after every task succeeds."""
     array = cluster_tools.submit_slurm(prepared.array_script)
     payload = {"fit_array": {"job_id": array.job_id, "dependency": None}}
-    submission_file = prepared.run_dir / "submission.json"
+    submission_file = prepared.orchestration_dir / "submission.json"
     _atomic_json(submission_file, payload)
     aggregate = _submit_afterok(prepared.aggregate_script, array.job_id)
     payload["aggregate"] = {

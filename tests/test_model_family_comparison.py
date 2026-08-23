@@ -173,9 +173,34 @@ def test_validate_cells_rejects_invalid_mixture_estimates(field, value, message)
         model_family_comparison._validate_cells(cells)
 
 
+def test_cluster_workflow_uses_one_regenerable_canonical_directory(tmp_path):
+    orchestration_dir = tmp_path / "slurm" / "model_family_comparison"
+    arguments = {
+        "repository_root": tmp_path,
+        "orchestration_dir": orchestration_dir,
+        "data_dir": tmp_path / "data",
+        "output_root": tmp_path / "comparison",
+        "table_dir": tmp_path / "tables",
+        "figure_dir": tmp_path / "figures",
+        "activate": None,
+        "configurations": configurations(),
+    }
+
+    first = model_family_cluster.prepare_workflow(**arguments)
+    second = model_family_cluster.prepare_workflow(**arguments)
+
+    assert first == second
+    assert first.orchestration_dir == orchestration_dir
+    assert first.manifest == orchestration_dir / "density_ratio_jobs.json"
+    assert first.array_script == orchestration_dir / "density_ratio_jobs.slurm"
+    assert first.aggregate_script == (
+        orchestration_dir / "aggregate_model_family_comparison.slurm"
+    )
+
+
 def test_cluster_submission_chains_aggregation_after_array(tmp_path, monkeypatch):
-    prepared = model_family_cluster.PreparedComparisonRun(
-        run_dir=tmp_path,
+    prepared = model_family_cluster.PreparedComparisonWorkflow(
+        orchestration_dir=tmp_path,
         manifest=tmp_path / "manifest.json",
         array_script=tmp_path / "array.slurm",
         aggregate_script=tmp_path / "aggregate.slurm",
@@ -193,7 +218,7 @@ def test_cluster_submission_chains_aggregation_after_array(tmp_path, monkeypatch
 
     monkeypatch.setattr(model_family_cluster.subprocess, "run", fake_run)
 
-    payload = model_family_cluster.submit_run(prepared)
+    payload = model_family_cluster.submit_workflow(prepared)
 
     assert payload["fit_array"] == {"job_id": "101", "dependency": None}
     assert payload["aggregate"]["dependency"] == "afterok:101"
