@@ -25,6 +25,7 @@ from .density_ratio.shards import (
     PlannedJob,
     aggregate_shards,
     read_manifest,
+    read_shard,
     shard_path,
 )
 
@@ -131,6 +132,7 @@ def aggregate_comparison(
         selected = [item for item in planned if item.fold.direction == direction]
         if len(selected) != (36 if direction == "reverse" else 4):
             raise ValueError(f"Expected complete four-model {direction} job design")
+        _validate_artifacts(selected)
         aggregated = aggregate_shards(
             selected, [shard_path(item.job) for item in selected]
         )
@@ -234,8 +236,34 @@ def _validate_cells(cells: pd.DataFrame) -> None:
             raise ValueError(f"Finalists do not share identical {column} by cell")
     if not np.allclose(cells["mean_probability"], cells["mixture_share"], atol=1e-7):
         raise ValueError("Adjusted probability means do not equal mixture shares")
+    if not cells["optimizer_converged"].all():
+        raise ValueError("Comparison contains a non-converged mixture estimate")
+    if cells["mixture_at_boundary"].any():
+        raise ValueError("Comparison contains a mixture estimate at the boundary")
     if cells.duplicated([*CELL_KEYS, "model_family"]).any():
         raise ValueError("Comparison contains duplicate model cells")
+
+
+def _validate_artifacts(planned: list[PlannedJob]) -> None:
+    """Verify every shard-referenced fit and its metadata identity."""
+    seen: set[Path] = set()
+    for item in planned:
+        shard = read_shard(shard_path(item.job))
+        for model in shard.models:
+            path = Path(model.artifact_path)
+            if path in seen:
+                raise ValueError(f"Comparison reuses fitted artifact {path}")
+            seen.add(path)
+            metadata = artifacts.validate_existing_artifact(path, allow_legacy=False)
+            artifacts.validate_metadata_identity(
+                metadata,
+                model_id=model.model_id,
+                train_years=item.fold.train_years,
+            )
+            if metadata is None or metadata.configuration != model.configuration:
+                raise ValueError(
+                    f"Artifact configuration does not match shard model {model.model_id}"
+                )
 
 
 def _aggregate_metrics(cells: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:

@@ -145,8 +145,17 @@ make submit-model-family-comparison
 make aggregate-model-family-comparison
 ```
 
+To rerun only the validator/aggregator for an automated cluster run, without refitting any
+model, pass the run-directory name recorded at submission:
+
+```bash
+make aggregate-model-family-comparison-run \
+  MODEL_FAMILY_COMPARISON_RUN_ID=<RUN_ID>
+```
+
 The generator does not submit unless passed `--submit`. Aggregation requires every immutable
-shard, verifies common sample counts and observed shares, and writes
+shard, validates every fitted artifact and metadata digest, rejects non-converged or boundary
+mixture estimates, verifies common sample counts and observed shares, and writes
 `model_family_comparison_{cells,reverse_horizons,summary,paired_cells,paired_summary}.csv` plus
 reverse and forward figures. It never persists loan-level probabilities. Numerical findings
 should be added here only after the refreshed winner artifacts have completed this workflow.

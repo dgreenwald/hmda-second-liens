@@ -4,6 +4,7 @@ import pandas as pd
 import pytest
 
 from hmda_seconds import model_family_cluster, model_family_comparison
+from hmda_seconds.density_ratio import artifacts
 from hmda_seconds.density_ratio.protocols import EvaluationResult, ModelConfiguration
 from hmda_seconds.density_ratio.shards import (
     ResultShard,
@@ -95,10 +96,21 @@ def test_aggregate_comparison_builds_matched_cells_and_weighted_summaries(tmp_pa
                 ShardModel(
                     model_id=model_id,
                     configuration=configuration,
-                    artifact_path=str(tmp_path / f"{model_id}.pkl"),
+                    artifact_path=str(output_root / "models" / f"{model_id}.pkl"),
                 ),
             ),
             results=tuple(results),
+        )
+        artifacts.save_fitted_model(
+            {"model_id": model_id},
+            shard.models[0].artifact_path,
+            model_id=model_id,
+            configuration=configuration,
+            train_years=planned.fold.train_years,
+            counts=(100, 80, 20),
+            feature_names=("log_lti",),
+            weighting="equal_source_year_class_priors",
+            source_prior="balanced",
         )
         write_shard(shard, shard_path(planned.job))
 
@@ -122,6 +134,43 @@ def test_aggregate_comparison_builds_matched_cells_and_weighted_summaries(tmp_pa
     )
     assert set(paired["n_cells_boosting_lower_brier"]) == {9, 45}
     assert (tmp_path / "figures" / "model_family_comparison_reverse.pdf").exists()
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("optimizer_converged", False, "non-converged mixture estimate"),
+        ("mixture_at_boundary", True, "mixture estimate at the boundary"),
+    ],
+)
+def test_validate_cells_rejects_invalid_mixture_estimates(field, value, message):
+    rows = []
+    for predictor_set in ("unrestricted", "hmda_only"):
+        for family in ("logistic", "boosting"):
+            for design, count in (("reverse", 45), ("forward", 9)):
+                for cell in range(count):
+                    rows.append(
+                        {
+                            "evaluation_design": design,
+                            "predictor_set": predictor_set,
+                            "model_family": family,
+                            "train_start": cell // 5,
+                            "train_end": cell // 5 + 3,
+                            "target_year": cell,
+                            "horizon": cell % 9 + 1,
+                            "n_observations": 100,
+                            "actual_second_share": 0.2,
+                            "mean_probability": 0.2,
+                            "mixture_share": 0.2,
+                            "optimizer_converged": True,
+                            "mixture_at_boundary": False,
+                        }
+                    )
+    cells = pd.DataFrame(rows)
+    cells.loc[0, field] = value
+
+    with pytest.raises(ValueError, match=message):
+        model_family_comparison._validate_cells(cells)
 
 
 def test_cluster_submission_chains_aggregation_after_array(tmp_path, monkeypatch):
