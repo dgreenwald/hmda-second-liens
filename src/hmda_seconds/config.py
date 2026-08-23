@@ -37,6 +37,7 @@ RAW_LOGISTIC_CLUSTER_DIR = OUTPUT_DIR / "raw_logistic_selection"
 HMDA_ONLY_RAW_LOGISTIC_CLUSTER_DIR = OUTPUT_DIR / "hmda_only_raw_logistic_selection"
 BOOSTING_CLUSTER_DIR = OUTPUT_DIR / "boosting_selection"
 HMDA_ONLY_BOOSTING_CLUSTER_DIR = OUTPUT_DIR / "hmda_only_boosting_selection"
+MODEL_FAMILY_COMPARISON_DIR = OUTPUT_DIR / "model_family_comparison"
 
 # Optional cluster defaults. Command-line arguments continue to take
 # precedence, while keeping machine-specific paths and Slurm settings out of

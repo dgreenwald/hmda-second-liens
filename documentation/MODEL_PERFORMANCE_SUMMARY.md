@@ -117,6 +117,40 @@ stale after the refreshed cluster selection changed the boosting winner. They sh
 used as the current four-model comparison. In particular, no current forward results for the
 HMDA-only finalists are present in the synchronized selection outputs.
 
+## Common diagnostic implementation
+
+The repository now provides a post-selection comparison that holds the evaluation convention
+fixed without reopening either model search. It translates each of the four frozen winners
+into an equal-source-year-prior density-ratio fit, estimates a separate mixture share in every
+target year, and scores all probabilities through the shared evaluator. The design contains
+45 reverse and nine forward cells per finalist, or 216 model-cell records in total. Logistic
+versus boosting differences are matched within the unrestricted and HMDA-only predictor sets.
+
+The preferred cluster entry point prepares the 40-task array and a dependent aggregation job.
+With `--submit`, one invocation submits both jobs and records their IDs under a run-specific
+directory; the aggregation job uses `afterok` and therefore runs only if every array task
+succeeds:
+
+```bash
+make model-family-comparison-cluster-submit
+```
+
+Use `make model-family-comparison-cluster` to prepare and inspect the scripts without
+submission. The following lower-level targets remain available for debugging or manual
+recovery:
+
+```bash
+make generate-model-family-comparison
+make submit-model-family-comparison
+make aggregate-model-family-comparison
+```
+
+The generator does not submit unless passed `--submit`. Aggregation requires every immutable
+shard, verifies common sample counts and observed shares, and writes
+`model_family_comparison_{cells,reverse_horizons,summary,paired_cells,paired_summary}.csv` plus
+reverse and forward figures. It never persists loan-level probabilities. Numerical findings
+should be added here only after the refreshed winner artifacts have completed this workflow.
+
 ## Source artifacts
 
 The aggregate values above come from the synchronized compatibility tables:
