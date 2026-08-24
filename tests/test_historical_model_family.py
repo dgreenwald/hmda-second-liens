@@ -3,6 +3,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from hmda_seconds import historical_model_family
 from hmda_seconds import historical_model_family_cluster as historical_cluster
@@ -67,6 +68,29 @@ def test_evaluate_year_retains_only_aggregate_model_and_support_records():
     assert "probability_q99" in result["annual"][0]
     assert "log_ratio_q01" in result["annual"][0]
     assert "fraction_abs_z_gt_3" in result["continuous_support"][0]
+    assert result["sample"] == {
+        "n_clean_sample": 20,
+        "n_model_sample": 20,
+        "n_excluded_nonfinite": 0,
+        "nonfinite_feature_counts": {},
+    }
+
+
+def test_evaluate_year_excludes_nonfinite_features_from_every_model():
+    target = frame()
+    target.loc[0, "log_lti"] = np.inf
+    target.loc[1, "purchaser_type"] = np.nan
+
+    with pytest.warns(RuntimeWarning, match="excludes 2 of 20"):
+        result = historical_model_family.evaluate_year(target, fake_models())
+
+    assert result["sample"]["n_model_sample"] == 18
+    assert result["sample"]["nonfinite_feature_counts"] == {
+        "log_lti": 1,
+        "purchaser_type": 1,
+    }
+    assert {row["n_model_sample"] for row in result["annual"]} == {18}
+    assert all(row["n"] == 18 for row in result["continuous_support"])
 
 
 def synthetic_shard(year):

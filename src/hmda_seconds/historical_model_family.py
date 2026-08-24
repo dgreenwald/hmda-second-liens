@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+import warnings
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -133,6 +134,7 @@ def evaluate_year(
     if frame.empty or frame["year"].nunique() != 1:
         raise ValueError("Historical frame must contain one nonempty year")
     year = int(frame["year"].iloc[0])
+    frame, sample = common_model_sample(frame)
     reference = models[("unrestricted", "logistic")]
     annual = []
     for predictor_set, family in MODEL_KEYS:
@@ -174,10 +176,53 @@ def evaluate_year(
     return {
         "schema_version": SCHEMA_VERSION,
         "year": year,
+        "sample": sample,
         "annual": annual,
         "continuous_support": continuous,
         "categorical_support": categorical,
     }
+
+
+def common_model_sample(frame: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, object]]:
+    """Keep the common rows that all four frozen finalists can score."""
+    required = [*config.CONTINUOUS_VARS, *config.CATEGORY_VARS]
+    missing = set(required) - set(frame.columns)
+    if missing:
+        raise ValueError(f"Historical model features are missing: {sorted(missing)}")
+    finite = pd.DataFrame(
+        {
+            variable: np.isfinite(frame[variable].to_numpy(dtype=float))
+            for variable in required
+        },
+        index=frame.index,
+    )
+    keep = finite.all(axis=1)
+    counts = {
+        variable: int((~finite[variable]).sum())
+        for variable in required
+        if not finite[variable].all()
+    }
+    sample = {
+        "n_clean_sample": len(frame),
+        "n_model_sample": int(keep.sum()),
+        "n_excluded_nonfinite": int((~keep).sum()),
+        "nonfinite_feature_counts": counts,
+    }
+    if not keep.any():
+        raise ValueError(
+            f"No common finite-feature observations remain; counts={counts}"
+        )
+    if counts:
+        warnings.warn(
+            f"Historical year {int(frame['year'].iloc[0])} excludes "
+            f"{sample['n_excluded_nonfinite']} of {sample['n_clean_sample']} "
+            f"clean rows with non-finite model features: {counts}",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+    result = frame.loc[keep].copy()
+    result.attrs = frame.attrs.copy()
+    return result, sample
 
 
 def continuous_support(frame: pd.DataFrame, reference_model) -> list[dict]:
@@ -280,7 +325,11 @@ def aggregate_historical(
         shard = json.loads(path.read_text())
         _validate_year_shard(shard, year)
         shards.append(shard)
-    annual = pd.DataFrame(row for shard in shards for row in shard["annual"])
+    annual = pd.DataFrame(
+        row
+        for shard in shards
+        for row in _annual_rows_with_sample_diagnostics(shard)
+    )
     continuous = pd.DataFrame(
         row for shard in shards for row in shard["continuous_support"]
     )
@@ -444,6 +493,15 @@ def _validate_year_shard(shard: dict, year: int) -> None:
         raise ValueError(f"Historical shard {year} does not contain four finalists")
     if annual["n_model_sample"].nunique() != 1:
         raise ValueError(f"Historical finalists use different samples in {year}")
+    sample = _sample_diagnostics(shard)
+    if sample["n_model_sample"] != int(annual["n_model_sample"].iloc[0]):
+        raise ValueError(f"Historical sample diagnostics differ in {year}")
+    if (
+        sample["n_clean_sample"] < sample["n_model_sample"]
+        or sample["n_excluded_nonfinite"]
+        != sample["n_clean_sample"] - sample["n_model_sample"]
+    ):
+        raise ValueError(f"Historical exclusion counts are invalid in {year}")
     if annual["model_id"].nunique() != 4:
         raise ValueError(f"Historical shard {year} reuses a model identity")
     observed = annual["actual_second_share"].dropna()
@@ -478,6 +536,30 @@ def _validate_year_shard(shard: dict, year: int) -> None:
             raise ValueError(f"Historical {variable} counts are incomplete in {year}")
         if not np.isclose(selected["share"].sum(), 1.0):
             raise ValueError(f"Historical {variable} shares are incomplete in {year}")
+
+
+def _sample_diagnostics(shard: dict) -> dict[str, object]:
+    """Normalize shards written before finite-feature exclusions were needed."""
+    sample = shard.get("sample")
+    if sample is not None:
+        return sample
+    annual = shard["annual"]
+    n_model_sample = int(annual[0]["n_model_sample"])
+    return {
+        "n_clean_sample": n_model_sample,
+        "n_model_sample": n_model_sample,
+        "n_excluded_nonfinite": 0,
+        "nonfinite_feature_counts": {},
+    }
+
+
+def _annual_rows_with_sample_diagnostics(shard: dict):
+    sample = _sample_diagnostics(shard)
+    for original in shard["annual"]:
+        row = dict(original)
+        row["n_clean_sample"] = sample["n_clean_sample"]
+        row["n_excluded_nonfinite"] = sample["n_excluded_nonfinite"]
+        yield row
 
 
 def _actual_share(frame: pd.DataFrame) -> float | None:

@@ -17,12 +17,17 @@ change the target population. Estimate a separate mixture share from each model'
 using only target-year characteristics. Never use target labels in estimation. Labels from
 2004 onward are used only for reported plausibility metrics.
 
+After cleaning, require finite values for all four primitive features so every finalist scores
+the same observations. Report the clean-sample count, common model-sample count, excluded-row
+count, and feature-specific non-finite counts in the immutable year shard. This final common
+eligibility restriction is not model-family-specific and must not be implemented as imputation.
+
 ## Annual outputs
 
 For each `(year, predictor_set, model_family)` cell report:
 
 - model and configuration identity;
-- eligible observation count and observed share when available;
+- clean, excluded, and common-model observation counts, plus the observed share when available;
 - fitted mixture share and mean adjusted probability;
 - hard second-lien share at the frozen 0.5 threshold;
 - optimizer/EM convergence, boundary status, and optimizer-minus-EM difference;
