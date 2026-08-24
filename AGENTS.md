@@ -64,6 +64,12 @@ count shares and mixture-adjusted probabilities. Read `documentation/MIGRATION_P
   known-source-prior models to 1990--2016, writes annual aggregate shares and the 2003--2004
   continuity table, and renders the predicted/actual series. It checkpoints annual aggregates
   and never retains loan-level historical probabilities.
+- Step 10 historical family comparison: `make historical-model-family-cluster` generates—but
+  never submits—the canonical 27-year array and dependent aggregation job. Use
+  `make historical-model-family-cluster-submit` for explicit submission, and
+  `make aggregate-historical-model-family` to reaggregate completed immutable annual shards.
+  It applies all four frozen finalists on a common sample and persists only annual aggregates
+  and support diagnostics; see `documentation/HISTORICAL_MODEL_FAMILY_PROTOCOL.md`.
 - Gradient-boosting challenger: `make evaluate-gradient-boosting` retains the sequential local
   compatibility workflow and produces reverse and forward calibration diagnostics. The
   reproducible cluster selection uses `make generate-boosting-screen`, then the survivor and

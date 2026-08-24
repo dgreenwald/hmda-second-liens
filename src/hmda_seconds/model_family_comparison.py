@@ -124,18 +124,21 @@ def aggregate_comparison(
     *,
     output_dir: str | Path = config.TABLE_DIR,
     figure_dir: str | Path = config.FIGURE_DIR,
+    result_root: str | Path | None = None,
 ) -> list[Path]:
     """Validate all comparison shards and publish matched diagnostic outputs."""
     planned = [expand_job_paths(item) for item in read_manifest(manifest)]
+    relocated_root = None if result_root is None else Path(result_root)
     parts = []
     for direction in ("reverse", "forward"):
         selected = [item for item in planned if item.fold.direction == direction]
         if len(selected) != (36 if direction == "reverse" else 4):
             raise ValueError(f"Expected complete four-model {direction} job design")
-        _validate_artifacts(selected)
-        aggregated = aggregate_shards(
-            selected, [shard_path(item.job) for item in selected]
-        )
+        shard_paths = [
+            _relocated_shard_path(item, relocated_root) for item in selected
+        ]
+        _validate_artifacts(selected, shard_paths, relocated_root)
+        aggregated = aggregate_shards(selected, shard_paths)
         frame = aggregated.cells.copy()
         frame["evaluation_design"] = direction
         parts.append(frame)
@@ -244,17 +247,38 @@ def _validate_cells(cells: pd.DataFrame) -> None:
         raise ValueError("Comparison contains duplicate model cells")
 
 
-def _validate_artifacts(planned: list[PlannedJob]) -> None:
+def _relocated_shard_path(item: PlannedJob, result_root: Path | None) -> Path:
+    path = shard_path(item.job)
+    return path if result_root is None else result_root / "shards" / path.name
+
+
+def _validate_artifacts(
+    planned: list[PlannedJob],
+    shard_paths: list[Path],
+    result_root: Path | None,
+) -> None:
     """Verify every shard-referenced fit and its metadata identity."""
     seen: set[Path] = set()
-    for item in planned:
-        shard = read_shard(shard_path(item.job))
+    for item, shard_file in zip(planned, shard_paths, strict=True):
+        shard = read_shard(shard_file)
+        remote_root = Path(shard.job.output_root)
         for model in shard.models:
             path = Path(model.artifact_path)
             if path in seen:
                 raise ValueError(f"Comparison reuses fitted artifact {path}")
             seen.add(path)
-            metadata = artifacts.validate_existing_artifact(path, allow_legacy=False)
+            artifact_path = path
+            if result_root is not None:
+                try:
+                    relative = path.relative_to(remote_root)
+                except ValueError as error:
+                    raise ValueError(
+                        f"Artifact is outside comparison output root: {path}"
+                    ) from error
+                artifact_path = result_root / relative
+            metadata = artifacts.validate_existing_artifact(
+                artifact_path, allow_legacy=False
+            )
             artifacts.validate_metadata_identity(
                 metadata,
                 model_id=model.model_id,

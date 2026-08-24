@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Sync validated model-selection results from the cluster."""
+"""Sync validated model-selection and family-comparison results from the cluster."""
 
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ def main() -> None:
         staging_dir=args.staging_dir,
     )
     if backup is not None:
-        print(f"Selection results synchronized; any prior outputs are under {backup}")
+        print(f"Cluster results synchronized; any prior outputs are under {backup}")
 
 
 if __name__ == "__main__":

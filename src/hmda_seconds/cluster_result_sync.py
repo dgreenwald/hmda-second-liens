@@ -49,6 +49,10 @@ TRANSFER_PATHS = (
     "output/slurm/hmda_only_logistic_selection/",
     "output/slurm/boosting/",
     "output/slurm/hmda_only_boosting/",
+    "output/model_family_comparison/",
+    "output/slurm/model_family_comparison/",
+    "output/historical_model_family/",
+    "output/slurm/historical_model_family/",
     "output/tables/logistic_selection_core_coarse_cells.csv",
     "output/tables/logistic_selection_core_coarse_horizons.csv",
     "output/tables/logistic_selection_core_coarse_summary.csv",
@@ -91,6 +95,21 @@ TRANSFER_PATHS = (
     "output/model/boosting_challenger.pkl.metadata.json",
     "output/model/boosting_hmda_only_challenger.pkl",
     "output/model/boosting_hmda_only_challenger.pkl.metadata.json",
+    "output/tables/model_family_comparison_cells.csv",
+    "output/tables/model_family_comparison_reverse_horizons.csv",
+    "output/tables/model_family_comparison_summary.csv",
+    "output/tables/model_family_comparison_paired_cells.csv",
+    "output/tables/model_family_comparison_paired_summary.csv",
+    "output/figures/model_family_comparison_reverse.pdf",
+    "output/figures/model_family_comparison_forward.pdf",
+    "output/tables/historical_model_family_annual.csv",
+    "output/tables/historical_model_family_paired.csv",
+    "output/tables/historical_model_family_boundary.csv",
+    "output/tables/historical_model_family_continuous_support.csv",
+    "output/tables/historical_model_family_categorical_support.csv",
+    "output/tables/historical_model_family_support_envelope.csv",
+    "output/figures/historical_model_family_shares.pdf",
+    "output/figures/historical_model_family_differences.pdf",
 )
 
 PROMOTION_PATHS = (
@@ -102,6 +121,10 @@ PROMOTION_PATHS = (
     "slurm/hmda_only_logistic_selection",
     "slurm/boosting",
     "slurm/hmda_only_boosting",
+    "model_family_comparison",
+    "slurm/model_family_comparison",
+    "historical_model_family",
+    "slurm/historical_model_family",
     *tuple(
         path.removeprefix("output/")
         for path in TRANSFER_PATHS
@@ -129,6 +152,21 @@ PROMOTION_PATHS = (
     "model/boosting_challenger.pkl.metadata.json",
     "model/boosting_hmda_only_challenger.pkl",
     "model/boosting_hmda_only_challenger.pkl.metadata.json",
+    "tables/model_family_comparison_cells.csv",
+    "tables/model_family_comparison_reverse_horizons.csv",
+    "tables/model_family_comparison_summary.csv",
+    "tables/model_family_comparison_paired_cells.csv",
+    "tables/model_family_comparison_paired_summary.csv",
+    "figures/model_family_comparison_reverse.pdf",
+    "figures/model_family_comparison_forward.pdf",
+    "tables/historical_model_family_annual.csv",
+    "tables/historical_model_family_paired.csv",
+    "tables/historical_model_family_boundary.csv",
+    "tables/historical_model_family_continuous_support.csv",
+    "tables/historical_model_family_categorical_support.csv",
+    "tables/historical_model_family_support_envelope.csv",
+    "figures/historical_model_family_shares.pdf",
+    "figures/historical_model_family_differences.pdf",
 )
 
 STAGES = {
@@ -246,7 +284,7 @@ def validate_staged_results(staged_output: Path) -> None:
     """Validate all transferred shards, aggregate tables, and model artifacts."""
     missing = [path for path in PROMOTION_PATHS if not (staged_output / path).exists()]
     if missing:
-        raise FileNotFoundError(f"Transferred boosting results are missing: {missing}")
+        raise FileNotFoundError(f"Transferred cluster results are missing: {missing}")
 
     for root in (
         "raw_logistic_selection",
@@ -272,6 +310,98 @@ def validate_staged_results(staged_output: Path) -> None:
     _validate_logistic_variant(staged_output, feature_set="hmda_only")
     _validate_combined_selection(staged_output)
     _validate_final_models(staged_output)
+    _validate_model_family_comparison(staged_output)
+    _validate_historical_model_family(staged_output)
+
+
+def _validate_model_family_comparison(staged_output: Path) -> None:
+    """Reaggregate the canonical comparison inside staging and match its tables."""
+    from . import model_family_comparison
+
+    manifest = (
+        staged_output
+        / "slurm"
+        / "model_family_comparison"
+        / "density_ratio_jobs.json"
+    )
+    with tempfile.TemporaryDirectory(
+        prefix=".model-family-validation-", dir=staged_output.parent
+    ) as temporary:
+        validation_root = Path(temporary)
+        regenerated_tables = validation_root / "tables"
+        regenerated_figures = validation_root / "figures"
+        model_family_comparison.aggregate_comparison(
+            manifest,
+            output_dir=regenerated_tables,
+            figure_dir=regenerated_figures,
+            result_root=staged_output / "model_family_comparison",
+        )
+        for name in (
+            "cells",
+            "reverse_horizons",
+            "summary",
+            "paired_cells",
+            "paired_summary",
+        ):
+            copied = pd.read_csv(
+                staged_output / "tables" / f"model_family_comparison_{name}.csv"
+            )
+            regenerated = pd.read_csv(
+                regenerated_tables / f"model_family_comparison_{name}.csv"
+            )
+            pd.testing.assert_frame_equal(
+                copied.reset_index(drop=True),
+                regenerated.reset_index(drop=True),
+                check_dtype=False,
+                check_exact=False,
+                rtol=1e-12,
+                atol=1e-14,
+            )
+
+
+def _validate_historical_model_family(staged_output: Path) -> None:
+    """Reaggregate relocated historical shards and match all published tables."""
+    from . import historical_model_family
+
+    manifest = (
+        staged_output
+        / "slurm"
+        / "historical_model_family"
+        / "historical_model_family_jobs.json"
+    )
+    with tempfile.TemporaryDirectory(
+        prefix=".historical-family-validation-", dir=staged_output.parent
+    ) as temporary:
+        validation_root = Path(temporary)
+        regenerated_tables = validation_root / "tables"
+        historical_model_family.aggregate_historical(
+            manifest,
+            output_dir=regenerated_tables,
+            figure_dir=validation_root / "figures",
+            result_root=staged_output / "historical_model_family",
+        )
+        for name in (
+            "annual",
+            "paired",
+            "boundary",
+            "continuous_support",
+            "categorical_support",
+            "support_envelope",
+        ):
+            copied = pd.read_csv(
+                staged_output / "tables" / f"historical_model_family_{name}.csv"
+            )
+            regenerated = pd.read_csv(
+                regenerated_tables / f"historical_model_family_{name}.csv"
+            )
+            pd.testing.assert_frame_equal(
+                copied.reset_index(drop=True),
+                regenerated.reset_index(drop=True),
+                check_dtype=False,
+                check_exact=False,
+                rtol=1e-12,
+                atol=1e-14,
+            )
 
 
 def _validate_artifact_tree(model_root: Path) -> None:

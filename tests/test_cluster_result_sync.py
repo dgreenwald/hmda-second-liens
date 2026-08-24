@@ -3,7 +3,7 @@ from pathlib import Path, PurePosixPath
 import pandas as pd
 import pytest
 
-from hmda_seconds import cluster_result_sync
+from hmda_seconds import cluster_result_sync, model_family_comparison
 from hmda_seconds.cluster_result_sync import (
     DEFAULT_DTN_HOST,
     EXPECTED_WINNER,
@@ -39,7 +39,7 @@ def test_transfer_command_uses_one_torch_dtn_source(tmp_path):
     )
 
 
-def test_transfer_scope_contains_all_four_workflows_but_no_microdata():
+def test_transfer_scope_contains_selection_and_comparison_but_no_microdata():
     paths = "\n".join(cluster_result_sync.TRANSFER_PATHS)
     assert "raw_logistic_selection/" in paths
     assert "hmda_only_raw_logistic_selection/" in paths
@@ -47,6 +47,14 @@ def test_transfer_scope_contains_all_four_workflows_but_no_microdata():
     assert "hmda_only_boosting_selection/" in paths
     assert "logistic_hmda_only_selected.pkl" in paths
     assert "boosting_hmda_only_challenger.pkl" in paths
+    assert "model_family_comparison/" in paths
+    assert "slurm/model_family_comparison/" in paths
+    assert "model_family_comparison_paired_summary.csv" in paths
+    assert "model_family_comparison_forward.pdf" in paths
+    assert "historical_model_family/" in paths
+    assert "slurm/historical_model_family/" in paths
+    assert "historical_model_family_support_envelope.csv" in paths
+    assert "historical_model_family_shares.pdf" in paths
     assert "selection_data" not in paths
     assert "data/raw" not in paths
 
@@ -196,6 +204,55 @@ def test_promote_rolls_back_after_move_failure(tmp_path, monkeypatch):
 def test_validation_rejects_missing_transfer_paths(tmp_path):
     with pytest.raises(FileNotFoundError, match="missing"):
         cluster_result_sync.validate_staged_results(tmp_path)
+
+
+def test_comparison_validation_reaggregates_relocated_results(
+    tmp_path, monkeypatch
+):
+    staged_output = tmp_path / "output"
+    manifest = (
+        staged_output
+        / "slurm"
+        / "model_family_comparison"
+        / "density_ratio_jobs.json"
+    )
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text("{}")
+    expected_result_root = staged_output / "model_family_comparison"
+    expected_result_root.mkdir()
+    names = (
+        "cells",
+        "reverse_horizons",
+        "summary",
+        "paired_cells",
+        "paired_summary",
+    )
+    tables = staged_output / "tables"
+    tables.mkdir()
+    for name in names:
+        pd.DataFrame({"value": [1.0]}).to_csv(
+            tables / f"model_family_comparison_{name}.csv", index=False
+        )
+
+    def fake_aggregate(received_manifest, *, output_dir, figure_dir, result_root):
+        assert received_manifest == manifest
+        assert result_root == expected_result_root
+        Path(output_dir).mkdir(parents=True)
+        Path(figure_dir).mkdir(parents=True)
+        for name in names:
+            pd.DataFrame({"value": [1.0]}).to_csv(
+                Path(output_dir) / f"model_family_comparison_{name}.csv",
+                index=False,
+            )
+        return []
+
+    monkeypatch.setattr(
+        model_family_comparison,
+        "aggregate_comparison",
+        fake_aggregate,
+    )
+
+    cluster_result_sync._validate_model_family_comparison(staged_output)
 
 
 def test_combined_selection_rejects_wrong_winner(tmp_path):

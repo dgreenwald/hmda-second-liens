@@ -127,7 +127,7 @@ def run_historical_plausibility(
         else:
             if county_values is None:
                 county_values = clean.build_county_value_panel(config.APPLY_YEARS)
-            frame = _load_and_clean_application_year(
+            frame = load_historical_application_year(
                 year, hmda_data_dir, county_values
             )
         log_ratio = known.log_ratio(frame)
@@ -220,9 +220,10 @@ def render_annual_shares(annual: pd.DataFrame, output_file: str | Path) -> None:
     plt.close(fig)
 
 
-def _load_and_clean_application_year(
+def load_historical_application_year(
     year: int, hmda_data_dir: Path, county_values: pd.DataFrame
 ) -> pd.DataFrame:
+    """Load the common historical target population with label-era tolerance."""
     label_policy = "drop" if year < REPORTING_START_YEAR else "allow"
     return clean.load_and_clean_year(
         year,
@@ -232,6 +233,11 @@ def _load_and_clean_application_year(
         allow_missing_columns=True,
         label_policy=label_policy,
     )
+
+
+# Retain the former private name for callers written before Step 10 made the
+# shared historical loader public.
+_load_and_clean_application_year = load_historical_application_year
 
 
 def _application_order(years: tuple[int, ...]) -> list[int]:

@@ -118,6 +118,7 @@ def test_aggregate_comparison_builds_matched_cells_and_weighted_summaries(tmp_pa
         manifest,
         output_dir=tmp_path / "tables",
         figure_dir=tmp_path / "figures",
+        result_root=output_root,
     )
 
     assert len(destinations) == 7

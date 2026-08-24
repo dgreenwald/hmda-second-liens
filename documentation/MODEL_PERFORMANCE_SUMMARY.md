@@ -18,9 +18,9 @@ The HMDA-only searches use the same estimation sample as the unrestricted search
 within-family comparisons show the best selected performance with and without the county-value
 predictor on that common sample.
 
-These are reverse-validation selection results, not current forward-validation diagnostics.
-The synchronized outputs do not contain a refreshed, common-score forward comparison for all
-four selected models.
+The family-specific results below describe model selection and do not share a probability
+convention across families. The synchronized post-selection workflow now supplies the missing
+common-score reverse and forward comparison; see `MODEL_FAMILY_COMPARISON_FINDINGS.md`.
 
 ## Selected models and aggregate performance
 
@@ -109,13 +109,11 @@ Unrestricted logistic benefits from purchaser-specific continuous slopes, while 
 HMDA-only winner uses a spline in `log_lti` without continuous-by-category interactions. In
 contrast, both boosting searches choose exactly the same compact tree configuration.
 
-Third, these outputs do not settle logistic versus boosting. A fair family comparison requires
-both selected models to be evaluated with the same probability convention and target-share
-adjustment in the same cells. Earlier unrestricted diagnostics did such a comparison for an
-older boosting fit, but the project documentation marks those forward and reverse values as
-stale after the refreshed cluster selection changed the boosting winner. They should not be
-used as the current four-model comparison. In particular, no current forward results for the
-HMDA-only finalists are present in the synchronized selection outputs.
+Third, these family-specific selection outputs alone do not settle logistic versus boosting
+because they use different probability conventions. The completed common-score comparison now
+supersedes the stale earlier diagnostics. Boosting wins all 45 reverse cells for both predictor
+sets, while logistic wins all nine forward years for both; see
+`MODEL_FAMILY_COMPARISON_FINDINGS.md` for the full results and Step 10 interpretation.
 
 ## Common diagnostic implementation
 
@@ -155,8 +153,8 @@ The generator does not submit unless passed `--submit`. Aggregation requires eve
 shard, validates every fitted artifact and metadata digest, rejects non-converged or boundary
 mixture estimates, verifies common sample counts and observed shares, and writes
 `model_family_comparison_{cells,reverse_horizons,summary,paired_cells,paired_summary}.csv` plus
-reverse and forward figures. It never persists loan-level probabilities. Numerical findings
-should be added here only after the refreshed winner artifacts have completed this workflow.
+reverse and forward figures. It never persists loan-level probabilities. The synchronized
+numerical findings are reported in `MODEL_FAMILY_COMPARISON_FINDINGS.md`.
 
 ## Source artifacts
 
