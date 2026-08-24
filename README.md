@@ -20,7 +20,9 @@ The synchronized four-model results are summarized in the
 with the common-score reverse and forward results in the
 [model-family comparison findings](documentation/MODEL_FAMILY_COMPARISON_FINDINGS.md).
 The final historical family comparison and support design is frozen in the
-[Step 10 historical protocol](documentation/HISTORICAL_MODEL_FAMILY_PROTOCOL.md).
+[Step 10 historical protocol](documentation/HISTORICAL_MODEL_FAMILY_PROTOCOL.md), with the
+completed analysis in the
+[Step 10 historical findings](documentation/HISTORICAL_MODEL_FAMILY_FINDINGS.md).
 
 ## Sync results from the cluster
 

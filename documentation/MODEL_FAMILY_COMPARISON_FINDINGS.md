@@ -115,10 +115,13 @@ These results satisfy the challenger's reverse-time breadth criterion but do not
 resolve the final estimator choice. The intended application is backward, so the reverse
 design is the primary validation exercise; however, the complete forward loss and known tree
 extrapolation behavior are directly relevant to transportability. Following the frozen
-protocol, retain unrestricted logistic as the current primary estimator and boosting as a
-serious finalist until Step 10 compares their 1990--2003 aggregate paths and explicit
-support/extrapolation diagnostics. Do not retune either family. Retain both HMDA-only variants
-as portability robustness models.
+protocol, the completed Step 10 comparison retains unrestricted logistic as the primary
+estimator and unrestricted boosting as the principal model-family robustness series. Their
+unrestricted historical aggregate paths are close after 1991, while explicit support shifts
+and logistic's universal forward advantage favor its clearer linear-tail extrapolation rule.
+Do not retune either family. Retain both HMDA-only variants as portability robustness models.
+See `HISTORICAL_MODEL_FAMILY_FINDINGS.md` for the complete historical evidence and final
+decision.
 
 ## Generated outputs
 
