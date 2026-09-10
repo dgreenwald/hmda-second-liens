@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Sync validated logistic and boosting selection results from the Torch DTN."""
+"""Sync validated model-selection and family-comparison results from the cluster."""
 
 from __future__ import annotations
 
 import argparse
 from pathlib import Path
 
-from hmda_seconds.boosting_result_sync import request_from_environment, sync_results
+from hmda_seconds.cluster_result_sync import request_from_environment, sync_results
 
 
 def parse_args() -> argparse.Namespace:
@@ -34,7 +34,7 @@ def main() -> None:
         staging_dir=args.staging_dir,
     )
     if backup is not None:
-        print(f"Selection results synchronized; any prior outputs are under {backup}")
+        print(f"Cluster results synchronized; any prior outputs are under {backup}")
 
 
 if __name__ == "__main__":

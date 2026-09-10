@@ -410,9 +410,11 @@ It improves Brier in all 45 cells and at all nine backward horizons; its gain in
 horizons. However, the final 2004--2007 boosted model is worse than mixture logistic in every
 2008--2016 forward year: average Brier is 0.011994 rather than 0.007307, driven chiefly by a
 1.19-point prevalence shortfall. Retain boosting as a serious finalist, but do not replace
-logistic automatically. Step 10 should compare the historical series and extrapolation/support
-behavior before resolving the strong backward evidence against the forward-regime warning.
-See `GRADIENT_BOOSTING_FINDINGS.md`.
+logistic automatically. The completed Step 10 comparison finds closely aligned unrestricted
+historical series after 1991 but material support shifts; it retains logistic as primary given
+its universal forward advantage and clearer linear-tail extrapolation rule, with boosting as
+the principal model-family robustness series. See `GRADIENT_BOOSTING_FINDINGS.md` and
+`HISTORICAL_MODEL_FAMILY_FINDINGS.md`.
 
 **Random Forest mixture revisit:** re-evaluate the established 50-tree, depth-10 full-sample
 forest using equal source-year class priors and the same annual target mixture adjustment. Its

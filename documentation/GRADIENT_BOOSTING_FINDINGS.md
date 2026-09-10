@@ -30,6 +30,10 @@ candidates contain the complete 45-cell reverse design.
 
 The reverse and forward diagnostic values below record the earlier selection-data vintage and
 L2-10 fit. Regenerate them from the refreshed L2-1 decision before treating them as current.
+The supported refresh is the common four-finalist workflow documented in
+`MODEL_PERFORMANCE_SUMMARY.md`; it evaluates logistic and boosting with the same
+known-source-prior mixture convention rather than rerunning the legacy family-specific
+diagnostic paths.
 
 ## Reverse-time comparison
 

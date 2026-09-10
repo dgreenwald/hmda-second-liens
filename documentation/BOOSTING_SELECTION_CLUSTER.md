@@ -95,7 +95,8 @@ overwrite an existing artifact.
 
 NYU directs command-line transfers through the Torch Data Transfer Node rather than login or
 compute nodes. The local sync target therefore defaults to `dtn.torch.hpc.nyu.edu` and sends
-the complete unrestricted and HMDA-only logistic and boosting results with one authenticated
+the complete unrestricted and HMDA-only logistic and boosting selection results, the canonical
+four-finalist comparison, and the Step 10 historical family comparison with one authenticated
 `rsync` invocation. It does not transfer raw HMDA files, selection-data Parquets, or loan-level
 output.
 
@@ -115,13 +116,15 @@ make sync-selection-results
 Then perform the transfer. This prompts for cluster authentication once:
 
 ```bash
-make sync-selection-results SYNC_BOOSTING_FLAGS=--apply
+make sync-selection-results SYNC_CLUSTER_FLAGS=--apply
 ```
 
-The command stages all four workflows' full selection models, immutable shards, Slurm
-manifests and logs, aggregate selection tables, and final models. It validates artifact
-digests, reaggregates the shards, verifies each decision (including the unrestricted frozen
-L2-1 boosting decision), and only then replaces local selection outputs.
+The command stages all four selection workflows, the model-family comparison, and the
+historical family comparison, including fitted models, immutable shards, Slurm manifests and
+logs, aggregate tables, figures, and final models. It validates artifact digests, reaggregates
+the shards, verifies each decision (including the unrestricted frozen L2-1 boosting decision),
+matches the comparison and historical tables to fresh staged aggregations, and only then
+replaces local outputs.
 Conflicting local files are retained under `output/sync_backups/<UTC timestamp>/`. A failed
 transfer or validation leaves current local results untouched and reports the retained staging
 directory for inspection or recovery.
@@ -131,7 +134,7 @@ than starting a new local staging tree:
 
 ```bash
 make sync-selection-results \
-  SYNC_BOOSTING_FLAGS="--apply --staging-dir /absolute/path/to/.boosting-sync-staging-..."
+  SYNC_CLUSTER_FLAGS="--apply --staging-dir /absolute/path/to/.cluster-sync-staging-..."
 ```
 
 The retry still uses one authenticated DTN session, while rsync's checksum comparison avoids

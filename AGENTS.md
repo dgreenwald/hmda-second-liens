@@ -68,6 +68,12 @@ count shares and mixture-adjusted probabilities. Read `documentation/MIGRATION_P
   known-source-prior models to 1990--2016, writes annual aggregate shares and the 2003--2004
   continuity table, and renders the predicted/actual series. It checkpoints annual aggregates
   and never retains loan-level historical probabilities.
+- Step 10 historical family comparison: `make historical-model-family-cluster` generates—but
+  never submits—the canonical 27-year array and dependent aggregation job. Use
+  `make historical-model-family-cluster-submit` for explicit submission, and
+  `make aggregate-historical-model-family` to reaggregate completed immutable annual shards.
+  It applies all four frozen finalists on a common sample and persists only annual aggregates
+  and support diagnostics; see `documentation/HISTORICAL_MODEL_FAMILY_PROTOCOL.md`.
 - Gradient-boosting challenger: `make evaluate-gradient-boosting` retains the sequential local
   compatibility workflow and produces reverse and forward calibration diagnostics. The
   reproducible cluster selection uses `make generate-boosting-screen`, then the survivor and
@@ -76,7 +82,7 @@ count shares and mixture-adjusted probabilities. Read `documentation/MIGRATION_P
 - Sync completed cluster selection results from the local machine with
   `make sync-selection-results`. Configure `HMDA_SECONDS_CLUSTER_USER` and
   `HMDA_SECONDS_CLUSTER_REPO` in the local `.env`; the host defaults to NYU's Torch Data
-  Transfer Node. The target is a network-free preview unless `SYNC_BOOSTING_FLAGS=--apply` is
+  Transfer Node. The target is a network-free preview unless `SYNC_CLUSTER_FLAGS=--apply` is
   passed. The applied sync retrieves unrestricted and HMDA-only logistic and boosting results,
   validates artifacts and selection decisions before replacing local outputs, and preserves
   conflicts under `output/sync_backups/`. It must not transfer raw HMDA data, selection-data
