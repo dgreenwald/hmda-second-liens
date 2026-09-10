@@ -86,6 +86,7 @@ from pathlib import Path
 import sys
 import numpy as np
 import hmda_seconds.portable_predict as predictor
+from hmda_seconds import load_benchmark
 
 module_path = Path(predictor.__file__).resolve()
 assert module_path.is_relative_to(Path(sys.prefix).resolve()), module_path
@@ -102,6 +103,14 @@ for mode, years in (("scalar", 2000), ("mixed", case["years"])):
     np.testing.assert_allclose(actual, expected, rtol=0, atol=1e-12)
     np.testing.assert_array_equal(model.predict(case["inputs"], year=years), np.where(expected >= .5, 2, 1))
 print("Installed wheel verified: NumPy-only dependencies; scalar/mixed-year predictions match.")
+for feature_set in ("core", "hmda_only"):
+    benchmark = load_benchmark(feature_set)
+    inputs = {name: case["inputs"][name] for name in benchmark.required_columns}
+    assert set(benchmark.intercepts) == set(range(1990, 2017))
+    probabilities = benchmark.predict_proba_second_lien(inputs, year=case["years"])
+    assert np.isfinite(probabilities).all()
+    np.testing.assert_array_equal(benchmark.predict(inputs, year=case["years"]), np.where(probabilities >= .5, 2, 1))
+print("Both packaged benchmark resources load without external files or training dependencies.")
 """
 
 
@@ -123,7 +132,6 @@ def main():
                 sys.executable,
                 "-m",
                 "build",
-                "--wheel",
                 "--outdir",
                 str(work / "dist"),
                 str(source),
@@ -134,6 +142,13 @@ def main():
         wheels = list((work / "dist").glob("*.whl"))
         assert len(wheels) == 1, wheels
         with zipfile.ZipFile(wheels[0]) as archive:
+            approved = {
+                "hmda_seconds/benchmarks/core.json",
+                "hmda_seconds/benchmarks/hmda_only.json",
+            }
+            assert {
+                name for name in archive.namelist() if name.endswith(".json")
+            } == approved
             for name in archive.namelist():
                 path = Path(name)
                 assert not {"data", "output"} & set(path.parts), name
@@ -141,7 +156,6 @@ def main():
                     ".pkl",
                     ".pickle",
                     ".parquet",
-                    ".json",
                     ".csv",
                 }, name
         environment = work / "venv"

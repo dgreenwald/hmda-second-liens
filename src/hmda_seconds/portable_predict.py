@@ -9,6 +9,7 @@ import numpy as np
 
 FORMAT_VERSION = 1
 SPECIFICATION = "spline_lti__purchaser_type"
+HMDA_ONLY_SPECIFICATION = "hmda_only__spline_lti__none"
 CONTINUOUS = ("log_lti", "log_county_value_to_loan")
 CATEGORIES = {"purchaser_type": list(range(10)), "loan_type": [1, 2, 3, 4]}
 
@@ -38,13 +39,24 @@ def _basis(values, knots):
     return np.column_stack(columns)
 
 
-def _feature_names():
+def continuous_variables(specification):
+    """Return primitive continuous inputs for the two supported frozen models."""
+    if specification == SPECIFICATION:
+        return CONTINUOUS
+    if specification == HMDA_ONLY_SPECIFICATION:
+        return ("log_lti",)
+    raise ValueError("Unsupported logistic specification")
+
+
+def _feature_names(specification=SPECIFICATION):
+    continuous = continuous_variables(specification)
     names = [f"log_lti_rcs_{i}" for i in range(1, 4)]
-    names.append("log_county_value_to_loan")
+    names.extend(continuous[1:])
     for variable, levels in CATEGORIES.items():
         names.extend(f"{variable}_{level}" for level in levels[1:])
-    for variable in CONTINUOUS:
-        names.extend(f"{variable}_x_purchaser_type_{i}" for i in range(1, 10))
+    if specification == SPECIFICATION:
+        for variable in continuous:
+            names.extend(f"{variable}_x_purchaser_type_{i}" for i in range(1, 10))
     return names
 
 
@@ -60,20 +72,23 @@ class PortableLogisticModel:
     def _initialize(self, payload):
         if payload["format_version"] != FORMAT_VERSION:
             raise ValueError("Unsupported portable model format version")
-        if payload["specification"] != SPECIFICATION:
-            raise ValueError("Unsupported logistic specification")
+        self.specification = payload["specification"]
+        self.continuous = continuous_variables(self.specification)
+        self.required_columns = (*self.continuous, *CATEGORIES)
         if payload["category_levels"] != CATEGORIES:
             raise ValueError("Unsupported category levels or reference categories")
-        if payload["feature_names"] != _feature_names():
+        names = _feature_names(self.specification)
+        if payload["feature_names"] != names:
             raise ValueError("Incorrect feature ordering")
         self.coefficients = _array(
-            payload["coefficients"], "coefficients", (len(_feature_names()),)
+            payload["coefficients"], "coefficients", (len(names),)
         )
         self.knots = _array(payload["knots"], "knots", (4,))
         if np.any(np.diff(self.knots) <= 0):
             raise ValueError("Spline knots must be strictly increasing")
-        self.raw_location = _array(payload["raw_location"], "raw_location", (2,))
-        self.raw_scale = _array(payload["raw_scale"], "raw_scale", (2,))
+        shape = (len(self.continuous),)
+        self.raw_location = _array(payload["raw_location"], "raw_location", shape)
+        self.raw_scale = _array(payload["raw_scale"], "raw_scale", shape)
         self.basis_location = _array(payload["basis_location"], "basis_location", (3,))
         self.basis_scale = _array(payload["basis_scale"], "basis_scale", (3,))
         if np.any(self.raw_scale <= 0) or np.any(self.basis_scale <= 0):
@@ -97,7 +112,7 @@ class PortableLogisticModel:
     def _features(self, inputs):
         values = {}
         size = None
-        for name in (*CONTINUOUS, *CATEGORIES):
+        for name in self.required_columns:
             try:
                 array = _array(inputs[name], name)
             except KeyError as exc:
@@ -108,13 +123,13 @@ class PortableLogisticModel:
             values[name] = array
         standardized = [
             (values[name] - self.raw_location[i]) / self.raw_scale[i]
-            for i, name in enumerate(CONTINUOUS)
+            for i, name in enumerate(self.continuous)
         ]
         blocks = [
             (_basis(values["log_lti"], self.knots) - self.basis_location)
             / self.basis_scale,
-            standardized[1][:, None],
         ]
+        blocks.extend(x[:, None] for x in standardized[1:])
         indicators = {}
         for name, levels in CATEGORIES.items():
             if not np.isin(values[name], levels).all():
@@ -123,7 +138,10 @@ class PortableLogisticModel:
                 [values[name] == level for level in levels[1:]]
             ).astype(float)
             blocks.append(indicators[name])
-        blocks.extend(x[:, None] * indicators["purchaser_type"] for x in standardized)
+        if self.specification == SPECIFICATION:
+            blocks.extend(
+                x[:, None] * indicators["purchaser_type"] for x in standardized
+            )
         features = np.column_stack(blocks)
         if not np.isfinite(features).all():
             raise ValueError("Input magnitude caused non-finite transformed features")

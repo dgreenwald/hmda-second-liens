@@ -21,11 +21,17 @@ from .density_ratio.families.logistic import (
 from .logistic_features import FeatureSpecification
 
 
-def default_model_path() -> Path:
+def default_model_path(feature_set: str = "core") -> Path:
+    if feature_set not in ("core", "hmda_only"):
+        raise ValueError("feature_set must be core or hmda_only")
     return known_source_prior_model_path(
         config.TRAIN_YEARS,
-        FeatureSpecification("spline_lti", "purchaser_type"),
-        0.1,
+        FeatureSpecification(
+            "spline_lti",
+            "none" if feature_set == "hmda_only" else "purchaser_type",
+            feature_set=feature_set,
+        ),
+        1.0 if feature_set == "hmda_only" else 0.1,
     )
 
 
@@ -42,12 +48,26 @@ def _atomic_write(path: Path, content: bytes) -> None:
 
 def export_portable_logistic(
     model_file: str | Path | None = None,
-    annual_file: str | Path = config.TABLE_DIR / "step8_annual_plausibility.csv",
-    output_dir: str | Path = config.MODEL_DIR / "portable_logistic",
+    annual_file: str | Path | None = None,
+    output_dir: str | Path | None = None,
     years=tuple(config.APPLY_YEARS),
+    *,
+    feature_set: str = "core",
 ) -> Path:
     """Export existing fits and aggregates only; never fit or estimate shares."""
-    model_file = default_model_path() if model_file is None else Path(model_file)
+    default_path = default_model_path(feature_set)
+    model_file = default_path if model_file is None else Path(model_file)
+    restricted = feature_set == "hmda_only"
+    if annual_file is None:
+        annual_file = config.TABLE_DIR / (
+            "historical_model_family_annual.csv"
+            if restricted
+            else "step8_annual_plausibility.csv"
+        )
+    if output_dir is None:
+        output_dir = config.MODEL_DIR / (
+            "portable_logistic_hmda_only" if restricted else "portable_logistic"
+        )
     annual_file = Path(annual_file)
     if not model_file.exists():
         raise FileNotFoundError(
@@ -56,22 +76,40 @@ def export_portable_logistic(
         )
     if not annual_file.exists():
         raise FileNotFoundError(
-            f"Missing annual estimates: {annual_file}. Run make plausibility-checks "
-            "with the saved final fits before exporting."
+            f"Missing annual estimates: {annual_file}. Generate historical annual "
+            "estimates with the saved matching final fits before exporting."
         )
     model = load_known_source_prior_model(model_file)
     metadata = artifacts.load_metadata(model_file)
     if (
-        model.specification.name != portable_predict.SPECIFICATION
-        or model.regularization_c != 0.1
+        model.specification.name
+        != (
+            portable_predict.HMDA_ONLY_SPECIFICATION
+            if restricted
+            else portable_predict.SPECIFICATION
+        )
+        or model.regularization_c != (1.0 if restricted else 0.1)
         or tuple(model.train_years) != tuple(config.TRAIN_YEARS)
     ):
-        raise ValueError("Export requires the frozen C=0.1 final 2004–2007 core model")
+        raise ValueError(
+            f"Export requires the frozen final 2004–2007 {feature_set} model"
+        )
     if model.transformer.specification != model.specification:
         raise ValueError("Model and transformer specifications differ")
     annual_bytes = annual_file.read_bytes()
     # Read the same bytes whose digest is recorded in the portable provenance.
     annual = pd.read_csv(BytesIO(annual_bytes))
+    if {"predictor_set", "model_family"} <= set(annual):
+        annual = annual.loc[
+            annual["predictor_set"].eq("hmda_only" if restricted else "unrestricted")
+            & annual["model_family"].eq("logistic")
+        ].rename(
+            columns={
+                "model_id": "mixture_model_id",
+                "model_sha256": "mixture_model_sha256",
+                "optimizer_converged": "mixture_optimizer_converged",
+            }
+        )
     required = {
         "year",
         "mixture_share",
@@ -83,7 +121,7 @@ def export_portable_logistic(
     if not required <= set(annual):
         raise ValueError(
             "Annual estimates lack required diagnostics/model provenance; "
-            "rerun make plausibility-checks using the saved fits."
+            "regenerate historical estimates with model digests using the saved fits."
         )
     year_values = pd.to_numeric(annual["year"], errors="raise").to_numpy(float)
     if not np.isfinite(year_values).all() or np.any(
@@ -115,7 +153,25 @@ def export_portable_logistic(
         raise ValueError("Annual mixture optimization did not converge")
     if not selected["mixture_at_boundary"].isin([True, False]).all():
         raise ValueError("Annual boundary diagnostics must be boolean")
+    payload = portable_payload(model, metadata, selected)
+    payload["provenance"]["annual_table_sha256"] = hashlib.sha256(
+        annual_bytes
+    ).hexdigest()
+    serialized = serialize_payload(payload)
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    _atomic_write(
+        output_dir / "predict.py", Path(portable_predict.__file__).read_bytes()
+    )
+    model_path = output_dir / "model.json"
+    _atomic_write(model_path, serialized)
+    return model_path
+
+
+def portable_payload(model, metadata, selected: pd.DataFrame) -> dict:
+    """Encode a fitted model and already provenance-validated annual rows."""
     transformer = model.transformer
+    continuous = portable_predict.continuous_variables(model.specification.name)
     offset = float(model.ratio.log_ratio_offset)
     annual_payload = {}
     for year, row in selected.iterrows():
@@ -138,17 +194,14 @@ def export_portable_logistic(
         "coefficients": model.ratio.feature_coefficients.tolist(),
         "density_ratio_offset": offset,
         "knots": transformer.knots_["log_lti"].tolist(),
-        "raw_location": [
-            transformer.raw_location_[v] for v in portable_predict.CONTINUOUS
-        ],
-        "raw_scale": [transformer.raw_scale_[v] for v in portable_predict.CONTINUOUS],
+        "raw_location": [transformer.raw_location_[v] for v in continuous],
+        "raw_scale": [transformer.raw_scale_[v] for v in continuous],
         "basis_location": transformer.basis_location_["log_lti"].tolist(),
         "basis_scale": transformer.basis_scale_["log_lti"].tolist(),
         "annual": annual_payload,
         "provenance": {
             "model_id": model.model_id,
             "source_artifact_sha256": metadata.payload_sha256,
-            "annual_table_sha256": hashlib.sha256(annual_bytes).hexdigest(),
             "train_years": [int(year) for year in model.train_years],
             "regularization_c": model.regularization_c,
             "software_versions": metadata.software_versions,
@@ -157,14 +210,12 @@ def export_portable_logistic(
         },
     }
     portable_predict.PortableLogisticModel(payload)
-    serialized = (
+    return payload
+
+
+def serialize_payload(payload: dict) -> bytes:
+    """Validate and deterministically serialize a portable model."""
+    portable_predict.PortableLogisticModel(payload)
+    return (
         json.dumps(payload, indent=2, sort_keys=True, allow_nan=False) + "\n"
     ).encode()
-    output_dir = Path(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
-    _atomic_write(
-        output_dir / "predict.py", Path(portable_predict.__file__).read_bytes()
-    )
-    model_path = output_dir / "model.json"
-    _atomic_write(model_path, serialized)
-    return model_path

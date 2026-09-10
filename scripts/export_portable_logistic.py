@@ -11,15 +11,14 @@ from hmda_seconds.portable_export import export_portable_logistic
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model", type=Path)
+    parser.add_argument("--feature-set", choices=("core", "hmda_only"), default="core")
     parser.add_argument(
         "--annual-file",
         type=Path,
-        default=config.TABLE_DIR / "step8_annual_plausibility.csv",
     )
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=config.MODEL_DIR / "portable_logistic",
     )
     parser.add_argument(
         "--years", nargs="+", type=int, default=tuple(config.APPLY_YEARS)
@@ -31,6 +30,7 @@ def main() -> None:
             annual_file=args.annual_file,
             output_dir=args.output_dir,
             years=args.years,
+            feature_set=args.feature_set,
         )
     )
 

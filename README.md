@@ -12,10 +12,23 @@ plans, frozen protocols, implementation findings, and refactoring documentation 
 [`documentation/`](documentation/).
 
 For lightweight prediction, install this checkout with `pip install .`; NumPy is the
-only runtime dependency. Load a separately exported `model.json` using
-`from hmda_seconds.portable_predict import load_model`. Predictions use fixed coefficients
-and saved annual mixture intercepts. The standalone `predict.py` export also remains available.
+only runtime dependency. Version 0.2.0 bundles both benchmark models with annual
+intercepts for 1990–2016:
+
+```python
+from hmda_seconds import load_benchmark
+
+model = load_benchmark()  # unrestricted benchmark
+restricted = load_benchmark(feature_set="hmda_only")
+probabilities = restricted.predict_proba_second_lien(inputs, year=2001)
+```
+
+Predictions use fixed coefficients and saved annual mixture intercepts. Loading needs
+no downloads, Dropbox access, or separate model file. Explicit JSON loading through
+`hmda_seconds.portable_predict.load_model` and the standalone export remain available.
 See [portable prediction](documentation/PORTABLE_PREDICTION.md) for model artifacts and usage.
+Both the core and selected HMDA-only logistic models are supported. The HMDA-only
+model needs just `log_lti`, `purchaser_type`, and `loan_type`.
 
 For data preparation, estimation, diagnostics, and model export, install with
 `pip install ".[train]"`. For repository development and tests, use

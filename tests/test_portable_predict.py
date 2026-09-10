@@ -78,6 +78,131 @@ def exported(fitted_export, tmp_path):
     )
 
 
+@pytest.fixture
+def restricted_export(exported, tmp_path):
+    frame = exported[1].drop(columns="log_county_value_to_loan")
+    model_file = tmp_path / "restricted.pkl"
+    model = mixture.fit_known_source_prior_model(
+        frame,
+        FeatureSpecification("spline_lti", "none", feature_set="hmda_only"),
+        1.0,
+        model_file=model_file,
+    )
+    digest = artifacts.load_metadata(model_file).payload_sha256
+    rows = []
+    for year, target in ((2000, frame.iloc[:300]), (2001, frame.iloc[300:])):
+        estimate = mixture.estimate_mixture_share(model.log_ratio(target))
+        rows.append(
+            {
+                "year": year,
+                "predictor_set": "hmda_only",
+                "model_family": "logistic",
+                "model_id": model.model_id,
+                "model_sha256": digest,
+                "mixture_share": estimate.share,
+                "optimizer_converged": estimate.optimizer_converged,
+                "mixture_at_boundary": estimate.at_boundary,
+            }
+        )
+    # Same years for other families must neither collide nor supply intercepts.
+    rows.extend(
+        [
+            {**row, "model_family": "boosting", "mixture_share": 0.9}
+            for row in rows.copy()
+        ]
+    )
+    annual_file = tmp_path / "historical.csv"
+    pd.DataFrame(rows).to_csv(annual_file, index=False)
+    path = portable_export.export_portable_logistic(
+        model_file,
+        annual_file,
+        tmp_path / "restricted",
+        years=(2000, 2001),
+        feature_set="hmda_only",
+    )
+    return model, frame, path, model_file, annual_file
+
+
+def test_restricted_predictions_need_only_three_columns(restricted_export):
+    model, frame, path, _, _ = restricted_export
+    portable = portable_predict.load_model(path)
+    assert portable.required_columns == ("log_lti", "purchaser_type", "loan_type")
+    assert portable.coefficients.shape == (15,)
+    target = frame[list(portable.required_columns)].copy()
+    knots = model.transformer.knots_["log_lti"]
+    target.loc[:5, "log_lti"] = [knots[0] - 10, *knots, knots[-1] + 10]
+    payload = json.loads(path.read_text())
+    years = np.resize([2000, 2001], len(target))
+    expected = np.empty(len(target))
+    for year in (2000, 2001):
+        share = payload["annual"][str(year)]["mixture_share"]
+        np.testing.assert_allclose(
+            portable.predict_proba_second_lien(target, year=year),
+            mixture.adjusted_probability(model.log_ratio(target), share),
+            rtol=0,
+            atol=1e-12,
+        )
+        mask = years == year
+        expected[mask] = mixture.adjusted_probability(
+            model.log_ratio(target.loc[mask]), share
+        )
+    actual = portable.predict_proba_second_lien(target.to_dict("list"), year=years)
+    np.testing.assert_allclose(actual, expected, rtol=0, atol=1e-12)
+    np.testing.assert_array_equal(
+        portable.predict(target, year=years), np.where(expected >= 0.5, 2, 1)
+    )
+    np.testing.assert_allclose(
+        portable.predict_proba_second_lien(target.iloc[:5], year=years[:5]),
+        actual[:5],
+        rtol=0,
+        atol=1e-12,
+    )
+    np.testing.assert_array_equal(
+        portable.predict_proba_second_lien(
+            target.assign(log_county_value_to_loan=np.nan), year=years
+        ),
+        actual,
+    )
+    for column in portable.required_columns:
+        with pytest.raises(ValueError):
+            portable.predict(target.drop(columns=column), year=2000)
+    malformed = copy.deepcopy(payload)
+    malformed["specification"] = portable_predict.SPECIFICATION
+    with pytest.raises(ValueError, match="feature ordering"):
+        portable_predict.PortableLogisticModel(malformed)
+
+
+def test_restricted_export_validates_feature_set_and_provenance(restricted_export):
+    _, _, path, model_file, annual_file = restricted_export
+    with pytest.raises(ValueError, match="core model"):
+        portable_export.export_portable_logistic(
+            model_file, annual_file, path.parent, years=(2000, 2001)
+        )
+    annual = pd.read_csv(annual_file)
+    for invalid in (
+        annual.drop(columns="model_sha256"),
+        annual.assign(model_sha256="wrong"),
+        annual.assign(predictor_set="unrestricted"),
+    ):
+        invalid.to_csv(annual_file, index=False)
+        with pytest.raises(ValueError):
+            portable_export.export_portable_logistic(
+                model_file,
+                annual_file,
+                path.parent,
+                years=(2000, 2001),
+                feature_set="hmda_only",
+            )
+
+
+def test_restricted_defaults_do_not_overwrite_core():
+    assert "hmda_only__spline_lti__none__c_1" in str(
+        portable_export.default_model_path("hmda_only")
+    )
+    with pytest.raises(ValueError):
+        portable_export.default_model_path("unknown")
+
+
 def test_probabilities_match_original_and_do_not_depend_on_batch(exported):
     model, frame, path, _, _ = exported
     portable = portable_predict.load_model(path)
@@ -245,8 +370,9 @@ def test_provenance_controls_checkpoint_reuse():
 
 
 @pytest.mark.parametrize("packaged", [False, True])
-def test_copied_module_has_no_training_dependencies(exported, packaged):
-    path = exported[2]
+@pytest.mark.parametrize("fixture", ["exported", "restricted_export"])
+def test_copied_module_has_no_training_dependencies(request, fixture, packaged):
+    path = request.getfixturevalue(fixture)[2]
     code = """
 import importlib.abc
 import sys

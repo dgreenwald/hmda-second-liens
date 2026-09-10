@@ -20,11 +20,16 @@ MODEL_FAMILY_CLUSTER_FLAGS ?=
 HISTORICAL_MODEL_FAMILY_FLAGS ?=
 
 .PHONY: export-portable-logistic test-lightweight-install
+.PHONY: bundle-logistic-models
 
 .PHONY: install test generate-hmda-parquet-jobs download-zillow audit county-values county-value-coverage selection-data select-logistic generate-logistic-selection-coarse aggregate-logistic-selection-coarse generate-logistic-selection-refinement aggregate-logistic-selection-refinement generate-hmda-only-logistic-coarse aggregate-hmda-only-logistic-coarse generate-hmda-only-logistic-refinement aggregate-hmda-only-logistic-refinement generate-finalize-logistic-slurm submit-finalize-logistic finalize-logistic-selection generate-finalize-hmda-only-logistic-slurm select-mixture-logistic generate-density-ratio-pilot generate-first-order-logistic-grid generate-boosting-screen aggregate-boosting-screen generate-boosting-survivors aggregate-boosting-survivors generate-boosting-refinement aggregate-boosting-refinement finalize-boosting-selection generate-finalize-boosting-slurm submit-finalize-boosting finalize-boosting sync-selection-results generate-hmda-only-boosting-screen aggregate-hmda-only-boosting-screen generate-hmda-only-boosting-survivors aggregate-hmda-only-boosting-survivors generate-hmda-only-boosting-refinement aggregate-hmda-only-boosting-refinement finalize-hmda-only-boosting-selection generate-finalize-hmda-only-boosting-slurm submit-finalize-hmda-only-boosting finalize-hmda-only-boosting generate-model-family-comparison submit-model-family-comparison aggregate-model-family-comparison model-family-comparison-cluster model-family-comparison-cluster-submit historical-model-family-cluster historical-model-family-cluster-submit aggregate-historical-model-family evaluate-spline-purchaser-interactions diagnose-logistic-calibration diagnose-mixture-calibration diagnose-threshold-subgroups plausibility-checks evaluate-gradient-boosting evaluate-rf-mixture estimate-mixture-shares clean
 
 install:
 	$(PYTHON) -m pip install -e ".[train,dev]"
+
+bundle-logistic-models:
+	$(if $(strip $(RESULTS_ROOT)),,$(error RESULTS_ROOT is required))
+	$(PYTHON) $(SCRIPTS_DIR)/bundle_logistic_models.py --results-root "$(RESULTS_ROOT)"
 
 test-lightweight-install:
 	$(PYTHON) $(ROOT)/tests/check_lightweight_install.py
