@@ -36,7 +36,11 @@ count shares and mixture-adjusted probabilities. Read `documentation/MIGRATION_P
 - `tests/` — pytest, synthetic fixtures only (no real HMDA data required to run the suite).
 
 ## Build, Test, and Development Commands
-- `pip install -e ".[dev]"` — editable install with test tooling.
+- `pip install -e ".[train,dev]"` — editable research install with test tooling.
+- `pip install .` — NumPy-only portable prediction; data preparation, fitting, diagnostics,
+  and export require the `train` extra.
+- `make test-lightweight-install` — build and verify the wheel in a fresh prediction-only
+  environment; may download build dependencies and NumPy. Separate from ordinary pytest.
 - Depends on `dgreenwald-py-tools[datasets]` for the HMDA/FHFA/Zillow loaders.
 - Core logistic workflow: `make selection-data`, `make select-logistic`,
   `make diagnose-logistic-calibration`.

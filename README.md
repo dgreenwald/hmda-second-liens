@@ -11,6 +11,21 @@ rationale, and porting plan, and [AGENTS.md](AGENTS.md) for repository conventio
 plans, frozen protocols, implementation findings, and refactoring documentation live under
 [`documentation/`](documentation/).
 
+For lightweight prediction, install this checkout with `pip install .`; NumPy is the
+only runtime dependency. Load a separately exported `model.json` using
+`from hmda_seconds.portable_predict import load_model`. Predictions use fixed coefficients
+and saved annual mixture intercepts. The standalone `predict.py` export also remains available.
+See [portable prediction](documentation/PORTABLE_PREDICTION.md) for model artifacts and usage.
+
+For data preparation, estimation, diagnostics, and model export, install with
+`pip install ".[train]"`. For repository development and tests, use
+`pip install -e ".[train,dev]"` or `make install`. The `dev` extra alone contains tooling,
+not the research dependencies. Existing full environments remain usable.
+
+`make test-lightweight-install` builds a wheel and verifies prediction in a temporary
+environment with only the base runtime dependencies. It may download build dependencies
+and NumPy; ordinary `pytest tests/` does not run this installation check.
+
 Cluster execution uses immutable result shards and a generated Slurm array; see the
 [density-ratio cluster workflow](documentation/DENSITY_RATIO_CLUSTER.md). Generation never
 submits jobs automatically. Portable model variants using HMDA-only predictors follow the

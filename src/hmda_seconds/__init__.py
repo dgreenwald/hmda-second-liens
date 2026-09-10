@@ -1,3 +1,3 @@
-"""Random Forest classifier for imputing HMDA lien status, 1990-2016."""
+"""Portable logistic prediction and optional HMDA lien-status research tools."""
 
 __version__ = "0.1.0"
