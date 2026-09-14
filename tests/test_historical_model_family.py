@@ -76,6 +76,46 @@ def test_evaluate_year_retains_only_aggregate_model_and_support_records():
     }
 
 
+def test_historical_rows_retain_model_digests():
+    digests = {key: f"digest-{key}" for key in historical_model_family.MODEL_KEYS}
+    result = historical_model_family.evaluate_year(frame(), fake_models(), artifact_digests=digests)
+    for row in result["annual"]:
+        assert row["model_sha256"] == digests[(row["predictor_set"], row["model_family"])]
+
+
+def test_historical_reuse_requires_matching_model_digests(tmp_path, monkeypatch):
+    shard = synthetic_shard(2004)
+    models = {
+        (row["predictor_set"], row["model_family"]): SimpleNamespace(model_id=row["model_id"])
+        for row in shard["annual"]
+    }
+    digests = {key: f"digest-{key}" for key in models}
+
+    def load_models(path, *, artifact_digests):
+        artifact_digests.update(digests)
+        return models
+
+    monkeypatch.setattr(historical_model_family, "load_finalists", load_models)
+    manifest = historical_model_family.write_historical_manifest(
+        tmp_path / "manifest.json", comparison_manifest=tmp_path / "comparison.json",
+        years=(2004,), output_root=tmp_path,
+    )
+    destination = historical_model_family.historical_shard_path(tmp_path, 2004)
+    destination.parent.mkdir()
+    for value in (None, "wrong", "matching"):
+        for row in shard["annual"]:
+            if value is not None:
+                row["model_sha256"] = digests[(row["predictor_set"], row["model_family"])] if value == "matching" else value
+        destination.write_text(json.dumps(shard))
+        if value == "matching":
+            assert historical_model_family.run_manifest_year(manifest, 0) == destination
+        else:
+            original = destination.read_bytes()
+            with pytest.raises(FileExistsError, match="artifact digests"):
+                historical_model_family.run_manifest_year(manifest, 0)
+            assert destination.read_bytes() == original
+
+
 def test_evaluate_year_excludes_nonfinite_features_from_every_model():
     target = frame()
     target.loc[0, "log_lti"] = np.inf

@@ -1,0 +1,355 @@
+{
+  "annual": {
+    "1990": {
+      "at_boundary": false,
+      "intercept": -6.12713447699986,
+      "mixture_share": 0.040710660051205314,
+      "optimizer_converged": true
+    },
+    "1991": {
+      "at_boundary": false,
+      "intercept": -6.364111098434093,
+      "mixture_share": 0.03239940343964942,
+      "optimizer_converged": true
+    },
+    "1992": {
+      "at_boundary": false,
+      "intercept": -6.346535536156711,
+      "mixture_share": 0.032954943044499356,
+      "optimizer_converged": true
+    },
+    "1993": {
+      "at_boundary": false,
+      "intercept": -6.561174568253065,
+      "mixture_share": 0.026759469269634312,
+      "optimizer_converged": true
+    },
+    "1994": {
+      "at_boundary": false,
+      "intercept": -6.312348116563581,
+      "mixture_share": 0.03406202807880083,
+      "optimizer_converged": true
+    },
+    "1995": {
+      "at_boundary": false,
+      "intercept": -6.046003024709613,
+      "mixture_share": 0.04399987245615916,
+      "optimizer_converged": true
+    },
+    "1996": {
+      "at_boundary": false,
+      "intercept": -5.938101975163857,
+      "mixture_share": 0.04876861998945313,
+      "optimizer_converged": true
+    },
+    "1997": {
+      "at_boundary": false,
+      "intercept": -5.742693770572939,
+      "mixture_share": 0.058675699152387566,
+      "optimizer_converged": true
+    },
+    "1998": {
+      "at_boundary": false,
+      "intercept": -5.644411097045305,
+      "mixture_share": 0.06434549393524804,
+      "optimizer_converged": true
+    },
+    "1999": {
+      "at_boundary": false,
+      "intercept": -5.501417171245164,
+      "mixture_share": 0.07350975094678486,
+      "optimizer_converged": true
+    },
+    "2000": {
+      "at_boundary": false,
+      "intercept": -5.247837235203244,
+      "mixture_share": 0.09275882094967174,
+      "optimizer_converged": true
+    },
+    "2001": {
+      "at_boundary": false,
+      "intercept": -5.268626131604785,
+      "mixture_share": 0.0910240881175204,
+      "optimizer_converged": true
+    },
+    "2002": {
+      "at_boundary": false,
+      "intercept": -5.279504417964958,
+      "mixture_share": 0.09012802817641327,
+      "optimizer_converged": true
+    },
+    "2003": {
+      "at_boundary": false,
+      "intercept": -5.264361107168661,
+      "mixture_share": 0.09137758677888125,
+      "optimizer_converged": true
+    },
+    "2004": {
+      "at_boundary": false,
+      "intercept": -4.848566283306155,
+      "mixture_share": 0.13225860885457175,
+      "optimizer_converged": true
+    },
+    "2005": {
+      "at_boundary": false,
+      "intercept": -4.362279871915104,
+      "mixture_share": 0.19863490377262233,
+      "optimizer_converged": true
+    },
+    "2006": {
+      "at_boundary": false,
+      "intercept": -4.214293494794552,
+      "mixture_share": 0.2232438522026818,
+      "optimizer_converged": true
+    },
+    "2007": {
+      "at_boundary": false,
+      "intercept": -4.876428494190587,
+      "mixture_share": 0.12909360056048758,
+      "optimizer_converged": true
+    },
+    "2008": {
+      "at_boundary": false,
+      "intercept": -6.513283137054712,
+      "mixture_share": 0.028035398993698238,
+      "optimizer_converged": true
+    },
+    "2009": {
+      "at_boundary": false,
+      "intercept": -7.282523814008937,
+      "mixture_share": 0.01318904271959206,
+      "optimizer_converged": true
+    },
+    "2010": {
+      "at_boundary": false,
+      "intercept": -7.208746479194404,
+      "mixture_share": 0.014184564778071418,
+      "optimizer_converged": true
+    },
+    "2011": {
+      "at_boundary": false,
+      "intercept": -6.960175283703778,
+      "mixture_share": 0.018114827449495618,
+      "optimizer_converged": true
+    },
+    "2012": {
+      "at_boundary": false,
+      "intercept": -7.037955490794899,
+      "mixture_share": 0.01678200337998713,
+      "optimizer_converged": true
+    },
+    "2013": {
+      "at_boundary": false,
+      "intercept": -7.221929575010478,
+      "mixture_share": 0.01400139652839156,
+      "optimizer_converged": true
+    },
+    "2014": {
+      "at_boundary": false,
+      "intercept": -7.101946870582367,
+      "mixture_share": 0.015758131395542673,
+      "optimizer_converged": true
+    },
+    "2015": {
+      "at_boundary": false,
+      "intercept": -7.122267416392889,
+      "mixture_share": 0.015446045221572174,
+      "optimizer_converged": true
+    },
+    "2016": {
+      "at_boundary": false,
+      "intercept": -7.043386310851555,
+      "mixture_share": 0.0166926276177085,
+      "optimizer_converged": true
+    }
+  },
+  "basis_location": [
+    0.5963078425336068,
+    0.9891851394240063,
+    0.021803380296573034
+  ],
+  "basis_scale": [
+    0.7743371291504437,
+    0.7857247599616377,
+    0.03678035974868036
+  ],
+  "category_levels": {
+    "loan_type": [
+      1,
+      2,
+      3,
+      4
+    ],
+    "purchaser_type": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9
+    ]
+  },
+  "coefficients": [
+    -0.7416696968890052,
+    -3.892787912326816,
+    2.7951803210497457,
+    1.1070556775374714,
+    -4.02386109015106,
+    -2.284696836380497,
+    -5.334599484590245,
+    -0.06895341145637417,
+    -2.133089476068778,
+    -0.6665341163339018,
+    -0.6355169649621945,
+    -1.345031067237918,
+    -0.3387917964413542,
+    -3.337954931005299,
+    -2.4737952561827616,
+    -2.7453336196322162,
+    -0.1605753380721873,
+    0.6620185373710205,
+    -0.14491485185887276,
+    -0.18927157793911376,
+    -1.6171345970771986,
+    -0.3323736482572985,
+    -0.3590466736976483,
+    -1.0448128087009554,
+    -0.09364650915797085,
+    0.9386147102028893,
+    0.46006054064067725,
+    0.5744426269367077,
+    0.29448182051400196,
+    1.8686125681453716,
+    0.9505973425129898,
+    0.9553679583547188,
+    1.140910088896326,
+    1.1447865404240227
+  ],
+  "density_ratio_offset": -2.967431713434565,
+  "feature_names": [
+    "log_lti_rcs_1",
+    "log_lti_rcs_2",
+    "log_lti_rcs_3",
+    "log_county_value_to_loan",
+    "purchaser_type_1",
+    "purchaser_type_2",
+    "purchaser_type_3",
+    "purchaser_type_4",
+    "purchaser_type_5",
+    "purchaser_type_6",
+    "purchaser_type_7",
+    "purchaser_type_8",
+    "purchaser_type_9",
+    "loan_type_2",
+    "loan_type_3",
+    "loan_type_4",
+    "log_lti_x_purchaser_type_1",
+    "log_lti_x_purchaser_type_2",
+    "log_lti_x_purchaser_type_3",
+    "log_lti_x_purchaser_type_4",
+    "log_lti_x_purchaser_type_5",
+    "log_lti_x_purchaser_type_6",
+    "log_lti_x_purchaser_type_7",
+    "log_lti_x_purchaser_type_8",
+    "log_lti_x_purchaser_type_9",
+    "log_county_value_to_loan_x_purchaser_type_1",
+    "log_county_value_to_loan_x_purchaser_type_2",
+    "log_county_value_to_loan_x_purchaser_type_3",
+    "log_county_value_to_loan_x_purchaser_type_4",
+    "log_county_value_to_loan_x_purchaser_type_5",
+    "log_county_value_to_loan_x_purchaser_type_6",
+    "log_county_value_to_loan_x_purchaser_type_7",
+    "log_county_value_to_loan_x_purchaser_type_8",
+    "log_county_value_to_loan_x_purchaser_type_9"
+  ],
+  "format_version": 1,
+  "knots": [
+    -0.9490805546971459,
+    0.5630940523117475,
+    1.0133147081562146,
+    1.4853852637641216
+  ],
+  "provenance": {
+    "annual_artifact_binding": "not_asserted; source snapshot predates required annual artifact digests",
+    "model_id": "logistic__spline_lti__purchaser_type__c_0p1__train_2004_2007",
+    "regularization_c": 0.1,
+    "snapshot_association": "model_id_and_comparison_configuration",
+    "software_versions": [
+      [
+        "hmda-second-liens",
+        "0.1.0"
+      ],
+      [
+        "numpy",
+        "2.5.1"
+      ],
+      [
+        "pandas",
+        "2.3.3"
+      ],
+      [
+        "scikit-learn",
+        "1.9.0"
+      ],
+      [
+        "scipy",
+        "1.18.0"
+      ]
+    ],
+    "source_artifact_sha256": "587238052e7450a166ec97b3dcd3131e49f3e519701d73f15d85d092119d78ca",
+    "source_files_sha256": {
+      "historical_model_family/shards/year_1990.json": "1a29c00e388cca7a93c0306d87dc2862d26ae02990ec56c607e190ae83e92015",
+      "historical_model_family/shards/year_1991.json": "4693999261b699b6e53ce3c01425ea8c04fff277d625311d15498832d162d683",
+      "historical_model_family/shards/year_1992.json": "20946714d2c3ae0c1a3c5ce93d098cdb232954f79cd59f0e68ef59f49ed2f96e",
+      "historical_model_family/shards/year_1993.json": "df0137987a47f6b3ae8b7d1c8185036a47c4ef9a966f903c53411e95e326eefd",
+      "historical_model_family/shards/year_1994.json": "a4db8b7f1267b40d6510a3e0587ebd17bdd7ab4c59fbc5f82189e8d7ebb81faa",
+      "historical_model_family/shards/year_1995.json": "a6b8b47d7853d835092ae0c32ec9da5eb10e0103fefee65987cdcc37a83487aa",
+      "historical_model_family/shards/year_1996.json": "d2ef6a3fa2501186e0d8318f3c2567850374db368113b784d24c3978847a913b",
+      "historical_model_family/shards/year_1997.json": "fde0d38cb617ad64f0a20a8a24a4776675ded3cf115190cc2d8e1eabfcf45579",
+      "historical_model_family/shards/year_1998.json": "ef9e8ab0ab1c847c89cc1cc7307a124d9efed0d19eb1d05424801b0c27e2ade5",
+      "historical_model_family/shards/year_1999.json": "5606a4401bd8ccd7e393499676fd3cc5b2ccbac07622e8803b36503a3b0fcf3f",
+      "historical_model_family/shards/year_2000.json": "04c3d7e98e1e3b4258ae3f8e23771dba216dcd561bdc01be28f971d4a9ca0d50",
+      "historical_model_family/shards/year_2001.json": "068ba3bafb61b8e5c56b3f9434f927e07d310f9e9489c3f66d6a3050e612c1d7",
+      "historical_model_family/shards/year_2002.json": "439611e51fcda9e762ecde81014de3a3fca8665f7f19ef2d6b29209706cbd034",
+      "historical_model_family/shards/year_2003.json": "688e042b858b5813f160df22bd8e315ae94103f12cafc11c7d431f8a93fd6d52",
+      "historical_model_family/shards/year_2004.json": "46f504e6c4f53a03a6bb989af96c35dc69a3e0c6adb717b46cd5f542916179fd",
+      "historical_model_family/shards/year_2005.json": "4b17faefef99750d216086d7d76197261a74e791d4358e9a1cc5f2806cb17a98",
+      "historical_model_family/shards/year_2006.json": "946b7588e25fd432728f5da61b8ccf8d37bcd3552d4d62b674cf36541f4ecc7f",
+      "historical_model_family/shards/year_2007.json": "1e31e07f6d42c8429ec3744eb91d4b5eaeab7657cfeb3af28899359a9e9171eb",
+      "historical_model_family/shards/year_2008.json": "0ca502453705ce1ee64f3867c46f086fb415de7488d9bdc009297f71ff5d9121",
+      "historical_model_family/shards/year_2009.json": "43de2ae2d8925ca6bc5343a8b028f7ab5b0efe8131c0892a6353721953014c6b",
+      "historical_model_family/shards/year_2010.json": "e2de30be8c534f5e104622a74194f2b4006a9d6be258a2c2ee3a4ce7cd2a59bf",
+      "historical_model_family/shards/year_2011.json": "4e3cd56b95d61a41a08a66116e05f12487a1079d62c59acaff292d3f014e0502",
+      "historical_model_family/shards/year_2012.json": "544f42da2c753d3660694eedd06c1c6992cbb68fc0cea0cc695da91f04f9ce25",
+      "historical_model_family/shards/year_2013.json": "e810f18ca48be7bbe715eee47f3f0b5fa543074b01c263e18879fdb0a9022d91",
+      "historical_model_family/shards/year_2014.json": "90851403cde7d492399a5fc19838aea261301d342a52e74372bd3feef5d9ed90",
+      "historical_model_family/shards/year_2015.json": "13a0dfbef93341cdca8bf251d4d2e234cf3cd93218a8d73f3405e65e49230591",
+      "historical_model_family/shards/year_2016.json": "794e72ea2eade8d87a9bbdd1890feea6b3d668d63db736299ba8f912a6522fd0",
+      "model_family_comparison/models/logistic/spline_lti__purchaser_type/known_source_prior__spline_lti__purchaser_type__c_0p1__train_2004_2007.pkl": "587238052e7450a166ec97b3dcd3131e49f3e519701d73f15d85d092119d78ca",
+      "model_family_comparison/models/logistic/spline_lti__purchaser_type/known_source_prior__spline_lti__purchaser_type__c_0p1__train_2004_2007.pkl.metadata.json": "1c1902cfdbfed30e85c6b62925199f3e52d6bf3e423244adf2d1016a7f67ff93",
+      "model_family_comparison/shards/model_family_comparison_forward__logistic__spline_lti__purchaser_type__train_2004_2007__886facdbfc42.json": "03832befed191cf673f8a876dbf604daecea52fe9e37d131850de8d2a1dd3657",
+      "tables/historical_model_family_annual.csv": "617158f1ae498a6e05f04c7fa4602a731ab723cbe396cb45feda15c97656b33b"
+    },
+    "source_prior": "one_half",
+    "train_years": [
+      2004,
+      2005,
+      2006,
+      2007
+    ],
+    "weighting": "equal_class_mass_within_source_year"
+  },
+  "raw_location": [
+    0.5963078425319401,
+    0.4950160080357456
+  ],
+  "raw_scale": [
+    0.7743371291526154,
+    0.8047684428901958
+  ],
+  "specification": "spline_lti__purchaser_type"
+}

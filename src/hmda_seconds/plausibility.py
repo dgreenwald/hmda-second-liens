@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 
 from . import clean, config, mixture, model_selection
-from .density_ratio import checkpoints, evaluation
+from .density_ratio import artifacts, checkpoints, evaluation
 
 REPORTING_START_YEAR = 2004
 HISTORICAL_REQUIRED_COLUMNS = [
@@ -112,13 +112,21 @@ def run_historical_plausibility(
         fold_model_dir,
     )
     known = mixture.load_known_source_prior_model(known_path)
+    provenance = {
+        "mixture_model_id": known.model_id,
+        "mixture_model_sha256": artifacts.load_metadata(known_path).payload_sha256,
+        "raw_model_sha256": artifacts.load_metadata(raw_model_file).payload_sha256,
+    }
     if raw.transformer.feature_names_ != known.transformer.feature_names_:
         raise RuntimeError("Final raw and mixture feature columns differ")
 
     annual_file = output_dir / "step8_annual_plausibility.csv"
     annual = checkpoints.read_csv(annual_file)
     requested = tuple(years)
-    missing = [year for year in _application_order(requested) if not _year_complete(annual, year)]
+    missing = [
+        year for year in _application_order(requested)
+        if not _year_complete(annual, year, provenance)
+    ]
     county_values = None
     for year in missing:
         selection_file = selection_data_dir / f"hmda{year}.parquet"
@@ -140,6 +148,7 @@ def run_historical_plausibility(
         )
         row.update(
             {
+                **provenance,
                 "mixture_optimizer_converged": estimate.optimizer_converged,
                 "mixture_at_boundary": estimate.at_boundary,
                 "mixture_em_difference": estimate.share - estimate.em_share,
@@ -247,5 +256,10 @@ def _application_order(years: tuple[int, ...]) -> list[int]:
     ]
 
 
-def _year_complete(annual: pd.DataFrame, year: int) -> bool:
-    return checkpoints.rows_present(annual, {"year": year})
+def _year_complete(annual: pd.DataFrame, year: int, provenance: dict) -> bool:
+    if not {"year", *provenance} <= set(annual):
+        return False
+    rows = annual.loc[annual["year"].eq(year)]
+    return len(rows) == 1 and all(
+        rows[column].eq(value).all() for column, value in provenance.items()
+    )

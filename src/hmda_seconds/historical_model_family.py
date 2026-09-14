@@ -82,7 +82,11 @@ def historical_shard_path(output_root: str | Path, year: int) -> Path:
     return Path(output_root) / "shards" / f"year_{int(year)}.json"
 
 
-def load_finalists(comparison_manifest: str | Path) -> dict[tuple[str, str], object]:
+def load_finalists(
+    comparison_manifest: str | Path,
+    *,
+    artifact_digests: dict | None = None,
+) -> dict[tuple[str, str], object]:
     """Load the four persisted 2004--2007 comparison fits."""
     planned = [expand_job_paths(item) for item in read_manifest(comparison_manifest)]
     forward = [item for item in planned if item.fold.direction == "forward"]
@@ -121,6 +125,8 @@ def load_finalists(comparison_manifest: str | Path) -> dict[tuple[str, str], obj
             else load_boosting_model
         )
         models[key] = loader(record.artifact_path)
+        if artifact_digests is not None:
+            artifact_digests[key] = metadata.payload_sha256
     if set(models) != set(MODEL_KEYS):
         raise ValueError("Historical finalists are incomplete")
     return models
@@ -129,6 +135,8 @@ def load_finalists(comparison_manifest: str | Path) -> dict[tuple[str, str], obj
 def evaluate_year(
     frame: pd.DataFrame,
     models: Mapping[tuple[str, str], object],
+    *,
+    artifact_digests: Mapping[tuple[str, str], str] | None = None,
 ) -> dict[str, object]:
     """Score one transient annual frame and return aggregate-only records."""
     if frame.empty or frame["year"].nunique() != 1:
@@ -163,6 +171,8 @@ def evaluate_year(
             "probability_below_001": float((probability < 0.01).mean()),
             "probability_above_099": float((probability > 0.99).mean()),
         }
+        if artifact_digests is not None:
+            row["model_sha256"] = artifact_digests[(predictor_set, family)]
         row.update(_quantile_columns(log_ratio, "log_ratio"))
         row.update(_quantile_columns(probability, "probability"))
         actual = row["actual_second_share"]
@@ -283,7 +293,10 @@ def run_manifest_year(manifest: str | Path, job_index: int) -> Path:
         raise IndexError("Historical job index is out of range")
     year = int(years[job_index])
     destination = historical_shard_path(payload["output_root"], year)
-    models = load_finalists(payload["comparison_manifest"])
+    artifact_digests = {}
+    models = load_finalists(
+        payload["comparison_manifest"], artifact_digests=artifact_digests
+    )
     if destination.exists():
         existing = json.loads(destination.read_text())
         _validate_year_shard(existing, year)
@@ -291,6 +304,17 @@ def run_manifest_year(manifest: str | Path, job_index: int) -> Path:
         observed_ids = {row["model_id"] for row in existing["annual"]}
         if observed_ids != expected_ids:
             raise FileExistsError(f"Conflicting historical shard {destination}")
+        if any(
+            row.get("model_sha256") != artifact_digests[
+                (row["predictor_set"], row["model_family"])
+            ]
+            for row in existing["annual"]
+        ):
+            raise FileExistsError(
+                f"Historical shard lacks matching artifact digests: {destination}. "
+                "Use a new historical output root to regenerate with saved fits; "
+                "existing immutable shards are not overwritten."
+            )
         return destination
     selection_file = Path(payload["selection_data_dir"]) / f"hmda{year}.parquet"
     if selection_file.exists():
@@ -300,7 +324,7 @@ def run_manifest_year(manifest: str | Path, job_index: int) -> Path:
         frame = plausibility.load_historical_application_year(
             year, Path(payload["hmda_data_dir"]), county_values
         )
-    result = evaluate_year(frame, models)
+    result = evaluate_year(frame, models, artifact_digests=artifact_digests)
     return _atomic_json(destination, result, replace=False)
 
 

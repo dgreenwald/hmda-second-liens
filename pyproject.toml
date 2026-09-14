@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hmda-second-liens"
-version = "0.1.0"
+version = "0.2.0"
 description = "Validated classifiers for imputing HMDA lien status, 1990-2016."
 authors = [
     {name = "Dan Greenwald", email = "greenw2@gmail.com"},
@@ -13,19 +13,28 @@ license = {file = "LICENSE"}
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "dgreenwald-py-tools[datasets]>=0.2.4,<1.0",
-    "python-dotenv>=1.0",
-    "scikit-learn>=1.2,<2.0",
-    "scipy>=1.10",
+    "numpy>=1.24",
 ]
 
 [project.urls]
 Repository = "https://github.com/dgreenwald/hmda-second-liens"
 
 [project.optional-dependencies]
+train = [
+    "dgreenwald-py-tools[datasets]>=0.2.4,<1.0",
+    "python-dotenv>=1.0",
+    "scikit-learn>=1.2,<2.0",
+    "scipy>=1.10",
+    "pandas",
+    "matplotlib",
+    "pyarrow",
+    "joblib",
+    "threadpoolctl",
+]
 dev = [
     "pytest>=7.0",
     "ruff>=0.6",
+    "build>=1.0",
 ]
 
 [tool.setuptools]
@@ -33,6 +42,9 @@ package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+hmda_seconds = ["benchmarks/core.json", "benchmarks/hmda_only.json"]
 
 [tool.pytest.ini_options]
 addopts = "-ra"
