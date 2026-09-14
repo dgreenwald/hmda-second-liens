@@ -1,0 +1,164 @@
+\newif\ifcomments
+\commentsfalse
+
+\documentclass[letterpaper,12pt,usenames,dvipsnames]{article}
+
+\frenchspacing
+
+%\usepackage[margin=1in, includefoot]{geometry}
+
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{amsthm}
+\usepackage{changepage}
+\usepackage{setspace}
+\usepackage{mathpazo}
+\usepackage{float}
+\usepackage{pdflscape}
+\usepackage{siunitx}
+\usepackage[margin=1in]{geometry}
+\usepackage[colorlinks=true, allcolors=black]{hyperref}
+\usepackage{amsfonts}
+\usepackage{booktabs}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{tabularray}
+\UseTblrLibrary{booktabs}
+\usepackage[longnamesfirst]{natbib}
+
+\newcommand{\sumn}{\sum_{i=1}^{n}}
+\newcommand{\sumt}{\sum_{t=0}^\infty}
+\newcommand{\sums}{\sum_{t=0}^\infty \sum_{s^t}}
+\newcommand{\sumj}{\sum_{j=-\infty}^\infty}
+\newcommand{\fsum}{\frac{1}{n} \sum_{i=1}^n}
+\newcommand{\prodn}{\prod_{i=1}^{n}}
+\newcommand{\intf}{\int_{-\infty}^{\infty}}
+\newcommand{\intz}{\int_0^\infty}
+\newcommand{\limf}{\lim_{n\to \infty}}
+\newcommand{\I}{\mathbb{I}}
+\newcommand{\N}{\mathbb{N}}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\E}{\mathbb{E}}
+%\newcommand{\E}{E}
+\newcommand{\Z}{\mathbb{Z}}
+\newcommand{\C}{\mathbb{C}}
+\newcommand{\M}{\mathcal{M}}
+\newcommand{\bp}{\mathbb{P}}
+\newcommand{\F}{\mathcal{F}}
+\newcommand{\Cost}{\text{Cost}}
+%\newcommand{\pay}{\text{pay}}
+\newcommand{\cH}{\mathcal{H}}
+\newcommand{\Var}{\text{Var}}
+\newcommand{\Cov}{\text{Cov}}
+\newcommand{\topr}{\xrightarrow{  p  }}
+\newcommand{\tod}{\xrightarrow{  d  }}
+\newcommand{\blambda}{\bar{\lambda}}
+\newcommand{\htheta}{\hat{\theta}}
+\newcommand{\hbeta}{\hat{\beta}}
+\newcommand{\hmu}{\hat{\mu}}
+\newcommand{\hF}{\hat{F}}
+\newcommand{\sss}{\subsubsection*}
+\newcommand{\simiid}{\stackrel{\text{iid}}{\sim}}
+\newcommand{\eqas}{\stackrel{\text{a.s.}}{=}}
+\newcommand{\eps}{\varepsilon}
+\newcommand{\re}{\text{Re}}
+\newcommand{\im}{\text{Im}}
+\newcommand{\cond}{ \; \Bigr| \; }
+\newcommand{\maxtil}{ \widetilde{\max} }
+
+\newcommand{\dxdy}[2]{\frac{\partial #1}{\partial #2}}
+\newcommand{\ind}[1]{\mathbf{1}_{\{ #1 \} }}
+\newcommand{\til}[1]{\tilde{#1}}
+\newcommand{\noth}[1]{#1}
+
+\newcommand{\pbrac}[1]{\left( #1 \right)}
+\newcommand{\Bigpbrac}[1]{\Bigl( #1 \Bigr)}
+\newcommand{\Biggpbrac}[1]{\Biggl( #1 \Biggr)}
+\newcommand{\bigpbrac}[1]{\bigl( #1 \bigr)}
+\newcommand{\biggpbrac}[1]{\biggl( #1 \biggr)}
+
+\newcommand{\sbrac}[1]{\left[ #1 \right]}
+\newcommand{\Bigsbrac}[1]{\Bigl[ #1 \Bigr]}
+\newcommand{\Biggsbrac}[1]{\Biggl[ #1 \Biggr]}
+\newcommand{\bigsbrac}[1]{\bigl[ #1 \bigr]}
+\newcommand{\biggsbrac}[1]{\biggl[ #1 \biggr]}
+
+\newcommand{\cbrac}[1]{\left\{ #1 \right\}}
+\newcommand{\Bigcbrac}[1]{\Bigl\{ #1 \Bigr\}}
+\newcommand{\biggcbrac}[1]{\biggl\{ #1 \biggr\}}
+\newcommand{\bigcbrac}[1]{\bigl\{ #1 \bigr\}}
+\newcommand{\Biggcbrac}[1]{\Biggl\{ #1 \Biggr\}}
+
+\newcommand{\pfrac}[2]{\pbrac{\frac{#1}{#2}}}
+
+\newcommand{\undertext}[2]{\underbrace{#1}_{\text{#2}}}
+
+\newcommand{\tblrsection}[2]{\midrule \SetCell[c=#1]{c} \textit{#2} \\ \midrule}
+\newcommand{\tablesection}[2]{\midrule \multicolumn{#1}{c}{\textit{#2}} \\ \midrule}
+
+\newcommand{\todo}[1]{\ifcomments{\color{red} [#1]}\fi}
+
+\newcommand{\round}[2]{%
+	\qty[round-mode=places, round-precision=#2]{#1}%
+}
+
+\allowdisplaybreaks[1]
+
+%\numberwithin{equation}{section}
+
+\theoremstyle{definition}
+\newtheorem{thm}{Theorem}
+\newtheorem{claim}{Claim}
+\newtheorem{prop}[thm]{Proposition}
+\newtheorem{defn}{Definition}
+\newtheorem{cor}{Corollary}
+\newtheorem{ex}{Example}
+\newtheorem{exer}{Exercise}
+\newtheorem{lem}[thm]{Lemma}
+\newtheorem{ob}{Observation}
+\newtheorem{fact}{Fact}
+
+\begin{document}
+
+%\ifnotaer
+%\small
+%\fi
+% \footnotesize
+
+%\def\plotdir{C:/Users/Dan/Dropbox/output/frm}
+\def\drop{/home/dan/Dropbox}
+\IfFileExists{localpaths.tex}{\input{localpaths.tex}}{}
+
+\newenvironment{tablenotes}{\begin{spacing}{1.0} \footnotesize \emph{Note:} }{\end{spacing}}
+\newenvironment{figurenotes}{\begin{spacing}{1.0} \footnotesize \emph{Note:} }{\end{spacing}}
+
+\title{{TBC}} 
+\author{Daniel L. Greenwald\thanks{Leonard N. Stern School of Business
+		Kaufman Management Center, 44 West Fourth Street, New York, NY 10012; Email: \texttt{dlg340@stern.nyu.edu}.}
+	}
+\date{}
+
+\maketitle
+
+\begin{abstract}
+\noindent \todo{TBC}
+\end{abstract}
+
+  
+%\clearpage
+\section{Introduction}
+
+\todo{TBC}
+
+\begin{spacing}{1}
+  {\small
+    \bibliographystyle{jpe}
+	\bibliography{\drop/bib/master}
+  }
+\end{spacing}
+
+%\clearpage
+%\appendix
+%\renewcommand\thefigure{\thesection.\arabic{figure}}
+
+\end{document}
