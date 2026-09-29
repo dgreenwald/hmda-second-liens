@@ -235,3 +235,11 @@ __marimo__/
 # Derived cache written by py_tools.datasets.fhfa.load() next to the
 # vendored HPI_AT_BDL_county.xlsx source file; regenerate, don't commit.
 /data/public/fhfa*.parquet
+
+# LaTeX
+*.aux
+*.bbl
+*.blg
+*.out
+*.pdf
+*.synctex.gz
