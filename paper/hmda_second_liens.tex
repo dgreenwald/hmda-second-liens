@@ -111,6 +111,8 @@
 \newcommand{\tablesection}[2]{\midrule \multicolumn{#1}{c}{\textit{#2}} \\ \midrule}
 
 \newcommand{\todo}[1]{\ifcomments{\color{red} [#1]}\fi}
+% Proposed text awaiting review: red when comments are on, plain text otherwise.
+\newcommand{\proposed}[1]{\ifcomments{\color{red}#1}\else#1\fi}
 
 \newcommand{\round}[2]{%
 	\qty[round-mode=places, round-precision=#2]{#1}%
@@ -169,17 +171,20 @@
 
 \subsection{Home Mortgage Disclosure Act Data}\label{sec:hmda-data}
 
-Our main data source is the HMDA Loan Application Register (LAR) files for 1990--2016, which contain the near-universe of originated home mortgages in the US. We obtain these files from three sources: \todo{FILL IN SOURCE BY YEAR}.
+My main data source is the HMDA Loan Application Register (LAR) files for 1990--2016, which contain the near-universe of originated home mortgages in the US. I obtain the files for 1990--2014 from the electronic records of the Federal Financial Institutions Examination Council (FFIEC) held by the National Archives and Records Administration \citep{nara2026hmda}, and the files for 2015--2016 from the Consumer Financial Protection Bureau's historic HMDA data \citep{cfpb2026hmda}. 
+%Each provider uses its own file layout, so I map all files to a common set of variable names and codes before applying any sample restrictions.
 
-This dataset includes the loan amount, applicant income, loan type, purchaser type (the type of institution that purchased the loan), the loan outcome (i.e., whether it was originated), and the state and county in which the property resides. Beginning in 2004, these data also include an indicator for whether a loan is a second lien. However, prior to 2004, this field is not available, motivating the estimation below.
+%\todo{The \texttt{py\_tools} loader resolves 1990--2014 to NARA and 2015--2016 to CFPB, i.e., two sources rather than three. If a third source (e.g., FFIEC) was used for some years, adjust. I added bib entries \texttt{nara2026hmda} and \texttt{cfpb2026hmda} to hmda.bib.}
 
-For my analysis, I restrict the sample to originated owner-occupied purchase loans, and drop any observations with missing values for loan amount, applicant income, loan type, purchaser type, loan outcome, state, and county. I further restrict the sample to observations that: (i) are located in the 50 states or District of Columbia; (ii) have strictly positive values for applicant income and loan amount, and (iii) have one of the four standard loan types (conventional, FHA, VA, and FSA/RHS) \todo{make sure these acronyms are defined somewhere}. From 2004 on, I also require a non-missing value for second-lien status. These restrictions lead to a final sample of 90.2 million observations from an original pool of 542.4 million observations, with most of the attrition (to 95.5 million) stemming from my restriction to originated owner-occupied purchase loans.
+In all years, these data include the loan amount, applicant income, loan type, purchaser type (the type of institution that purchased the loan), the loan outcome (i.e., whether it was originated), and the state and county in which the property resides. Beginning in 2004, these data also include an indicator for whether a loan is a second lien. However, prior to 2004, this field is not available, motivating the estimation below.
+
+For my analysis, I restrict the sample to originated owner-occupied purchase loans, and drop any observations with missing values for loan amount, applicant income, loan type, purchaser type, loan outcome, state, and county. I further restrict the sample to observations that: (i) are located in the 50 states or District of Columbia; (ii) have strictly positive values for applicant income and loan amount, and (iii) have one of the four standard loan types (conventional loans; loans insured by the Federal Housing Administration, FHA; loans guaranteed by the Department of Veterans Affairs, VA; and loans guaranteed by the Farm Service Agency or Rural Housing Service, FSA/RHS). From 2004 on, I also require a non-missing value for second-lien status. These restrictions lead to a final sample of 90.2 million observations from an original pool of 542.4 million observations, with most of the attrition (to 95.5 million) stemming from my restriction to originated owner-occupied purchase loans.
 
 \subsection{County House Price Data}\label{sec:fhfa-data}
 
 While the loan-to-income ratio can be constructed directly from HMDA data, the prevailing value of properties may also be informative for determining the distribution of typical first and second lien sizes in a given area. Since I cannot match transactions with the sales price for that particular property, I instead merge in data on house prices at the county level.
 
-For this house price series, I use two complementary sources. First, I use the all-transactions county house price index from the FHFA \citep{bogin2019local,fhfa2026county}. This source has excellent temporal coverage, and is available for all years of our 1990--2016 sample. However, these price indices are normalized separately by county, and cannot be directly interpreted using a dollar value. To address this, I incorporate the Zillow Home Value Index (ZHVI), obtained from \cite{zillow2026zhvi}. This index is scaled in dollar amounts, corresponding to the median home value in each county, but is not available prior to \todo{FILL}.
+For this house price series, I use two complementary sources. First, I use the all-transactions county house price index from the FHFA \citep{bogin2019local,fhfa2026county}. This source has excellent temporal coverage, and is available for all years of our 1990--2016 sample. However, these price indices are normalized separately by county, and cannot be directly interpreted using a dollar value. To address this, I incorporate the Zillow Home Value Index (ZHVI), obtained from \cite{zillow2026zhvi}. This index is scaled in dollar amounts, corresponding to the median home value in each county, but is not available prior to 2000, making it unsuitable to use over my full sample.
 
 Using these series, I create a combined house price index
 \begin{align}
@@ -188,186 +193,11 @@ Using these series, I create a combined house price index
 \end{align}
 where $c$ denotes county, $t$ denotes time, $v^{FHFA}_{c,t}$ is the FHFA house price index, and $a_c$ is a scaling factor designed to convert the FHFA series from a normalized index to dollar levels. These scaling factors are in turn computed as
 \begin{equation}
-	\log a_c = \frac{1}{T_{max} - T_{min}} \sum_{t=T_{min}}^{T_{max}}
+	\log a_c = \frac{1}{|\mathcal{T}_c|} \sum_{t \in \mathcal{T}_c}
 	\pbrac{\log v^{ZHVI}_{c,t} - \log v^{FHFA}_{c,t}},
 	\label{eq:county-value}
 \end{equation}
-where $T_{min}$ and $T_{max}$ are the start and end years of the overlapping sample over which both indices are vailable. Combined, equations \eqref{eq:house-price-index} and \eqref{eq:county-value} ensure that the final series $v_{c,t}$ has the same relative values as in the FHFA series, but has an average log level equal to that of the ZHVI index when both series are available.
-
-\ifclaude
-
-The analysis uses the annual national Home Mortgage Disclosure Act (HMDA) Loan/\allowbreak Application
-Register (LAR) files for 1990--2016 \citep{avery2007opportunities}. Each record describes a
-mortgage application or purchased loan reported by a covered lender, including the loan amount,
-applicant income, loan type, the type of institution that purchased the loan within the
-calendar year, and the property's state and county. The field that motivates this paper is lien
-status. Following the 2002 amendments to Regulation C, lenders began reporting whether an
-originated loan is secured by a first or a subordinate lien with the 2004 data; the field does
-not exist in earlier LARs. We therefore treat 2004--2016 as labeled years and 1990--2003 as
-unlabeled application years. Provider-specific file layouts are mapped to a single versioned
-variable schema before any sample restriction is applied.
-\todo{Document the source vintage used for each year (NARA, FFIEC, CFPB) once raw-file
-sourcing is final; see data/README.md. State why 2017, the last pre-2018-format year, is
-excluded.}
-
-The target population is originated, owner-occupied, home-purchase loans. From the raw LAR we
-retain records whose action is an origination, whose purpose is home purchase, and whose
-property is owner occupied. We then require (i) a state in the 50 states or the District of
-Columbia and a nonmissing county code; (ii) positive, nonmissing applicant income and loan
-amount, both of which HMDA reports in thousands of dollars; (iii) one of the four standard loan
-types (conventional, FHA, VA, and FSA/RHS); and (iv) a county-value match, described in
-Section~\ref{sec:data_predictors}. In labeled years we also require a nonmissing lien status.
-Within this sample the reported field takes only the first-lien and subordinate-lien values, so
-no further restriction on the label is needed.
-
-Across the 27 years, the origination, purpose, and occupancy restrictions retain 95.45 million
-of 542.38 million raw records. Missing or invalid geography removes a further 3.2 percent of
-these loans, and missing or invalid income or loan amount removes 2.4 percent, leaving 90.23
-million eligible loans before the county-value merge. The merge is nearly complete in the
-labeled period: it retains 99.75 percent of eligible 2004--2007 loans and at least 99.47
-percent in every year from 2000 onward. Coverage is lower early in the sample---96.42 percent
-of eligible loans in 1990---because many low-volume counties lack a scaled county value.
-Table~\ref{tab:sample} reports representative years, and Appendix~\ref{app:data} reports the
-complete annual attrition.
-
-A final restriction requires finite values of all four predictors, so every model in the paper
-scores exactly the same observations. It binds only because of missing purchaser type in three
-historical years, removing 700 of 1,664,933 otherwise eligible loans in 1990 (0.042 percent),
-195 of 1,662,241 in 1991 (0.012 percent), and three of 4,189,285 in 1999. We apply this
-restriction identically to every model and do not impute.
-
-\subsection{County value and predictors}\label{sec:data_predictors}
-
-The one predictor not taken directly from HMDA is a county-level house value. The Federal
-Housing Finance Agency (FHFA) all-transactions county house price index
-\citep{bogin2019local,fhfa2026county} provides long annual histories, but it is a repeat-sales
-appreciation index whose level is normalized separately for each county. It therefore measures
-price changes, not levels that are comparable across counties. The Zillow Home Value Index
-(ZHVI) provides dollar levels but begins later for many counties \citep{zillow2026zhvi}. We
-combine the two by scaling each county's FHFA history to the Zillow dollar level. Let $H_{ct}$
-be the FHFA index for county $c$ in year $t$ and $Z_{ct}$ the calendar-year average of the
-monthly all-homes, middle-tier, smoothed and seasonally adjusted ZHVI, computed only when all
-twelve months are present. Over the set $\mathcal{T}_c$ of years in which both series are
-available,
-\begin{equation}
-	\log a_c = \frac{1}{|\mathcal{T}_c|} \sum_{t \in \mathcal{T}_c}
-	\pbrac{\log Z_{ct} - \log H_{ct}},
-	\qquad
-	\widehat{V}_{ct} = a_c H_{ct}.
-	\label{eq:county_value}
-\end{equation}
-The scale $a_c$ is the least-squares constant in logs. It is invariant to the arbitrary FHFA
-normalization and gives each overlap year equal weight. We require at least one overlap year,
-which yields 2,690 scaled counties. A loan is matched if its county has a positive FHFA
-observation in the loan's own origination year; we do not require a balanced county panel.
-Because the year-specific merge retains 99.72 percent of first liens and 99.92 percent of
-second liens in 2004--2007, it raises the observed source-period second-lien share by only
-0.03 percentage point (from 17.67 to 17.70 percent). Appendix~\ref{app:data} compares
-alternative scale estimators and explains why we do not use a balanced panel, which excludes
-more loans and is more strongly correlated with lien status.
-
-The models use four primitive predictors, defined in Panel~B of Table~\ref{tab:sample}:
-\begin{enumerate}
-	\item the log loan-to-income ratio, $x_1 = \log(L/I)$, where $L$ is the loan amount and
-	$I$ is applicant income;
-	\item the log county-value-to-loan ratio, $x_2 = \log(\widehat{V}_{ct}/L)$, with $L$
-	measured in dollars;
-	\item purchaser type, the ten HMDA codes for the type of institution that purchased the loan
-	within the calendar year of origination, where code 0 denotes a loan that was not sold in
-	that year; and
-	\item loan type: conventional, FHA, VA, or FSA/RHS.
-\end{enumerate}
-The first two predictors capture the size of the loan relative to the borrower's income and to
-typical local house values. A subordinate lien that finances part of a purchase is usually
-small on both scales. The county-value ratio is a county-level collateral proxy, not a
-property-specific loan-to-value ratio. Purchaser and loan type capture the distinct secondary-
-market and program channels through which first and subordinate liens flow. The 2004 Regulation
-C revisions also changed the purchaser-type categories, adding a separate code for private
-securitizations. We use the reported codes without recoding.
-\todo{Verify the pre- and post-2004 purchaser-type crosswalk and decide whether codes 5--9
-should be harmonized or whether the change should be discussed as a transport risk.}
-
-We deliberately exclude geography, calendar year, local house-price growth, lender identity,
-and HMDA edit flags. Each of these could proxy for period-specific market structure, such as the
-2000s securitization and financing regime, rather than for a relationship that plausibly
-transports back to the 1990s.
-
-The HMDA-only model variants omit $x_2$ and use only the three predictors observed directly in
-HMDA. They are estimated and evaluated on the identical sample, including the county-value
-merge, so any difference between the unrestricted and HMDA-only results reflects the predictor
-set rather than the population.
-
-\subsection{Estimands and released objects}\label{sec:data_estimand}
-
-Let $\mathcal{S}_t$ denote the eligible sample in year $t$, with $N_t = |\mathcal{S}_t|$
-loans, and let $y_i = 1$ if loan $i$ is secured by a subordinate lien and $y_i = 0$ if it is a
-first lien. The primary estimand is the annual second-lien origination-count share
-\begin{equation}
-	\pi_t = \frac{1}{N_t} \sum_{i \in \mathcal{S}_t} y_i .
-	\label{eq:estimand}
-\end{equation}
-Every eligible loan receives weight one, and the share is defined relative to the eligible
-sample, not all raw HMDA records. We observe $\pi_t$ for $t \geq 2004$ and estimate it for
-$1990 \leq t \leq 2003$.
-
-We also release two loan-level objects. The first is the mixture-adjusted probability
-$\tilde{p}_{it} = \widehat{\Pr}_t(y_i = 1 \mid x_i)$ defined in
-Section~\ref{sec:est_mixture}. Its sum over $\mathcal{S}_t$ is the model-implied expected
-number of second liens, and by construction its mean equals the estimated share
-$\hat{\pi}_t$. The second is a hard classification, $\hat{y}_{it} = \ind{\tilde{p}_{it} \geq
-0.5}$, which corresponds to equal misclassification costs. The 0.5 threshold is fixed and is not
-tuned by year or subgroup. The hard classification is a convenience output: it discards
-within-loan uncertainty, and the share of loans it classifies as second liens need not equal
-$\hat{\pi}_t$.
-
-Several related quantities are distinct from $\pi_t$. Dollar-weighted shares, outstanding
-second-lien balances, stocks of home equity lines of credit (HELOCs), and home-equity borrowing
-for refinancing or home improvement all measure different objects, and none of them restricts
-to owner-occupied purchase originations. Before 2018, Regulation C also made reporting of
-HELOCs optional, so purchase-money second liens structured as credit lines may be incompletely
-represented in HMDA in every year of our sample.
-\todo{Confirm the pre-2018 HELOC reporting rule and whether it interacts with the 2004 change.}
-
-\begin{table}[htbp]
-	\centering
-	\caption{Sample Construction and Variable Definitions}
-	\label{tab:sample}
-	\small
-	\textit{Panel A: Sample attrition, representative years}\\[0.5ex]
-	\inputpaper{table1_sample_attrition.tex}
-
-	\vspace{2ex}
-	\textit{Panel B: Outcome and predictors}\\[0.5ex]
-	\begin{tabular}{p{0.2\linewidth} p{0.44\linewidth} p{0.26\linewidth}}
-		\toprule
-		Variable & Definition and transformation & Source \\
-		\midrule
-		Second lien, $y$ & 1 if subordinate lien, 0 if first lien; observed 2004--2016 only
-		& HMDA lien status \\
-		$\log(\text{LTI})$, $x_1$ & $\log(\text{loan amount}/\text{applicant income})$;
-		restricted cubic spline in logistic models & HMDA \\
-		$\log(\text{CV}/\text{L})$, $x_2$ & $\log(\widehat{V}_{ct}/\text{loan amount})$, with
-		$\widehat{V}_{ct}$ from \eqref{eq:county_value}; omitted in HMDA-only models
-		& FHFA county HPI scaled to Zillow ZHVI; HMDA \\
-		Purchaser type & Ten HMDA codes; reference: not sold in the calendar year (0)
-		& HMDA \\
-		Loan type & Conventional (reference), FHA, VA, FSA/RHS & HMDA \\
-		\bottomrule
-	\end{tabular}
-
-	\vspace{1ex}
-	\begin{tablenotes}
-		Panel A reports cumulative attrition for 1990, 2003, 2004, and 2016 and totals for
-		1990--2003 and 2004--2016. The eligible sample consists of originated, owner-occupied,
-		home-purchase loans in the 50 states and the District of Columbia with valid county,
-		positive income and loan amount, a standard loan type, and a year-specific county-value
-		match. Appendix Table~\ref{tab:app_attrition} reports every year.
-	\end{tablenotes}
-	\todo{Generate Panel A from output/tables/sample\_attrition\_by\_year.csv and
-	county\_value\_coverage\_by\_year.csv.}
-\end{table}
-
-\fi
+where $\mathcal{T}_c$ is the set of years that contain 12 months of observations for both series in county $c$, and $|\mathcal{T}_c|$ is the number of such years. Combined, equations \eqref{eq:house-price-index} and \eqref{eq:county-value} ensure that the final series $v_{c,t}$ has the same relative values as in the FHFA series, but has an average log level equal to that of the ZHVI index when both series are available.
 
 \section{Estimation}\label{sec:estimation}
 
@@ -398,12 +228,14 @@ To operationalize the intuition from the example above, we consider a mixture mo
 		\tilde{f}_1(x) h_t(x) &\text{ for } y = 1.
 	\end{cases}
 \end{equation}
-Equation \eqref{eq:mixture-cases} simply states that the distribution of predictors follows one distribution when $y = 0$ and another when $y = 1$. The key identification assumption, embedded in the lack of time subscripts on $\tilde{f}_0$ and $\tilde{f}_1$, is that while the overall distribution of predictors may vary in common through $h_t$, the \emph{relative} densities of these distributions across the possible values of $y_{i,t}$ do not vary over time. This implies that the relative density can be written as 
+Equation \eqref{eq:mixture-cases} simply states that the distribution of predictors follows one distribution when $y = 0$ and another when $y = 1$. The key identification assumption, embedded in the lack of time subscripts on $\tilde{f}_0$ and $\tilde{f}_1$, is that while the overall distribution of predictors may vary in common through $h_t$, the \emph{relative} densities of these distributions across the possible values of $y_{i,t}$ do not vary over time. This is known as the \emph{prior-shift} assumption in the classification literature \citep{saerens2002adjusting,gonzalez2017review,lipton2018detecting}, and is beneficial for applications like this one where the underlying share of positives exhibits substantial variation over time.
+
+Under these assumptions, the relative density can be written as
 \begin{align}
 	\label{eq:r-definition}
-	r(x) &\equiv \frac{f_t(x | y = 1)}{f_t(x | y = 0)} = \frac{\tilde{f}_1(x)}{\tilde{f}_0(x)}
+	r(x) &\equiv \frac{f_t(x | y = 1)}{f_t(x | y = 0)} = \frac{\tilde{f}_1(x)}{\tilde{f}_0(x)},
 \end{align}
-and is invariant to the period $t$.
+which is invariant to the period $t$.
 To frame this in the context of the HMDA data, equation \eqref{eq:mixture-cases} allows loan-to-income ratios to be higher on average in periods of high house prices, but imposes that the density of a given loan-to-income ratio among second liens is always a constant multiple of its density among first liens.
 
 Under this mixture model, the overall predictor density is given by
@@ -422,31 +254,61 @@ where the constant term does not vary with $\pi_t$. Given an estimate of $r(x)$,
 \end{align*}
 which intuitively ensures consistency between the fitted prevalence parameter $\hat{\pi}_t$ and the estimated total prevalence conditional on that parameter.
 
-To obtain the required estimate of $r(x)$, note that by Bayes' rule we have
+To obtain the required estimate of $r(x)$, we will approximate $\log r(x) \simeq \eta(x; \theta)$ for a parameteric function $\eta$. We will then estimate $\theta$ to maximize the weighted penalized log likelihood function
 \begin{align}
-	\label{eq:bayes-rule}
-%	\Pr(y \mid x) &= \frac{\Pr(x \mid y) \Pr(y)}{\Pr(x)}.
-	\Pr(x \mid y) &= \frac{\Pr(y \mid x) \Pr(x)}{\Pr(y)}.
+	\label{eq:likelihood-q}
+	\ell(\theta) &= \sum_i w_i \Bigsbrac{ y_i \log q(x_i; \theta) + (1 - y_i) \log \bigpbrac{1 - q(x_i; \theta)}} - K(\theta).
 \end{align}
-Applying \eqref{eq:bayes-rule} for $y \in \{0, 1\}$ and dividing cancels the $\Pr(x)$ terms, yielding
-\begin{align}
-	\label{eq:r-derivation}
-	r(x) = \frac{\Pr(x \mid y = 1)}{\Pr(x \mid y = 0)} = \frac{\Pr(y = 1 \mid x)}{\Pr(y = 0 \mid x)} \times \frac{\Pr(y = 0)}{\Pr(y = 1)}.
-\end{align}
-Thus, to compute $r(x)$, we only need to estimate the two fractions on the far right of \eqref{eq:r-derivation}. While each of these fractions depends on the current date $t$, their product does not, allowing us to estimate $r(x)$ using any sample satisfying \eqref{eq:mixture-cases}. For the first fraction, the predictive estimation directly provides the fitted probability $\widehat{\Pr}(y \mid x)$, allowing for immediate evaluation. For the second fraction, a simple approach would be to proxy for these probabilities using the sample shares of second liens over the labeled sample. As explained below, because I use multi-year training samples for which this second fraction will vary, I instead reweight the observations so that these probabilities are equal in the reweighted data in each year, canceling this fraction entirely. With this estimate of $\hat{r}(x)$ in hand, we can evaluate $\hat{\pi}_t$ in each period. 
+where
+\begin{equation}
+	q(x; \theta) = \frac{\exp(\eta(x; \theta))}{1 + \exp(\eta(x; \theta))}
+\end{equation}
+is the logistic transform of $\eta$, and $K(\theta)$ is a penalty function, and the weights are
+\begin{equation}
+	w_i = \begin{cases}
+		\frac{1}{2 \pi_t} &\text{ for } y_i = 1 \\
+		\frac{1}{2 (1 - \pi_t)} &\text{ for } y_i = 0,
+	\end{cases}
+	\label{eq:weights}
+\end{equation}
+where $t$ is the year that loan $i$ was originated, and $\pi_t$ is the observed second-lien share in that year.
+%where $q(x_i; \theta) = \exp(\eta(x; \theta)) / (1 + \exp(\eta(x; \theta)))$, and $K(\theta)$ is a penalty function. I show in Appendix \todo{fill} that \eqref{eq:likelihood-q} is equivalent to the simpler expression
+%\begin{align}
+%	\label{eq:likelihood-eta}
+%	\ell(\theta) &= \sum_i w_i \Bigsbrac{ y_i \eta(x_i; \theta) - \log\bigpbrac{1 + \exp(\eta(x_i; \theta))}} - K(\theta).
+%\end{align}
+Using this procedure, we can estimate $\eta(x; \hat{\theta})$ and recover our estimate $\hat{r}(x) = \exp(\eta(x; \hat{\theta}))$.
 
-For the final step, we recover the absolute probabilities given our estimates of $\hat{r}(x)$ and $\hat{\pi}_t$. Applying these estimates to \eqref{eq:r-derivation}, as well as the identities $\widehat{Pr}_t(y = 0 \mid x) = 1 - \widehat{Pr}_t(y = 1 \mid x)$, $\widehat{Pr}_t(y = 1) = \hat{\pi}_t$ and $\widehat{Pr}_t(y = 0) = 1 - \hat{\pi}_t$, we obtain
-\begin{align*}
-	\hat{r}(x) &= \frac{\widehat{Pr}_t(y = 1 \mid x)}{1 - \widehat{Pr}_t(y = 1 \mid x)} \times \frac{1 - \hat{\pi}_t}{\hat{\pi}_t},
-\end{align*}
-which can be manipulated to yield
+%To obtain the required estimate of $r(x)$, note that by Bayes' rule we have
+%\begin{align}
+%	\label{eq:bayes-rule}
+%%	\Pr(y \mid x) &= \frac{\Pr(x \mid y) \Pr(y)}{\Pr(x)}.
+%	\Pr(x \mid y) &= \frac{\Pr(y \mid x) \Pr(x)}{\Pr(y)}.
+%\end{align}
+%Applying \eqref{eq:bayes-rule} for $y \in \{0, 1\}$ and dividing cancels the $\Pr(x)$ terms, yielding
+%\begin{align}
+%	\label{eq:r-derivation}
+%	r(x) = \frac{\Pr(x \mid y = 1)}{\Pr(x \mid y = 0)} = \frac{\Pr(y = 1 \mid x)}{\Pr(y = 0 \mid x)} \times \frac{\Pr(y = 0)}{\Pr(y = 1)}.
+%\end{align}
+%Thus, to compute $r(x)$, we only need to estimate the two fractions on the far right of \eqref{eq:r-derivation}. While each of these fractions depends on the current date $t$, their product does not, allowing us to estimate $r(x)$ using any sample satisfying \eqref{eq:mixture-cases}. For the first fraction, the predictive estimation directly provides the fitted probability $\widehat{\Pr}(y \mid x)$, allowing for immediate evaluation. For the second fraction, a simple approach would be to proxy for these probabilities using the sample shares of second liens over the labeled sample. As explained below, because I use multi-year training samples for which this second fraction will vary, I instead reweight the observations so that these probabilities are equal in the reweighted data in each year, canceling this fraction entirely. With this estimate of $\hat{r}(x)$ in hand, we can evaluate $\hat{\pi}_t$ in each period. 
+
+For the final step, we recover the absolute probabilities on the unlabeled sample given our estimates of $\hat{r}(x)$ and $\hat{\pi}_t$
+%. Applying these estimates to \eqref{eq:r-derivation}, as well as the identities $\widehat{Pr}_t(y = 0 \mid x) = 1 - \widehat{Pr}_t(y = 1 \mid x)$, $\widehat{Pr}_t(y = 1) = \hat{\pi}_t$ and $\widehat{Pr}_t(y = 0) = 1 - \hat{\pi}_t$, we obtain
+%\begin{align*}
+%	\hat{r}(x) &= \frac{\widehat{Pr}_t(y = 1 \mid x)}{1 - \widehat{Pr}_t(y = 1 \mid x)} \times \frac{1 - \hat{\pi}_t}{\hat{\pi}_t},
+%\end{align*}
+%which can be manipulated to yield
+using
 \begin{align}
 	\label{eq:p-recovery}
 	\hat{p}_t(x) &\equiv \widehat{Pr}_t(y = 1 \mid x) = \frac{\hat{\pi}_t \hat{r}(x)}{1 - \hat{\pi}_t + \hat{\pi}_t \hat{r}(x)}.
 \end{align}
-Equation \eqref{eq:p-recovery} computes the final probabilities of second lien status, completing the estimation procedure. 
+Equation \eqref{eq:p-recovery} computes the final probabilities of second lien status in our pre-2004 sample, completing the estimation procedure. 
 
 To tie this back to the intuition in Section \ref{sec:intuition}, note that the naive approach would instead evaluate \eqref{eq:p-recovery} using the average prevalence in the labeled data ($\bar{\pi}_{L}$) in place of the period-specific prevalence $\hat{\pi}_t$. As a result, the naive approach will overstate the probabilities when the training sample features a higher prevalence of second liens the target sample ($\bar{\pi}_{L} > \hat{\pi}_t$), and understate them when $\bar{\pi}_{L} < \hat{\pi}_t$, exactly as found in my out of sample testing. However, the presence of the period-specific estimate $\hat{\pi}_t$ in \eqref{eq:p-recovery} corrects for this bias. Returning to the infection example, observing a distribution of $x$ consistent with a vanishing value of $\hat{\pi}_t$ will correctly predict trivial probabilities of infection on the low-prevalence island, even for values of temperature ($x$) that would be consistent with a substantial probability of infection on the high-prevalence island.
+
+\section{Parametric Implementations}
+\label{sec:parametric-implementations}
 
 \subsection{Main Specification: Logistic Regression}
 \label{sec:logistic-model}
@@ -461,21 +323,27 @@ For my benchmark estimates, I choose a logistic regression model. As shown below
 	\label{eq:logit}
 \end{equation}
 where
-\begin{equation}
-		\eta(x) 
-	\equiv \log \pfrac{p(x)}{1 - p(x)} 
-\end{equation}
-is the log-odds ratio, $x_1$ is the log loan-to-income ratio, $x_2$ is the log loan-to-local-house-price ratio, $g(x_1)$ is a cubic spline in the log loan-to-income ratio with knots at the
+%\begin{equation}
+%		\eta(x) 
+%	\equiv \log \pfrac{p(x)}{1 - p(x)} 
+%\end{equation}
+%is the log-odds ratio, 
+$x_1$ is the log loan-to-income ratio, $x_2$ is the log loan-to-local-house-price ratio, $g(x_1)$ is a cubic spline in the log loan-to-income ratio with knots at the
 the 5th, 35th, 65th, and 95th percentiles of the source sample \citep{harrell2015regression},
 $D^{P}_{p}$ are indicators for purchaser types other than ``not sold,'' and $D^{L}_{l}$ are
-indicators for loan types other than conventional. This specification allows for a flexible nonlinear relationship in the log loan-to-income ratio, purchaser-type and loan-type fixed effects, as well as linear terms in the log loan-to-income and loan-to-local-house-price ratios that are allowed to vary with purchaser type. \todo{explain how specification was chosen}
+indicators for loan types other than conventional. 
+
+This specification allows for a flexible nonlinear relationship in the log loan-to-income ratio, purchaser-type and loan-type fixed effects, as well as linear terms in the log loan-to-income and loan-to-local-house-price ratios that are allowed to vary with purchaser type. 
+
+\proposed{I chose this specification, along with the penalty parameter $C$ in \eqref{eq:ridge-objective} below, using the reverse-time validation design described in Section~\ref{sec:est_validation}. I fixed the candidate set and the selection criterion in advance, and I made the choice before examining any historical estimates. The candidate set is a grid of twelve specifications. Each includes both continuous predictors and both sets of categorical indicators. The grid crosses three functional forms for the continuous predictors (linear in both, a cubic spline in $x_1$ only, and cubic splines in both) with four interaction structures (none, continuous predictors interacted with loan type, continuous predictors interacted with purchaser type, and both). For each specification, I search over $C \in \{10^{-4}, 10^{-2}, 1, 100\}$ and then over the adjacent decades around the best of these values. The selected pair minimizes the out-of-sample Brier score, averaged first equally within each backward horizon and then equally across horizons. The results are fairly clear-cut. Interacting the continuous predictors with purchaser type delivers the largest improvement, and a spline in $x_1$ adds to it. By contrast, a spline in $x_2$ or additional interactions with loan type slightly worsen out-of-sample performance. The selected specification lowers the Brier score from 0.0695 for the linear specification without interactions to 0.0653. The full selection results are reported in Appendix~\todo{ref}.}
+\todo{Selection used the Brier score of the \emph{raw} predicted probabilities, not the mixture-adjusted ones (boosting, by contrast, was selected on mixture-adjusted Brier). Decide whether to state this explicitly and, if so, why.}
 
 We estimate $\beta = (\gamma, \delta, \theta, \lambda, \mu,
 \kappa)$ and the unpenalized intercept $\alpha$ by weighted ridge logistic regression
 \begin{equation}
 	(\hat{\alpha}, \hat{\beta}) = \arg\max_{\alpha, \beta} \;
-	\sum_{i} w_i \Bigsbrac{y_i p(x_i)
-		- (1 - y_i) (1 - p(x_i))}
+	\sum_{i} w_i \Bigsbrac{y_i \log p(x_i)
+		- (1 - y_i) \log(1 - p(x_i))}
 	- \frac{1}{2C} \|\beta\|^2.
 %	\qquad C = 0.1 ,
 	\label{eq:ridge-objective}
@@ -484,20 +352,37 @@ where
 \begin{equation}
 	p(x) = \frac{1}{1 + e^{-\eta(x)}}.
 \end{equation}
-The first term on the right hand side of \eqref{eq:ridge} is a weighted version of the log likelihood function, while the second term is a quadratic penalty on the parameter values, the strength of which is scaled by the hyperparameter $C$.
+\todo{The bracketed term in \eqref{eq:ridge-objective} is missing logs: the log likelihood is $y_i \log p(x_i) + (1 - y_i) \log\bigl(1 - p(x_i)\bigr)$.}
+The first term on the right hand side of \eqref{eq:ridge-objective} is a weighted version of the log likelihood function, while the second term is a quadratic penalty on the parameter values, the strength of which is scaled by the hyperparameter $C$.
 
-For the weights $w_i$, we choose 
-\begin{equation}
+For the weights $w_i$, I choose
+\proposed{\begin{equation}
 	w_i = \begin{cases}
-		\frac{N_1}{2N} &\text{ for } y_i = 1 \\
-		\frac{N_0}{2N} &\text{ for } y_i = 0
+		\frac{N_t}{2N_{t,1}} &\text{ for } y_i = 1 \\
+		\frac{N_t}{2N_{t,0}} &\text{ for } y_i = 0,
 	\end{cases}
+	\label{eq:weights}
 \end{equation}
-where $N$ is the total number of observations, $N_1 = \sum_i y_i$ is the sum of observations with $y_i = 1$ and $N_0 = N - N_1$ is the sum of observations with $y_i = 0$. This weighting scheme ensures that first and second liens each account for half of each year's total weight \todo{EXPLAIN THIS WEIGHTING SCHEME AND WHY IT IS GOOD}.
+where $t$ is the origination year of loan $i$, $N_t$ is the total number of observations in year $t$, $N_{t,1}$ is the number of second liens in year $t$, and $N_{t,0} = N_t - N_{t,1}$ is the number of first liens in year $t$.} \todo{The original formula, $N_1/(2N)$ and $N_0/(2N)$ pooled over the sample, was inverted (it would upweight the majority class). It also computed the weights on the pooled sample, whereas the code computes them within each source year.} This weighting scheme ensures that first and second liens each account for half of each year's total weight\proposed{, while each year keeps its share of the total weight in the training sample.
+
+This weighting accomplishes two things. First, it lets the fitted model deliver the density ratio $r(x)$ directly. By \eqref{eq:r-derivation}, $r(x)$ equals the fitted odds $\Pr(y = 1 \mid x) / \Pr(y = 0 \mid x)$ divided by the prior odds $\Pr(y = 1) / \Pr(y = 0)$ in the training sample. In the reweighted sample these prior odds equal one, so the fitted log odds $\hat{\eta}(x)$, including the intercept, estimate $\log r(x)$ directly, and no separate estimate of the training-sample prevalence is required. 
+
+Second, balancing the classes within each year, rather than in the pooled sample, keeps variation in prevalence across training years from contaminating the estimated density ratio. The second-lien share varies substantially within the 2004--2007 training window, from 13.5\% in 2004 to 22.2\% in 2006, and the common component of the predictor distribution, $h_s(x)$, shifts over the same years. To see why this matters, note that under \eqref{eq:mixture-cases}, the population odds in a training sample pooled across years $s$, with class weights $\omega_{s,y}$, are
+\begin{equation*}
+	\frac{\sum_s \omega_{s,1} N_{s,1} \tilde{f}_1(x) h_s(x)}{\sum_s \omega_{s,0} N_{s,0} \tilde{f}_0(x) h_s(x)}
+	= r(x) \times \frac{\sum_s \omega_{s,1} N_{s,1} h_s(x)}{\sum_s \omega_{s,0} N_{s,0} h_s(x)}.
+\end{equation*}
+In general, the second factor depends on $x$. It would, for example, be high for predictor values that were relatively common in 2005--2006, when second liens were most prevalent, and the model would wrongly attribute this high prevalence to those predictor values. This happens both without weights and with class weights that balance only the pooled sample. Under the within-year weights \eqref{eq:weights}, $\omega_{s,y} N_{s,y} = N_s / 2$ for both classes, so the second factor equals one for every $x$, and the fitted odds recover $r(x)$ exactly. Intuitively, the coefficients are identified only from differences between the predictor distributions of first and second liens within the same year. Under the prior-shift assumption, this is exactly the object that is stable over time.}
 
 \subsection{Alternative Specification: Gradient Boosting}
 
-In addition to my main estimates using logistic regression, I also predict second-lien status using gradient boosting. \todo{ADD DETAILS}
+In addition to my main estimates using logistic regression, I also predict second-lien status using gradient boosting. \proposed{Gradient boosting builds a prediction of the log odds $\eta(x)$ as the sum of many shallow regression trees. Each new tree is fit to the gradient of the log loss at the current prediction and added with a small step size \citep{friedman2001greedy}. I use the histogram-based implementation in scikit-learn \citep{pedregosa2011scikit}, which discretizes each continuous predictor into at most 255 bins before searching for splits \citep{ke2017lightgbm}.
+
+Boosting complements the logistic model because it imposes almost no functional form. I supply only the four primitive predictors: $x_1$, $x_2$, purchaser type, and loan type. The two categorical variables are handled natively by the trees, and I add no splines or interactions, so any nonlinearities and interactions are learned from the data. Otherwise, the boosting model is estimated exactly like the logistic model. It maximizes the same weighted log likelihood, using the within-year balancing weights \eqref{eq:weights}, so its fitted log odds are likewise an estimate of $\log r(x)$. The fitted log odds then enter the same annual mixture adjustment \eqref{eq:mixture-likelihood}--\eqref{eq:p-recovery}.\footnote{Because tree ensembles can produce fitted probabilities arbitrarily close to zero or one, I clip them to $[10^{-12}, 1 - 10^{-12}]$ before computing log odds.}
+
+I choose the hyperparameters with a bounded, staged search over the same reverse-time validation design used for the logistic model. In the first stage, I use the latest training window, 2013--2016, which can be evaluated at every backward horizon from 1 to 9. On this window, I screen trees with 7, 15, or 31 leaves and learning rates of 0.05 or 0.1, holding fixed 200 boosting iterations and an L2 penalty of 1 on the leaf values. In the second stage, I evaluate the two best configurations on all 45 validation cells. In the third stage, I vary the number of iterations (100 or 400) and the L2 penalty (0 or 10) one at a time around the better of the two. In every stage, I require at least 1,000 loans per leaf, and I rank candidates by the equal-horizon-weighted Brier score of the mixture-adjusted probabilities. The selected configuration uses trees with seven leaves, a learning rate of 0.05, 200 iterations, and an L2 penalty of 1.
+
+The two model families differ most in how they extrapolate beyond the support of the training data. Because the spline $g(x_1)$ is linear in its tails and $x_2$ enters linearly, the logistic model extends the log density ratio linearly outside the training range. A tree ensemble instead holds its prediction constant beyond its outermost split. Since the distribution of predictors in 1990--2003 differs materially from that in 2004--2007, these different extrapolation rules can lead to different historical estimates, even between models that perform similarly in the labeled data. I therefore treat boosting as the principal robustness check on the logistic estimates.}
 
 \subsection{Restricted HMDA-Only Specifications}
 
@@ -508,276 +393,8 @@ The full logistic regression and gradient boosting specifications both require s
 	+ \sum_{l=2}^{4} D^{L}_{l} \kappa_l.
 	\label{eq:logit-restricted}
 \end{equation}
+\todo{The selected HMDA-only logistic model (\texttt{logistic\_selection\_hmda\_only\_decision.csv}) is \texttt{hmda\_only\_\_spline\_lti\_\_none} with $C = 1$. It has the $x_1$ spline and the indicators, but no $x_1$-by-purchaser interactions ($\lambda_p$) and a different penalty. Equation \eqref{eq:logit-restricted} should drop the $\lambda_p x_1$ terms, and the text should note $C = 1$ (and, if relevant, that it was selected from the analogous eight-specification HMDA-only grid). The HMDA-only boosting search selected the same hyperparameters as the unrestricted model.}
 For the gradient boosting scheme, this simply means re-estimating the model without including $x_2$ as a feature.
-
-\ifclaude
-[CLAUDE]
-
-The estimator has two steps. First, in labeled source years, we estimate the ratio of the
-feature densities of second and first liens, $r(x) = f_1(x)/f_0(x)$, using a class-balanced
-ridge logistic regression. Second, in each target year, we estimate the second-lien share
-$\pi_t$ by maximizing a mixture likelihood that uses only that year's covariates, and we then
-form adjusted loan-level probabilities. The identifying assumption is that the class-conditional
-feature distributions transport across years while the class shares do not:
-\begin{equation}
-	f_t(x \mid y) = f(x \mid y), \quad y \in \{0, 1\},
-	\qquad \text{while } \pi_t \text{ varies freely.}
-	\label{eq:label_shift}
-\end{equation}
-This is the prior-shift, or label-shift, assumption of the classifier-adjustment and
-quantification literatures \citep{saerens2002adjusting,gonzalez2017review,lipton2018detecting}.
-It differs from the assumption, implicit in applying a fixed classifier across years, that
-$\Pr(y \mid x)$ is stable. Neither assumption nests the other. Prior shift is the natural
-starting point here because the second-lien share moves sharply: it averages about 18 percent
-in 2004--2007 and falls to around 2 percent in 2009--2016. Assumption \eqref{eq:label_shift} cannot be
-tested before 2004. The temporal validation in Section~\ref{sec:est_validation} measures how well
-it holds within the labeled period.
-
-\subsection{Ridge-logistic density ratio}\label{sec:est_logistic}
-
-Let $\mathcal{W}$ denote a source window of labeled years, which is 2004--2007 for the final
-model. For year $s \in \mathcal{W}$, let $N_s$ be the number of eligible loans and $N_{s1}$ and
-$N_{s0}$ the numbers of second and first liens. Each loan receives the weight
-\begin{equation}
-	w_i = \frac{N_{s}}{2 N_{s y_i}}, \qquad s = \text{year of loan } i ,
-	\label{eq:weights}
-\end{equation}
-so the two lien classes each carry half of every source year's total weight, and source years
-retain their relative sizes.
-
-The selected unrestricted specification models the log odds as
-\begin{equation}
-	\eta(x) = \alpha + h(x_1)'\gamma + \delta x_2
-	+ \sum_{p=1}^{9} D^{P}_{p} \pbrac{\theta_p + \lambda_p x_1 + \mu_p x_2}
-	+ \sum_{l=2}^{4} D^{L}_{l} \kappa_l ,
-	\label{eq:logit}
-\end{equation}
-where $h(x_1)$ is a restricted cubic spline in the log loan-to-income ratio with four knots at
-the 5th, 35th, 65th, and 95th percentiles of the source sample \citep{harrell2015regression},
-$D^{P}_{p}$ are indicators for purchaser types other than ``not sold,'' and $D^{L}_{l}$ are
-indicators for loan types other than conventional. The spline is linear beyond its outer knots.
-The county-value ratio enters linearly, and both continuous predictors have linear slope shifts
-by purchaser type. All continuous columns are standardized using source-window moments. The
-design has 34 slope coefficients. We estimate $\beta = (\gamma, \delta, \theta, \lambda, \mu,
-\kappa)$ and the unpenalized intercept $\alpha$ by weighted ridge logistic regression,
-\begin{equation}
-	(\hat{\alpha}, \hat{\beta}) = \arg\min_{\alpha, \beta} \;
-	\frac{1}{2}\|\beta\|^2 - C \sum_{i} w_i \Bigsbrac{y_i \eta(x_i)
-		- \log\pbrac{1 + e^{\eta(x_i)}}},
-	\qquad C = 0.1 ,
-	\label{eq:ridge}
-\end{equation}
-where the specification and penalty were selected by the reverse-time validation described
-below (Appendix~\ref{app:estimator}).
-
-The weights in \eqref{eq:weights} determine how to interpret the fitted log odds. In the
-reweighted source population, each class has probability one-half within every year, and the
-feature density of class $y$ is the size-weighted average of the annual class-conditional
-densities, $\bar{f}_y(x) = \sum_{s \in \mathcal{W}} (N_s/N_{\mathcal{W}}) f_s(x \mid y)$.
-Bayes' rule then gives
-\begin{equation}
-	\log \frac{\Pr^{w}(y = 1 \mid x)}{\Pr^{w}(y = 0 \mid x)}
-	= \log \frac{\bar{f}_1(x)}{\bar{f}_0(x)} \equiv \log r(x) ,
-	\label{eq:density_ratio}
-\end{equation}
-so the complete fitted log odds $\hat{\eta}(x)$, including the intercept, estimate the log
-density ratio. By contrast, an unweighted classifier's log odds equal $\log r(x) +
-\operatorname{logit} \pi_{\mathcal{W}}$ and embed the source-period prevalence
-$\pi_{\mathcal{W}}$. Formally, \eqref{eq:ridge} is a weighted score-matching estimator. It does
-not impose the normalization moments $\E_0[r(X)] = 1$ and $\E_1[1/r(X)] = 1$ that a literal
-density ratio satisfies, and these moments hold poorly in the source folds because the fitted
-log ratio has a long right tail. We therefore interpret $\hat{r}$ as a predictive
-pseudo-likelihood score, whose adequacy is established by out-of-sample performance, rather
-than as a structurally validated density ratio \citep[see][]{sugiyama2012density}.
-
-\subsection{Annual mixture-share adjustment}\label{sec:est_mixture}
-
-Under \eqref{eq:label_shift}, the target-year feature density is the mixture
-\begin{equation}
-	f_t(x) = (1 - \pi_t) f_0(x) + \pi_t f_1(x) .
-	\label{eq:mixture}
-\end{equation}
-Dividing by $f_0(x)$, which does not depend on $\pi_t$, leaves a likelihood for the share that
-depends on the data only through the estimated ratio:
-\begin{equation}
-	\ell_t(\pi) = \sum_{i \in \mathcal{S}_t} \log\Bigsbrac{1 - \pi + \pi \hat{r}(x_i)},
-	\qquad
-	\hat{\pi}_t = \arg\max_{\pi \in [0, 1]} \ell_t(\pi) .
-	\label{eq:mixture_likelihood}
-\end{equation}
-The objective is concave, because $\ell_t''(\pi) = -\sum_i (\hat{r}_i - 1)^2 / (1 - \pi + \pi
-\hat{r}_i)^2 \leq 0$, and it is maximized by a bounded one-dimensional search. The mixture-
-adjusted probability is the target-year posterior
-\begin{equation}
-	\tilde{p}_{it} = \frac{\hat{\pi}_t \hat{r}(x_i)}{1 - \hat{\pi}_t + \hat{\pi}_t
-		\hat{r}(x_i)}
-	= \Lambda\pbrac{\hat{\eta}(x_i) + \operatorname{logit} \hat{\pi}_t} ,
-	\label{eq:adjusted_probability}
-\end{equation}
-where $\Lambda$ is the logistic function. The adjustment is thus a year-specific intercept
-shift of the fitted density-ratio model. At an interior optimum, the first-order condition for
-\eqref{eq:mixture_likelihood} is equivalent to
-\begin{equation}
-	\frac{1}{N_t} \sum_{i \in \mathcal{S}_t} \tilde{p}_{it} = \hat{\pi}_t ,
-	\label{eq:fixed_point}
-\end{equation}
-so the mean adjusted probability equals the fitted mixture share. Equation
-\eqref{eq:fixed_point} is also the fixed point of the expectation-maximization procedure of
-\citet{saerens2002adjusting}, which we use as a numerical check on the direct optimizer. Target
-labels are never used to estimate $\hat{\pi}_t$. In labeled validation years, they are revealed
-only after estimation, to score the result.
-
-The adjustment matters because the obvious alternative---averaging a classifier's predicted
-probabilities over the target sample---estimates $\pi_t$ only when the target prevalence equals
-the source prevalence. When prevalence differs, the average is pulled toward
-$\pi_{\mathcal{W}}$, and counting hard classifications suffers the same bias
-\citep{gonzalez2017review}. With a 2004--2007 source share near 18 percent and target shares
-that are much lower both before 2004 and after 2008, this bias is first order. With millions of
-loans per year, sampling uncertainty in $\hat{\pi}_t$ is negligible. The relevant uncertainty
-concerns transport, which we assess through temporal validation, alternative model families,
-and support diagnostics rather than through conventional standard errors.
-
-\subsection{Temporal validation}\label{sec:est_validation}
-
-Because the application runs backward in time, the primary validation design does too
-(Figure~\ref{fig:timeline}). For $k = 1, \ldots, 9$, we fit the model on the four-year window
-$\mathcal{W}_k = \{2004 + k, \ldots, 2007 + k\}$, from 2005--2008 through 2013--2016, and
-evaluate it on every earlier labeled year $t \in \{2004, \ldots, 2003 + k\}$. This yields 45
-validation cells. A cell's backward horizon is $h = \min \mathcal{W}_k - t \in \{1, \ldots,
-9\}$, and horizon $h$ contains $10 - h$ cells. For any cell-level metric $M_c$, we report
-\begin{equation}
-	\bar{M} = \frac{1}{9} \sum_{h=1}^{9} \frac{1}{10 - h}
-	\sum_{c \,:\, h(c) = h} M_c ,
-	\label{eq:horizon_average}
-\end{equation}
-which averages equally within each horizon and then equally across horizons. This keeps the
-many short-horizon cells from dominating the long horizons that are most relevant to the
-historical application. Relative to the 2004--2007 source window, the application requires
-horizons 1 through 14, and horizons 10--14 cannot be validated with the available labels. Spline
-knots, standardization moments, and reference coding are fitted on each source window and
-applied unchanged to its target years.
-
-The forward design applies the final 2004--2007 model, the same object used for 1990--2003, to
-each year from 2008 through 2016, weighting years equally. We treat it as a stress test rather
-than an interchangeable fold. The post-2008 period combines an abrupt collapse in second-lien
-prevalence with large shifts in loan-type and purchaser composition, so it probes how each
-estimator extrapolates under a regime change. It is not a replica of the 1990s. Forward results
-never enter model selection.
-
-Every design uses the same metrics, computed from the mixture-adjusted probabilities: the Brier
-score $N_t^{-1} \sum_i (\tilde{p}_{it} - y_i)^2$ \citep{brier1950verification}; log loss; the
-signed and absolute annual share error, $\hat{\pi}_t - \pi_t$; and the calibration intercept and
-slope from a logistic regression of $y_i$ on $\operatorname{logit} \tilde{p}_{it}$
-\citep{cox1958two}, which equal zero and one under perfect calibration. Selection statistics
-use the Brier score aggregated by \eqref{eq:horizon_average}. Classification rates at the fixed
-0.5 threshold are reported only as secondary diagnostics.
-
-\begin{figure}[htbp]
-	\centering
-	\begin{tikzpicture}[x=0.54cm, y=0.5cm, font=\footnotesize]
-		% Final design: application, source, and forward validation.
-		\node[anchor=west, font=\footnotesize\itshape] at (0, 1.6) {Final model};
-		\fill[gray!20] (0, 0) rectangle (14, 1);
-		\fill[black!75] (14, 0) rectangle (18, 1);
-		\fill[gray!50] (18, 0) rectangle (27, 1);
-		\node at (7, 0.5) {Unlabeled application, 1990--2003};
-		\node[text=white] at (16, 0.5) {Source};
-		\node at (22.5, 0.5) {Forward validation};
-		% Reverse-time validation triangle.
-		\node[anchor=west, font=\footnotesize\itshape] at (0, -1.2)
-			{Reverse-time validation (45 cells)};
-		\foreach \k in {1, ..., 9} {
-			\pgfmathsetmacro{\ytop}{-1.9 - 0.8 * \k}
-			\pgfmathsetmacro{\ybot}{\ytop - 0.6}
-			\pgfmathtruncatemacro{\sy}{2004 + \k}
-			\pgfmathtruncatemacro{\ey}{2007 + \k}
-			\fill[gray!35] (14, \ybot) rectangle (\sy - 1990, \ytop);
-			\foreach \t in {2005, ..., \sy} {
-				\draw[white, line width=0.6pt] (\t - 1990, \ybot) -- (\t - 1990, \ytop);
-			}
-			\fill[black!75] (\sy - 1990, \ybot) rectangle (\sy - 1986, \ytop);
-			\node[anchor=east] at (13.8, {(\ytop + \ybot) / 2}) {Fit \sy--\ey};
-		}
-		% Year axis.
-		\draw (0, -10.3) -- (27, -10.3);
-		\foreach \t in {1990, 1995, 2000, 2004, 2008, 2012, 2016} {
-			\draw (\t - 1990 + 0.5, -10.3) -- (\t - 1990 + 0.5, -10.5);
-			\node[anchor=north] at (\t - 1990 + 0.5, -10.5) {\t};
-		}
-		\draw[dashed] (14, 1.3) -- (14, -10.3);
-	\end{tikzpicture}
-	\caption{Data and Validation Timeline}
-	\label{fig:timeline}
-	\begin{figurenotes}
-		Dark bars are four-year source windows; light gray cells in the lower panel are the
-		labeled target years evaluated by each reverse-time fit. The dashed line marks the
-		start of lien-status reporting in 2004. Horizon is the first source year minus the
-		target year. The final model is fitted on 2004--2007, validated forward on 2008--2016,
-		and applied backward to 1990--2003.
-	\end{figurenotes}
-	\todo{Move this figure to the introduction as Figure 1 once that section is drafted.}
-\end{figure}
-
-\subsection{Frozen challengers}\label{sec:est_challengers}
-
-Four challengers, all fixed before the comparisons reported below, test how much the results
-depend on functional form, the external county-value input, and model family.
-Table~\ref{tab:protocol} summarizes them; Appendix~\ref{app:estimator} documents their
-selection.
-\begin{enumerate}
-	\item \emph{Unrestricted gradient boosting.} A histogram gradient-boosted classifier
-	\citep{friedman2001greedy,ke2017lightgbm}, as implemented in scikit-learn
-	\citep{pedregosa2011scikit}, uses the four primitive predictors, with purchaser and loan
-	type as native categorical variables. It has no splines or hand-built interactions. The
-	selected configuration has seven leaves per tree, a learning rate of 0.05, 200 iterations,
-	an L2 penalty of 1, and at least 1,000 loans per leaf.
-	\item \emph{HMDA-only logistic.} The HMDA-only logistic model uses the $\log(\text{LTI})$
-	spline and the purchaser- and loan-type indicators without interactions, with $C = 1$. It
-	was selected from the analogous grid restricted to HMDA predictors.
-	\item \emph{HMDA-only boosting.} This model drops $x_2$ from the boosting model. Its
-	independent search selected the same hyperparameters as the unrestricted model.
-	\item \emph{Fixed Random Forest.} A random forest \citep{breiman2001random} with 50 trees of
-	maximum depth 10 uses the untransformed continuous predictors and full categorical
-	indicators. This is the configuration of the original exploratory classifier, and it is not
-	tuned further. It serves as an appendix robustness benchmark.
-\end{enumerate}
-
-The family-specific selection objectives differed. The logistic specification was selected on
-raw-probability Brier score, while boosting was selected on mixture-adjusted Brier. For the
-comparisons in this paper, each finalist is therefore refit under one common convention: equal
-source-year class weights \eqref{eq:weights}, fitted log odds interpreted as the log density
-ratio (tree-based probabilities are clipped to $[10^{-12}, 1 - 10^{-12}]$ before taking log
-odds), the annual mixture adjustment \eqref{eq:mixture_likelihood}--\eqref{eq:adjusted_probability},
-identical target observations, and identical metrics. This convention changes how the fitted
-models are scored but does not reopen either search.
-
-The families differ most in how they extrapolate. Because the logistic spline has linear tails
-and the county-value ratio enters linearly, the logistic model extends the log density ratio
-linearly outside the source support. A tree ensemble instead holds its prediction constant
-beyond its outermost split, carrying terminal-leaf values into regions it never observed. This
-distinction matters because the historical covariate distribution differs materially from its
-2004--2007 counterpart.
-
-\begin{table}[htbp]
-	\centering
-	\caption{Estimators and Validation Protocol}
-	\label{tab:protocol}
-	\small
-	\inputpaper{table2_estimator_protocol.tex}
-
-	\vspace{1ex}
-	\begin{tablenotes}
-		One row per finalist: predictor set, functional form, fixed hyperparameters, source
-		years, source weighting, target adjustment, and role in the paper. Every finalist is
-		fitted with equal first- and second-lien mass within each source year and receives the
-		same annual mixture-share adjustment. Reverse validation uses nine four-year windows
-		and 45 cells. Forward validation fits on 2004--2007 and evaluates 2008--2016.
-	\end{tablenotes}
-	\todo{Generate from the persisted artifact metadata sidecars and frozen protocol
-	constants.}
-\end{table}
-
-\fi
 
 \begin{spacing}{1}
   {\small
@@ -1075,5 +692,451 @@ knots, and both tails, it reproduces the original fitted probabilities to within
 \todo{Add repository URL and package version.}
 
 \fi
+
+\ifclaude
+
+The analysis uses the annual national Home Mortgage Disclosure Act (HMDA) Loan/\allowbreak Application
+Register (LAR) files for 1990--2016 \citep{avery2007opportunities}. Each record describes a
+mortgage application or purchased loan reported by a covered lender, including the loan amount,
+applicant income, loan type, the type of institution that purchased the loan within the
+calendar year, and the property's state and county. The field that motivates this paper is lien
+status. Following the 2002 amendments to Regulation C, lenders began reporting whether an
+originated loan is secured by a first or a subordinate lien with the 2004 data; the field does
+not exist in earlier LARs. We therefore treat 2004--2016 as labeled years and 1990--2003 as
+unlabeled application years. Provider-specific file layouts are mapped to a single versioned
+variable schema before any sample restriction is applied.
+\todo{Document the source vintage used for each year (NARA, FFIEC, CFPB) once raw-file
+	sourcing is final; see data/README.md. State why 2017, the last pre-2018-format year, is
+	excluded.}
+
+The target population is originated, owner-occupied, home-purchase loans. From the raw LAR we
+retain records whose action is an origination, whose purpose is home purchase, and whose
+property is owner occupied. We then require (i) a state in the 50 states or the District of
+Columbia and a nonmissing county code; (ii) positive, nonmissing applicant income and loan
+amount, both of which HMDA reports in thousands of dollars; (iii) one of the four standard loan
+types (conventional, FHA, VA, and FSA/RHS); and (iv) a county-value match, described in
+Section~\ref{sec:data_predictors}. In labeled years we also require a nonmissing lien status.
+Within this sample the reported field takes only the first-lien and subordinate-lien values, so
+no further restriction on the label is needed.
+
+Across the 27 years, the origination, purpose, and occupancy restrictions retain 95.45 million
+of 542.38 million raw records. Missing or invalid geography removes a further 3.2 percent of
+these loans, and missing or invalid income or loan amount removes 2.4 percent, leaving 90.23
+million eligible loans before the county-value merge. The merge is nearly complete in the
+labeled period: it retains 99.75 percent of eligible 2004--2007 loans and at least 99.47
+percent in every year from 2000 onward. Coverage is lower early in the sample---96.42 percent
+of eligible loans in 1990---because many low-volume counties lack a scaled county value.
+Table~\ref{tab:sample} reports representative years, and Appendix~\ref{app:data} reports the
+complete annual attrition.
+
+A final restriction requires finite values of all four predictors, so every model in the paper
+scores exactly the same observations. It binds only because of missing purchaser type in three
+historical years, removing 700 of 1,664,933 otherwise eligible loans in 1990 (0.042 percent),
+195 of 1,662,241 in 1991 (0.012 percent), and three of 4,189,285 in 1999. We apply this
+restriction identically to every model and do not impute.
+
+\subsection{County value and predictors}\label{sec:data_predictors}
+
+The one predictor not taken directly from HMDA is a county-level house value. The Federal
+Housing Finance Agency (FHFA) all-transactions county house price index
+\citep{bogin2019local,fhfa2026county} provides long annual histories, but it is a repeat-sales
+appreciation index whose level is normalized separately for each county. It therefore measures
+price changes, not levels that are comparable across counties. The Zillow Home Value Index
+(ZHVI) provides dollar levels but begins later for many counties \citep{zillow2026zhvi}. We
+combine the two by scaling each county's FHFA history to the Zillow dollar level. Let $H_{ct}$
+be the FHFA index for county $c$ in year $t$ and $Z_{ct}$ the calendar-year average of the
+monthly all-homes, middle-tier, smoothed and seasonally adjusted ZHVI, computed only when all
+twelve months are present. Over the set $\mathcal{T}_c$ of years in which both series are
+available,
+\begin{equation}
+	\log a_c = \frac{1}{|\mathcal{T}_c|} \sum_{t \in \mathcal{T}_c}
+	\pbrac{\log Z_{ct} - \log H_{ct}},
+	\qquad
+	\widehat{V}_{ct} = a_c H_{ct}.
+	\label{eq:county_value}
+\end{equation}
+The scale $a_c$ is the least-squares constant in logs. It is invariant to the arbitrary FHFA
+normalization and gives each overlap year equal weight. We require at least one overlap year,
+which yields 2,690 scaled counties. A loan is matched if its county has a positive FHFA
+observation in the loan's own origination year; we do not require a balanced county panel.
+Because the year-specific merge retains 99.72 percent of first liens and 99.92 percent of
+second liens in 2004--2007, it raises the observed source-period second-lien share by only
+0.03 percentage point (from 17.67 to 17.70 percent). Appendix~\ref{app:data} compares
+alternative scale estimators and explains why we do not use a balanced panel, which excludes
+more loans and is more strongly correlated with lien status.
+
+The models use four primitive predictors, defined in Panel~B of Table~\ref{tab:sample}:
+\begin{enumerate}
+	\item the log loan-to-income ratio, $x_1 = \log(L/I)$, where $L$ is the loan amount and
+	$I$ is applicant income;
+	\item the log county-value-to-loan ratio, $x_2 = \log(\widehat{V}_{ct}/L)$, with $L$
+	measured in dollars;
+	\item purchaser type, the ten HMDA codes for the type of institution that purchased the loan
+	within the calendar year of origination, where code 0 denotes a loan that was not sold in
+	that year; and
+	\item loan type: conventional, FHA, VA, or FSA/RHS.
+\end{enumerate}
+The first two predictors capture the size of the loan relative to the borrower's income and to
+typical local house values. A subordinate lien that finances part of a purchase is usually
+small on both scales. The county-value ratio is a county-level collateral proxy, not a
+property-specific loan-to-value ratio. Purchaser and loan type capture the distinct secondary-
+market and program channels through which first and subordinate liens flow. The 2004 Regulation
+C revisions also changed the purchaser-type categories, adding a separate code for private
+securitizations. We use the reported codes without recoding.
+\todo{Verify the pre- and post-2004 purchaser-type crosswalk and decide whether codes 5--9
+	should be harmonized or whether the change should be discussed as a transport risk.}
+
+We deliberately exclude geography, calendar year, local house-price growth, lender identity,
+and HMDA edit flags. Each of these could proxy for period-specific market structure, such as the
+2000s securitization and financing regime, rather than for a relationship that plausibly
+transports back to the 1990s.
+
+The HMDA-only model variants omit $x_2$ and use only the three predictors observed directly in
+HMDA. They are estimated and evaluated on the identical sample, including the county-value
+merge, so any difference between the unrestricted and HMDA-only results reflects the predictor
+set rather than the population.
+
+\subsection{Estimands and released objects}\label{sec:data_estimand}
+
+Let $\mathcal{S}_t$ denote the eligible sample in year $t$, with $N_t = |\mathcal{S}_t|$
+loans, and let $y_i = 1$ if loan $i$ is secured by a subordinate lien and $y_i = 0$ if it is a
+first lien. The primary estimand is the annual second-lien origination-count share
+\begin{equation}
+	\pi_t = \frac{1}{N_t} \sum_{i \in \mathcal{S}_t} y_i .
+	\label{eq:estimand}
+\end{equation}
+Every eligible loan receives weight one, and the share is defined relative to the eligible
+sample, not all raw HMDA records. We observe $\pi_t$ for $t \geq 2004$ and estimate it for
+$1990 \leq t \leq 2003$.
+
+We also release two loan-level objects. The first is the mixture-adjusted probability
+$\tilde{p}_{it} = \widehat{\Pr}_t(y_i = 1 \mid x_i)$ defined in
+Section~\ref{sec:est_mixture}. Its sum over $\mathcal{S}_t$ is the model-implied expected
+number of second liens, and by construction its mean equals the estimated share
+$\hat{\pi}_t$. The second is a hard classification, $\hat{y}_{it} = \ind{\tilde{p}_{it} \geq
+	0.5}$, which corresponds to equal misclassification costs. The 0.5 threshold is fixed and is not
+tuned by year or subgroup. The hard classification is a convenience output: it discards
+within-loan uncertainty, and the share of loans it classifies as second liens need not equal
+$\hat{\pi}_t$.
+
+Several related quantities are distinct from $\pi_t$. Dollar-weighted shares, outstanding
+second-lien balances, stocks of home equity lines of credit (HELOCs), and home-equity borrowing
+for refinancing or home improvement all measure different objects, and none of them restricts
+to owner-occupied purchase originations. Before 2018, Regulation C also made reporting of
+HELOCs optional, so purchase-money second liens structured as credit lines may be incompletely
+represented in HMDA in every year of our sample.
+\todo{Confirm the pre-2018 HELOC reporting rule and whether it interacts with the 2004 change.}
+
+\begin{table}[htbp]
+	\centering
+	\caption{Sample Construction and Variable Definitions}
+	\label{tab:sample}
+	\small
+	\textit{Panel A: Sample attrition, representative years}\\[0.5ex]
+	\inputpaper{table1_sample_attrition.tex}
+	
+	\vspace{2ex}
+	\textit{Panel B: Outcome and predictors}\\[0.5ex]
+	\begin{tabular}{p{0.2\linewidth} p{0.44\linewidth} p{0.26\linewidth}}
+		\toprule
+		Variable & Definition and transformation & Source \\
+		\midrule
+		Second lien, $y$ & 1 if subordinate lien, 0 if first lien; observed 2004--2016 only
+		& HMDA lien status \\
+		$\log(\text{LTI})$, $x_1$ & $\log(\text{loan amount}/\text{applicant income})$;
+		restricted cubic spline in logistic models & HMDA \\
+		$\log(\text{CV}/\text{L})$, $x_2$ & $\log(\widehat{V}_{ct}/\text{loan amount})$, with
+		$\widehat{V}_{ct}$ from \eqref{eq:county_value}; omitted in HMDA-only models
+		& FHFA county HPI scaled to Zillow ZHVI; HMDA \\
+		Purchaser type & Ten HMDA codes; reference: not sold in the calendar year (0)
+		& HMDA \\
+		Loan type & Conventional (reference), FHA, VA, FSA/RHS & HMDA \\
+		\bottomrule
+	\end{tabular}
+	
+	\vspace{1ex}
+	\begin{tablenotes}
+		Panel A reports cumulative attrition for 1990, 2003, 2004, and 2016 and totals for
+		1990--2003 and 2004--2016. The eligible sample consists of originated, owner-occupied,
+		home-purchase loans in the 50 states and the District of Columbia with valid county,
+		positive income and loan amount, a standard loan type, and a year-specific county-value
+		match. Appendix Table~\ref{tab:app_attrition} reports every year.
+	\end{tablenotes}
+	\todo{Generate Panel A from output/tables/sample\_attrition\_by\_year.csv and
+		county\_value\_coverage\_by\_year.csv.}
+\end{table}
+
+\fi
+
+\ifclaude
+[CLAUDE]
+
+The estimator has two steps. First, in labeled source years, we estimate the ratio of the
+feature densities of second and first liens, $r(x) = f_1(x)/f_0(x)$, using a class-balanced
+ridge logistic regression. Second, in each target year, we estimate the second-lien share
+$\pi_t$ by maximizing a mixture likelihood that uses only that year's covariates, and we then
+form adjusted loan-level probabilities. The identifying assumption is that the class-conditional
+feature distributions transport across years while the class shares do not:
+\begin{equation}
+	f_t(x \mid y) = f(x \mid y), \quad y \in \{0, 1\},
+	\qquad \text{while } \pi_t \text{ varies freely.}
+	\label{eq:label_shift}
+\end{equation}
+This is the prior-shift, or label-shift, assumption of the classifier-adjustment and
+quantification literatures \citep{saerens2002adjusting,gonzalez2017review,lipton2018detecting}.
+It differs from the assumption, implicit in applying a fixed classifier across years, that
+$\Pr(y \mid x)$ is stable. Neither assumption nests the other. Prior shift is the natural
+starting point here because the second-lien share moves sharply: it averages about 18 percent
+in 2004--2007 and falls to around 2 percent in 2009--2016. Assumption \eqref{eq:label_shift} cannot be
+tested before 2004. The temporal validation in Section~\ref{sec:est_validation} measures how well
+it holds within the labeled period.
+
+\subsection{Ridge-logistic density ratio}\label{sec:est_logistic}
+
+Let $\mathcal{W}$ denote a source window of labeled years, which is 2004--2007 for the final
+model. For year $s \in \mathcal{W}$, let $N_s$ be the number of eligible loans and $N_{s1}$ and
+$N_{s0}$ the numbers of second and first liens. Each loan receives the weight
+\begin{equation}
+	w_i = \frac{N_{s}}{2 N_{s y_i}}, \qquad s = \text{year of loan } i ,
+	\label{eq:weights}
+\end{equation}
+so the two lien classes each carry half of every source year's total weight, and source years
+retain their relative sizes.
+
+The selected unrestricted specification models the log odds as
+\begin{equation}
+	\eta(x) = \alpha + h(x_1)'\gamma + \delta x_2
+	+ \sum_{p=1}^{9} D^{P}_{p} \pbrac{\theta_p + \lambda_p x_1 + \mu_p x_2}
+	+ \sum_{l=2}^{4} D^{L}_{l} \kappa_l ,
+	\label{eq:logit}
+\end{equation}
+where $h(x_1)$ is a restricted cubic spline in the log loan-to-income ratio with four knots at
+the 5th, 35th, 65th, and 95th percentiles of the source sample \citep{harrell2015regression},
+$D^{P}_{p}$ are indicators for purchaser types other than ``not sold,'' and $D^{L}_{l}$ are
+indicators for loan types other than conventional. The spline is linear beyond its outer knots.
+The county-value ratio enters linearly, and both continuous predictors have linear slope shifts
+by purchaser type. All continuous columns are standardized using source-window moments. The
+design has 34 slope coefficients. We estimate $\beta = (\gamma, \delta, \theta, \lambda, \mu,
+\kappa)$ and the unpenalized intercept $\alpha$ by weighted ridge logistic regression,
+\begin{equation}
+	(\hat{\alpha}, \hat{\beta}) = \arg\min_{\alpha, \beta} \;
+	\frac{1}{2}\|\beta\|^2 - C \sum_{i} w_i \Bigsbrac{y_i \eta(x_i)
+		- \log\pbrac{1 + e^{\eta(x_i)}}},
+	\qquad C = 0.1 ,
+	\label{eq:ridge}
+\end{equation}
+where the specification and penalty were selected by the reverse-time validation described
+below (Appendix~\ref{app:estimator}).
+
+The weights in \eqref{eq:weights} determine how to interpret the fitted log odds. In the
+reweighted source population, each class has probability one-half within every year, and the
+feature density of class $y$ is the size-weighted average of the annual class-conditional
+densities, $\bar{f}_y(x) = \sum_{s \in \mathcal{W}} (N_s/N_{\mathcal{W}}) f_s(x \mid y)$.
+Bayes' rule then gives
+\begin{equation}
+	\log \frac{\Pr^{w}(y = 1 \mid x)}{\Pr^{w}(y = 0 \mid x)}
+	= \log \frac{\bar{f}_1(x)}{\bar{f}_0(x)} \equiv \log r(x) ,
+	\label{eq:density_ratio}
+\end{equation}
+so the complete fitted log odds $\hat{\eta}(x)$, including the intercept, estimate the log
+density ratio. By contrast, an unweighted classifier's log odds equal $\log r(x) +
+\operatorname{logit} \pi_{\mathcal{W}}$ and embed the source-period prevalence
+$\pi_{\mathcal{W}}$. Formally, \eqref{eq:ridge} is a weighted score-matching estimator. It does
+not impose the normalization moments $\E_0[r(X)] = 1$ and $\E_1[1/r(X)] = 1$ that a literal
+density ratio satisfies, and these moments hold poorly in the source folds because the fitted
+log ratio has a long right tail. We therefore interpret $\hat{r}$ as a predictive
+pseudo-likelihood score, whose adequacy is established by out-of-sample performance, rather
+than as a structurally validated density ratio \citep[see][]{sugiyama2012density}.
+
+\subsection{Annual mixture-share adjustment}\label{sec:est_mixture}
+
+Under \eqref{eq:label_shift}, the target-year feature density is the mixture
+\begin{equation}
+	f_t(x) = (1 - \pi_t) f_0(x) + \pi_t f_1(x) .
+	\label{eq:mixture}
+\end{equation}
+Dividing by $f_0(x)$, which does not depend on $\pi_t$, leaves a likelihood for the share that
+depends on the data only through the estimated ratio:
+\begin{equation}
+	\ell_t(\pi) = \sum_{i \in \mathcal{S}_t} \log\Bigsbrac{1 - \pi + \pi \hat{r}(x_i)},
+	\qquad
+	\hat{\pi}_t = \arg\max_{\pi \in [0, 1]} \ell_t(\pi) .
+	\label{eq:mixture_likelihood}
+\end{equation}
+The objective is concave, because $\ell_t''(\pi) = -\sum_i (\hat{r}_i - 1)^2 / (1 - \pi + \pi
+\hat{r}_i)^2 \leq 0$, and it is maximized by a bounded one-dimensional search. The mixture-
+adjusted probability is the target-year posterior
+\begin{equation}
+	\tilde{p}_{it} = \frac{\hat{\pi}_t \hat{r}(x_i)}{1 - \hat{\pi}_t + \hat{\pi}_t
+		\hat{r}(x_i)}
+	= \Lambda\pbrac{\hat{\eta}(x_i) + \operatorname{logit} \hat{\pi}_t} ,
+	\label{eq:adjusted_probability}
+\end{equation}
+where $\Lambda$ is the logistic function. The adjustment is thus a year-specific intercept
+shift of the fitted density-ratio model. At an interior optimum, the first-order condition for
+\eqref{eq:mixture_likelihood} is equivalent to
+\begin{equation}
+	\frac{1}{N_t} \sum_{i \in \mathcal{S}_t} \tilde{p}_{it} = \hat{\pi}_t ,
+	\label{eq:fixed_point}
+\end{equation}
+so the mean adjusted probability equals the fitted mixture share. Equation
+\eqref{eq:fixed_point} is also the fixed point of the expectation-maximization procedure of
+\citet{saerens2002adjusting}, which we use as a numerical check on the direct optimizer. Target
+labels are never used to estimate $\hat{\pi}_t$. In labeled validation years, they are revealed
+only after estimation, to score the result.
+
+The adjustment matters because the obvious alternative---averaging a classifier's predicted
+probabilities over the target sample---estimates $\pi_t$ only when the target prevalence equals
+the source prevalence. When prevalence differs, the average is pulled toward
+$\pi_{\mathcal{W}}$, and counting hard classifications suffers the same bias
+\citep{gonzalez2017review}. With a 2004--2007 source share near 18 percent and target shares
+that are much lower both before 2004 and after 2008, this bias is first order. With millions of
+loans per year, sampling uncertainty in $\hat{\pi}_t$ is negligible. The relevant uncertainty
+concerns transport, which we assess through temporal validation, alternative model families,
+and support diagnostics rather than through conventional standard errors.
+
+\subsection{Temporal validation}\label{sec:est_validation}
+
+Because the application runs backward in time, the primary validation design does too
+(Figure~\ref{fig:timeline}). For $k = 1, \ldots, 9$, we fit the model on the four-year window
+$\mathcal{W}_k = \{2004 + k, \ldots, 2007 + k\}$, from 2005--2008 through 2013--2016, and
+evaluate it on every earlier labeled year $t \in \{2004, \ldots, 2003 + k\}$. This yields 45
+validation cells. A cell's backward horizon is $h = \min \mathcal{W}_k - t \in \{1, \ldots,
+9\}$, and horizon $h$ contains $10 - h$ cells. For any cell-level metric $M_c$, we report
+\begin{equation}
+	\bar{M} = \frac{1}{9} \sum_{h=1}^{9} \frac{1}{10 - h}
+	\sum_{c \,:\, h(c) = h} M_c ,
+	\label{eq:horizon_average}
+\end{equation}
+which averages equally within each horizon and then equally across horizons. This keeps the
+many short-horizon cells from dominating the long horizons that are most relevant to the
+historical application. Relative to the 2004--2007 source window, the application requires
+horizons 1 through 14, and horizons 10--14 cannot be validated with the available labels. Spline
+knots, standardization moments, and reference coding are fitted on each source window and
+applied unchanged to its target years.
+
+The forward design applies the final 2004--2007 model, the same object used for 1990--2003, to
+each year from 2008 through 2016, weighting years equally. We treat it as a stress test rather
+than an interchangeable fold. The post-2008 period combines an abrupt collapse in second-lien
+prevalence with large shifts in loan-type and purchaser composition, so it probes how each
+estimator extrapolates under a regime change. It is not a replica of the 1990s. Forward results
+never enter model selection.
+
+Every design uses the same metrics, computed from the mixture-adjusted probabilities: the Brier
+score $N_t^{-1} \sum_i (\tilde{p}_{it} - y_i)^2$ \citep{brier1950verification}; log loss; the
+signed and absolute annual share error, $\hat{\pi}_t - \pi_t$; and the calibration intercept and
+slope from a logistic regression of $y_i$ on $\operatorname{logit} \tilde{p}_{it}$
+\citep{cox1958two}, which equal zero and one under perfect calibration. Selection statistics
+use the Brier score aggregated by \eqref{eq:horizon_average}. Classification rates at the fixed
+0.5 threshold are reported only as secondary diagnostics.
+
+\begin{figure}[htbp]
+	\centering
+	\begin{tikzpicture}[x=0.54cm, y=0.5cm, font=\footnotesize]
+		% Final design: application, source, and forward validation.
+		\node[anchor=west, font=\footnotesize\itshape] at (0, 1.6) {Final model};
+		\fill[gray!20] (0, 0) rectangle (14, 1);
+		\fill[black!75] (14, 0) rectangle (18, 1);
+		\fill[gray!50] (18, 0) rectangle (27, 1);
+		\node at (7, 0.5) {Unlabeled application, 1990--2003};
+		\node[text=white] at (16, 0.5) {Source};
+		\node at (22.5, 0.5) {Forward validation};
+		% Reverse-time validation triangle.
+		\node[anchor=west, font=\footnotesize\itshape] at (0, -1.2)
+		{Reverse-time validation (45 cells)};
+		\foreach \k in {1, ..., 9} {
+			\pgfmathsetmacro{\ytop}{-1.9 - 0.8 * \k}
+			\pgfmathsetmacro{\ybot}{\ytop - 0.6}
+			\pgfmathtruncatemacro{\sy}{2004 + \k}
+			\pgfmathtruncatemacro{\ey}{2007 + \k}
+			\fill[gray!35] (14, \ybot) rectangle (\sy - 1990, \ytop);
+			\foreach \t in {2005, ..., \sy} {
+				\draw[white, line width=0.6pt] (\t - 1990, \ybot) -- (\t - 1990, \ytop);
+			}
+			\fill[black!75] (\sy - 1990, \ybot) rectangle (\sy - 1986, \ytop);
+			\node[anchor=east] at (13.8, {(\ytop + \ybot) / 2}) {Fit \sy--\ey};
+		}
+		% Year axis.
+		\draw (0, -10.3) -- (27, -10.3);
+		\foreach \t in {1990, 1995, 2000, 2004, 2008, 2012, 2016} {
+			\draw (\t - 1990 + 0.5, -10.3) -- (\t - 1990 + 0.5, -10.5);
+			\node[anchor=north] at (\t - 1990 + 0.5, -10.5) {\t};
+		}
+		\draw[dashed] (14, 1.3) -- (14, -10.3);
+	\end{tikzpicture}
+	\caption{Data and Validation Timeline}
+	\label{fig:timeline}
+	\begin{figurenotes}
+		Dark bars are four-year source windows; light gray cells in the lower panel are the
+		labeled target years evaluated by each reverse-time fit. The dashed line marks the
+		start of lien-status reporting in 2004. Horizon is the first source year minus the
+		target year. The final model is fitted on 2004--2007, validated forward on 2008--2016,
+		and applied backward to 1990--2003.
+	\end{figurenotes}
+	\todo{Move this figure to the introduction as Figure 1 once that section is drafted.}
+\end{figure}
+
+\subsection{Frozen challengers}\label{sec:est_challengers}
+
+Four challengers, all fixed before the comparisons reported below, test how much the results
+depend on functional form, the external county-value input, and model family.
+Table~\ref{tab:protocol} summarizes them; Appendix~\ref{app:estimator} documents their
+selection.
+\begin{enumerate}
+	\item \emph{Unrestricted gradient boosting.} A histogram gradient-boosted classifier
+	\citep{friedman2001greedy,ke2017lightgbm}, as implemented in scikit-learn
+	\citep{pedregosa2011scikit}, uses the four primitive predictors, with purchaser and loan
+	type as native categorical variables. It has no splines or hand-built interactions. The
+	selected configuration has seven leaves per tree, a learning rate of 0.05, 200 iterations,
+	an L2 penalty of 1, and at least 1,000 loans per leaf.
+	\item \emph{HMDA-only logistic.} The HMDA-only logistic model uses the $\log(\text{LTI})$
+	spline and the purchaser- and loan-type indicators without interactions, with $C = 1$. It
+	was selected from the analogous grid restricted to HMDA predictors.
+	\item \emph{HMDA-only boosting.} This model drops $x_2$ from the boosting model. Its
+	independent search selected the same hyperparameters as the unrestricted model.
+	\item \emph{Fixed Random Forest.} A random forest \citep{breiman2001random} with 50 trees of
+	maximum depth 10 uses the untransformed continuous predictors and full categorical
+	indicators. This is the configuration of the original exploratory classifier, and it is not
+	tuned further. It serves as an appendix robustness benchmark.
+\end{enumerate}
+
+The family-specific selection objectives differed. The logistic specification was selected on
+raw-probability Brier score, while boosting was selected on mixture-adjusted Brier. For the
+comparisons in this paper, each finalist is therefore refit under one common convention: equal
+source-year class weights \eqref{eq:weights}, fitted log odds interpreted as the log density
+ratio (tree-based probabilities are clipped to $[10^{-12}, 1 - 10^{-12}]$ before taking log
+odds), the annual mixture adjustment \eqref{eq:mixture_likelihood}--\eqref{eq:adjusted_probability},
+identical target observations, and identical metrics. This convention changes how the fitted
+models are scored but does not reopen either search.
+
+The families differ most in how they extrapolate. Because the logistic spline has linear tails
+and the county-value ratio enters linearly, the logistic model extends the log density ratio
+linearly outside the source support. A tree ensemble instead holds its prediction constant
+beyond its outermost split, carrying terminal-leaf values into regions it never observed. This
+distinction matters because the historical covariate distribution differs materially from its
+2004--2007 counterpart.
+
+\begin{table}[htbp]
+	\centering
+	\caption{Estimators and Validation Protocol}
+	\label{tab:protocol}
+	\small
+	\inputpaper{table2_estimator_protocol.tex}
+	
+	\vspace{1ex}
+	\begin{tablenotes}
+		One row per finalist: predictor set, functional form, fixed hyperparameters, source
+		years, source weighting, target adjustment, and role in the paper. Every finalist is
+		fitted with equal first- and second-lien mass within each source year and receives the
+		same annual mixture-share adjustment. Reverse validation uses nine four-year windows
+		and 45 cells. Forward validation fits on 2004--2007 and evaluates 2008--2016.
+	\end{tablenotes}
+	\todo{Generate from the persisted artifact metadata sidecars and frozen protocol
+		constants.}
+\end{table}
+
+\fi
+
+
 
 \end{document}
