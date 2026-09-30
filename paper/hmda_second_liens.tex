@@ -2,6 +2,9 @@
 %\commentsfalse
 \commentstrue
 
+\newif\ifclaude
+\claudefalse
+
 \documentclass[letterpaper,12pt,usenames,dvipsnames]{article}
 
 \frenchspacing
@@ -164,11 +167,34 @@
 \section{Data}\label{sec:data}
 
 
-\subsection{Home Mortgage Disclosure Act Data}\label{sec:data_sample}
+\subsection{Home Mortgage Disclosure Act Data}\label{sec:hmda-data}
 
-Our main data source is the HMDA Loan Application Register (LAR) files for 1990--2016. 
+Our main data source is the HMDA Loan Application Register (LAR) files for 1990--2016, which contain the near-universe of originated home mortgages in the US. We obtain these files from three sources: \todo{FILL IN SOURCE BY YEAR}.
 
-[CLAUDE]
+This dataset includes the loan amount, applicant income, loan type, purchaser type (the type of institution that purchased the loan), the loan outcome (i.e., whether it was originated), and the state and county in which the property resides. Beginning in 2004, these data also include an indicator for whether a loan is a second lien. However, prior to 2004, this field is not available, motivating the estimation below.
+
+For my analysis, I restrict the sample to originated owner-occupied purchase loans, and drop any observations with missing values for loan amount, applicant income, loan type, purchaser type, loan outcome, state, and county. I further restrict the sample to observations that: (i) are located in the 50 states or District of Columbia; (ii) have strictly positive values for applicant income and loan amount, and (iii) have one of the four standard loan types (conventional, FHA, VA, and FSA/RHS) \todo{make sure these acronyms are defined somewhere}. From 2004 on, I also require a non-missing value for second-lien status. These restrictions lead to a final sample of 90.2 million observations from an original pool of 542.4 million observations, with most of the attrition (to 95.5 million) stemming from my restriction to originated owner-occupied purchase loans.
+
+\subsection{County House Price Data}\label{sec:fhfa-data}
+
+While the loan-to-income ratio can be constructed directly from HMDA data, the prevailing value of properties may also be informative for determining the distribution of typical first and second lien sizes in a given area. Since I cannot match transactions with the sales price for that particular property, I instead merge in data on house prices at the county level.
+
+For this house price series, I use two complementary sources. First, I use the all-transactions county house price index from the FHFA \citep{bogin2019local,fhfa2026county}. This source has excellent temporal coverage, and is available for all years of our 1990--2016 sample. However, these price indices are normalized separately by county, and cannot be directly interpreted using a dollar value. To address this, I incorporate the Zillow Home Value Index (ZHVI), obtained from \cite{zillow2026zhvi}. This index is scaled in dollar amounts, corresponding to the median home value in each county, but is not available prior to \todo{FILL}.
+
+Using these series, I create a combined house price index
+\begin{align}
+	\label{eq:house-price-index}
+	\log v_{c,t} = \log v^{FHFA}_{c,t} + \log a_c
+\end{align}
+where $c$ denotes county, $t$ denotes time, $v^{FHFA}_{c,t}$ is the FHFA house price index, and $a_c$ is a scaling factor designed to convert the FHFA series from a normalized index to dollar levels. These scaling factors are in turn computed as
+\begin{equation}
+	\log a_c = \frac{1}{T_{max} - T_{min}} \sum_{t=T_{min}}^{T_{max}}
+	\pbrac{\log v^{ZHVI}_{c,t} - \log v^{FHFA}_{c,t}},
+	\label{eq:county-value}
+\end{equation}
+where $T_{min}$ and $T_{max}$ are the start and end years of the overlapping sample over which both indices are vailable. Combined, equations \eqref{eq:house-price-index} and \eqref{eq:county-value} ensure that the final series $v_{c,t}$ has the same relative values as in the FHFA series, but has an average log level equal to that of the ZHVI index when both series are available.
+
+\ifclaude
 
 The analysis uses the annual national Home Mortgage Disclosure Act (HMDA) Loan/\allowbreak Application
 Register (LAR) files for 1990--2016 \citep{avery2007opportunities}. Each record describes a
@@ -341,6 +367,8 @@ represented in HMDA in every year of our sample.
 	county\_value\_coverage\_by\_year.csv.}
 \end{table}
 
+\fi
+
 \section{Estimation}\label{sec:estimation}
 
 
@@ -482,6 +510,7 @@ The full logistic regression and gradient boosting specifications both require s
 \end{equation}
 For the gradient boosting scheme, this simply means re-estimating the model without including $x_2$ as a feature.
 
+\ifclaude
 [CLAUDE]
 
 The estimator has two steps. First, in labeled source years, we estimate the ratio of the
@@ -748,6 +777,8 @@ distinction matters because the historical covariate distribution differs materi
 	constants.}
 \end{table}
 
+\fi
+
 \begin{spacing}{1}
   {\small
     \bibliographystyle{jpe}
@@ -761,6 +792,9 @@ distinction matters because the historical covariate distribution differs materi
 \renewcommand\thetable{\thesection.\arabic{table}}
 \setcounter{figure}{0}
 \setcounter{table}{0}
+
+\ifclaude
+[CLAUDE]
 
 \section{Data Construction and County-Value Scaling}\label{app:data}
 
@@ -1039,5 +1073,7 @@ including their annual intercepts for 1990--2016, are distributed as a dependenc
 prediction package. On synthetic inputs spanning every category combination, the spline
 knots, and both tails, it reproduces the original fitted probabilities to within $10^{-12}$.
 \todo{Add repository URL and package version.}
+
+\fi
 
 \end{document}
