@@ -354,9 +354,9 @@ Section~\ref{sec:est_validation}, classifiers trained on four-year windows runni
 2005--2008 through 2013--2016 and applied to every earlier labeled year from 2004 through 2012
 on average predict second-lien shares that are 55\% lower than the actual shares, leading to massive classification errors.
 
-This poor performance follows from the failure of the naive approach to internalize that the underlying prevalence of $y_{i,t}$ (i.e., the share of second liens) changes over time. To understand why this is an issue, consider the example of trying to determine whether individuals are infected with a viral disease using body temperature. If the disease is associated with fever, the probability of being infected will be increasing with body temperature. However, there may be overlap between the temperature distributions, so that temperatures for infected people with relatively low fevers and temperatures for uninfected people with relatively high natural body temperatures may coincide. 
+This poor performance follows from the failure of the naive approach to internalize changes in the underlying prevalence of $y_{i,t}$ (i.e., the share of second liens) over time. To understand why this is an issue, consider the example of trying to determine whether individuals are infected with a viral illness using body temperature. If the illness is associated with fever, the probability of being infected will be increasing with body temperature. However, there may be overlap between the temperature distributions, so that temperatures for infected people with relatively low fevers and temperatures for uninfected people with relatively high natural body temperatures may coincide. 
 
-For an extreme example of where this can go wrong, imagine that we have estimated the probability of infection given body temperature on one island where the disease is prevalent, and then apply our fitted probabilities to another island where the disease has been fully eradicated, but where the distributions of body temperature are otherwise identical to the first island conditional on infection status. In this case, we will correctly identify that there are fewer infected individuals in the second island than in the first island, since we observe draws from the distribution of relatively lower uninfected body temperatures. However, we will still predict a substantial share of false positives stemming from individuals in the ambiguous zone with high natural body temperatures.
+For an extreme example of where this can go wrong, imagine that we have estimated the probability of infection given body temperature on one island where the disease is prevalent, and then apply our fitted probabilities to another island where the disease has been fully eradicated. In this case, we will correctly predict that there are fewer infected individuals in the second island than in the first island, since we observe draws from the distribution of relatively lower uninfected body temperatures. However, we will still predict a substantial share of false positives stemming from individuals in the ambiguous zone with high uninfected temperatures.
 
 While some false positives are inevitable in a classification exercise, we can still improve on this naive approach. The key idea is that the distribution of observables itself provides important information about the underlying prevalence. In our example, while the temperatures of uninfected people and infected people with low fevers may overlap, there will be very few uninfected people with high fevers. As a result, the fact that we observe nearly no people in the second island with high fevers indicates that the prevalence of the disease in that island is close to zero. Using this additional information contained in the distribution of predictors, we can now conclude correctly that nearly all people in the zone of ambiguous temperatures are also uninfected. In the estimation below, I will develop a formal version of this approach that jointly estimates the aggregate prevalence of second liens and the individual probabilities, which I show in testing vastly improves the out of sample prediction performance.
 
@@ -405,7 +405,7 @@ Applying \eqref{eq:bayes-rule} for $y \in \{0, 1\}$ and dividing cancels the $\P
 	\label{eq:r-derivation}
 	r(x) = \frac{\Pr(x \mid y = 1)}{\Pr(x \mid y = 0)} = \frac{\Pr(y = 1 \mid x)}{\Pr(y = 0 \mid x)} \times \frac{\Pr(y = 0)}{\Pr(y = 1)}.
 \end{align}
-Thus, to compute $r(x)$, we only need to estimate the two fractions on the far right of \eqref{eq:r-derivation}. While each of these fractions depends on the current date $t$, their product does not, allowing us to estimate $r(x)$ using any sample satisfying \eqref{eq:mixture-cases}. For the first fraction, the predictive estimation directly the fitted probability $\widehat{\Pr}(y \mid x)$, allowing for immediate evaluation. For the second fraction, a simple approach would be to proxy for these probabilities using the sample shares of second liens over the labeled sample. As explained below, because I use multi-year training samples for which this second fraction will vary, I instead reweight the observations so that these probabilities are equal in the reweighted data in each year, canceling this fraction entirely. With this estimate of $\hat{r}(x)$ in hand, we can evaluate $\hat{\pi}_t$ in each period. 
+Thus, to compute $r(x)$, we only need to estimate the two fractions on the far right of \eqref{eq:r-derivation}. While each of these fractions depends on the current date $t$, their product does not, allowing us to estimate $r(x)$ using any sample satisfying \eqref{eq:mixture-cases}. For the first fraction, the predictive estimation directly provides the fitted probability $\widehat{\Pr}(y \mid x)$, allowing for immediate evaluation. For the second fraction, a simple approach would be to proxy for these probabilities using the sample shares of second liens over the labeled sample. As explained below, because I use multi-year training samples for which this second fraction will vary, I instead reweight the observations so that these probabilities are equal in the reweighted data in each year, canceling this fraction entirely. With this estimate of $\hat{r}(x)$ in hand, we can evaluate $\hat{\pi}_t$ in each period. 
 
 For the final step, we recover the absolute probabilities given our estimates of $\hat{r}(x)$ and $\hat{\pi}_t$. Applying these estimates to \eqref{eq:r-derivation}, as well as the identities $\widehat{Pr}_t(y = 0 \mid x) = 1 - \widehat{Pr}_t(y = 1 \mid x)$, $\widehat{Pr}_t(y = 1) = \hat{\pi}_t$ and $\widehat{Pr}_t(y = 0) = 1 - \hat{\pi}_t$, we obtain
 \begin{align*}
@@ -418,12 +418,69 @@ which can be manipulated to yield
 \end{align}
 Equation \eqref{eq:p-recovery} computes the final probabilities of second lien status, completing the estimation procedure. 
 
-To tie this back to the intuition in Section \ref{sec:intuition}, note that the naive approach would instead evaluate \eqref{eq:p-recovery} using the average prevalence in the labeled data ($\bar{\pi}_{L}$) in place of the period-specific prevalence $\hat{\pi}_t$. As a result, the naive approach will overstate the probabilities when the training sample featured a higher prevalence of second liens the target sample ($\bar{\pi}_{L} > \hat{\pi}_t$), and understate them when $\bar{\pi}_{L} < \hat{\pi}_t$, exactly as found in my out of sample testing. However, the presence of the period-specific estimate $\hat{\pi}_t$ in \eqref{eq:p-recovery} corrects for this bias. Returning to the infection example, observing a distribution of $x$ consistent with a vanishing value of $\hat{\pi}_t$ will correctly predict trivial probabilities of infection on the low-prevalence island, even for values of temperature ($x$) that would be consistent with a higher probability of infection on the high-prevalence island.
+To tie this back to the intuition in Section \ref{sec:intuition}, note that the naive approach would instead evaluate \eqref{eq:p-recovery} using the average prevalence in the labeled data ($\bar{\pi}_{L}$) in place of the period-specific prevalence $\hat{\pi}_t$. As a result, the naive approach will overstate the probabilities when the training sample features a higher prevalence of second liens the target sample ($\bar{\pi}_{L} > \hat{\pi}_t$), and understate them when $\bar{\pi}_{L} < \hat{\pi}_t$, exactly as found in my out of sample testing. However, the presence of the period-specific estimate $\hat{\pi}_t$ in \eqref{eq:p-recovery} corrects for this bias. Returning to the infection example, observing a distribution of $x$ consistent with a vanishing value of $\hat{\pi}_t$ will correctly predict trivial probabilities of infection on the low-prevalence island, even for values of temperature ($x$) that would be consistent with a substantial probability of infection on the high-prevalence island.
 
-\subsection{Prediction Models}
-\label{sec:prediction-models}
+\subsection{Main Specification: Logistic Regression}
+\label{sec:logistic-model}
 
-\todo{FILL IN}
+For my benchmark estimates, I choose a logistic regression model. As shown below, this specification delivers excellent prediction performance, while maintaining simplicity and transparency relative to more complex machine learning methods. My main logistic specification is
+\begin{equation}
+	\eta(x) 
+%	\equiv \log \pfrac{p(x)}{1 - p(x)} 
+	= \alpha + g(x_1)'\gamma + \delta x_2
+	+ \sum_{p=1}^{9} D^{P}_{p} \pbrac{\theta_p + \lambda_p x_1 + \mu_p x_2}
+	+ \sum_{l=2}^{4} D^{L}_{l} \kappa_l ,
+	\label{eq:logit}
+\end{equation}
+where
+\begin{equation}
+		\eta(x) 
+	\equiv \log \pfrac{p(x)}{1 - p(x)} 
+\end{equation}
+is the log-odds ratio, $x_1$ is the log loan-to-income ratio, $x_2$ is the log loan-to-local-house-price ratio, $g(x_1)$ is a cubic spline in the log loan-to-income ratio with knots at the
+the 5th, 35th, 65th, and 95th percentiles of the source sample \citep{harrell2015regression},
+$D^{P}_{p}$ are indicators for purchaser types other than ``not sold,'' and $D^{L}_{l}$ are
+indicators for loan types other than conventional. This specification allows for a flexible nonlinear relationship in the log loan-to-income ratio, purchaser-type and loan-type fixed effects, as well as linear terms in the log loan-to-income and loan-to-local-house-price ratios that are allowed to vary with purchaser type. \todo{explain how specification was chosen}
+
+We estimate $\beta = (\gamma, \delta, \theta, \lambda, \mu,
+\kappa)$ and the unpenalized intercept $\alpha$ by weighted ridge logistic regression
+\begin{equation}
+	(\hat{\alpha}, \hat{\beta}) = \arg\max_{\alpha, \beta} \;
+	\sum_{i} w_i \Bigsbrac{y_i p(x_i)
+		- (1 - y_i) (1 - p(x_i))}
+	- \frac{1}{2C} \|\beta\|^2.
+%	\qquad C = 0.1 ,
+	\label{eq:ridge-objective}
+\end{equation}
+where 
+\begin{equation}
+	p(x) = \frac{1}{1 + e^{-\eta(x)}}.
+\end{equation}
+The first term on the right hand side of \eqref{eq:ridge} is a weighted version of the log likelihood function, while the second term is a quadratic penalty on the parameter values, the strength of which is scaled by the hyperparameter $C$.
+
+For the weights $w_i$, we choose 
+\begin{equation}
+	w_i = \begin{cases}
+		\frac{N_1}{2N} &\text{ for } y_i = 1 \\
+		\frac{N_0}{2N} &\text{ for } y_i = 0
+	\end{cases}
+\end{equation}
+where $N$ is the total number of observations, $N_1 = \sum_i y_i$ is the sum of observations with $y_i = 1$ and $N_0 = N - N_1$ is the sum of observations with $y_i = 0$. This weighting scheme ensures that first and second liens each account for half of each year's total weight \todo{EXPLAIN THIS WEIGHTING SCHEME AND WHY IT IS GOOD}.
+
+\subsection{Alternative Specification: Gradient Boosting}
+
+In addition to my main estimates using logistic regression, I also predict second-lien status using gradient boosting. \todo{ADD DETAILS}
+
+\subsection{Restricted HMDA-Only Specifications}
+
+The full logistic regression and gradient boosting specifications both require supplementary data on county-level house prices from FHFA and Zillow. For researchers who wish to predict second lien status without the use of external data, I re-estimate restricted specifications that omit the log loan-to-local-house-price predictor $x_2$. For the logistic regression, this means estimating \eqref{eq:ridge-objective} using the alternative log odds ratio
+\begin{equation}
+	\eta(x) = \alpha + g(x_1)'\gamma 
+	+ \sum_{p=1}^{9} D^{P}_{p} \pbrac{\theta_p + \lambda_p x_1}
+	+ \sum_{l=2}^{4} D^{L}_{l} \kappa_l.
+	\label{eq:logit-restricted}
+\end{equation}
+For the gradient boosting scheme, this simply means re-estimating the model without including $x_2$ as a feature.
 
 [CLAUDE]
 
