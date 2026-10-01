@@ -3,7 +3,8 @@
 \commentstrue
 
 \newif\ifclaude
-\claudefalse
+%\claudefalse
+\claudetrue
 
 \documentclass[letterpaper,12pt,usenames,dvipsnames]{article}
 
@@ -254,7 +255,7 @@ where the constant term does not vary with $\pi_t$. Given an estimate of $r(x)$,
 \end{align*}
 which intuitively ensures consistency between the fitted prevalence parameter $\hat{\pi}_t$ and the estimated total prevalence conditional on that parameter.
 
-To obtain the required estimate of $r(x)$, we will approximate $\log r(x) \simeq \eta(x; \theta)$ for a parameteric function $\eta$. We will then estimate $\theta$ to maximize the weighted penalized log likelihood function
+To obtain the required estimate of $r(x)$, I approximate $\log r(x) \simeq \eta(x; \theta)$ for a parametric function $\eta$. I then estimate $\theta$ to maximize the weighted penalized log likelihood function
 \begin{align}
 	\label{eq:likelihood-q}
 	\ell(\theta) &= \sum_i w_i \Bigsbrac{ y_i \log q(x_i; \theta) + (1 - y_i) \log \bigpbrac{1 - q(x_i; \theta)}} - K(\theta).
@@ -263,7 +264,7 @@ where
 \begin{equation}
 	q(x; \theta) = \frac{\exp(\eta(x; \theta))}{1 + \exp(\eta(x; \theta))}
 \end{equation}
-is the logistic transform of $\eta$, and $K(\theta)$ is a penalty function, and the weights are
+is the logistic transform of $\eta$, $K(\theta)$ is a penalty function, and the weights are
 \begin{equation}
 	w_i = \begin{cases}
 		\frac{1}{2 \pi_t} &\text{ for } y_i = 1 \\
@@ -307,13 +308,38 @@ Equation \eqref{eq:p-recovery} computes the final probabilities of second lien s
 
 To tie this back to the intuition in Section \ref{sec:intuition}, note that the naive approach would instead evaluate \eqref{eq:p-recovery} using the average prevalence in the labeled data ($\bar{\pi}_{L}$) in place of the period-specific prevalence $\hat{\pi}_t$. As a result, the naive approach will overstate the probabilities when the training sample features a higher prevalence of second liens the target sample ($\bar{\pi}_{L} > \hat{\pi}_t$), and understate them when $\bar{\pi}_{L} < \hat{\pi}_t$, exactly as found in my out of sample testing. However, the presence of the period-specific estimate $\hat{\pi}_t$ in \eqref{eq:p-recovery} corrects for this bias. Returning to the infection example, observing a distribution of $x$ consistent with a vanishing value of $\hat{\pi}_t$ will correctly predict trivial probabilities of infection on the low-prevalence island, even for values of temperature ($x$) that would be consistent with a substantial probability of infection on the high-prevalence island.
 
+\subsection{Model Selection}
+\label{sec:model-selection}
+
+For each parametric family of functions, I consider a number of alternative models for $\eta(x; \theta)$, varying both the specification, as well as a number of hyperparameters. To select the best model from these alternatives, I compute out-of-sample validation measures based on how well models selected on a set of rolling windows are able to predict second lien status in earlier labeled data, as this maps directly into our ultimate goal of using later estimation to predict earlier unlabeled data. Specifically, we fit each model on each four-year window $[2004 + k, 2007 + k]$ for $k \in \{1, \ldots, 9\}$, yielding nine fitted models. 
+
+For each fitted model I then average the Brier score at each earlier date
+\begin{align*}
+	\bar{B}_k = \frac{1}{k} \sum_{j=1}^k B_{2004 + k - 1} 
+\end{align*}
+and then average over windows to construct a specification-level Brier score
+\begin{align*}
+	\bar{B} = \frac{1}{9} \sum_{k=1}^9 \bar{B}_k.
+\end{align*}
+The specification with the best (lowest) Brier score $\bar{B}$ is then chosen for for that parametric family.
+
 \section{Parametric Implementations}
 \label{sec:parametric-implementations}
 
 \subsection{Main Specification: Logistic Regression}
 \label{sec:logistic-model}
 
-For my benchmark estimates, I choose a logistic regression model. As shown below, this specification delivers excellent prediction performance, while maintaining simplicity and transparency relative to more complex machine learning methods. My main logistic specification is
+For my benchmark estimates, I choose a logistic regression model, in which $\eta(x; \theta)$ is linear in a set of regressors. As shown below, this specification delivers excellent prediction performance, while maintaining simplicity and transparency relative to more complex machine learning methods. 
+
+For the features, I use the log loan-to-income ratio (denoted $x_1$), the log loan-to-local-house-price ratio (denoted $x_2$), indicators for purchaser type $p$ (denoted $D^P_{p}$), and indicators for lender type $l$ (denoted $D^L_l$). For the penalty function, I choose
+\begin{equation*}
+	K(\theta) = \frac{C}{2} ||\theta||^2
+\end{equation*}
+for penalty hyperparameter $C$, corresponding to a ridge regression.
+
+I next set the grid for model selection along three dimensions. First, I allow the continuous predictors ($x_1, x_2$) to take three possible functional forms: (i) linear in both, (ii) cubic splines for $x_1$, linear in $x_2$; (iii) cubic splines in both. Second, I allow four possible structures governing the interaction between the continuous variables ($x_1, x_2$) and the indicator variables ($D^P_p, D^L_l$): (i) no interactions; (ii) linear interactions with loan type; (iii) linear interactions with purchaser type; and (iv) linear interactions with both. Third, I consider four values for $C$: $\{10^{-2}, 1, 10^2, 10^4\}$.
+
+My main logistic specification is
 \begin{equation}
 	\eta(x) 
 %	\equiv \log \pfrac{p(x)}{1 - p(x)} 
